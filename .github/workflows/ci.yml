@@ -5,8 +5,9 @@ on:
     branches: [main]
   pull_request:
 
-permissions:
-  contents: read
+# Least privilege: no token scopes by default; each job asks only for what it needs. The workflow
+# uses the plain pull-request trigger only, so runs from forks get no secrets.
+permissions: {}
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -19,14 +20,19 @@ jobs:
     name: Safety guards, licences, repo checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: apps/api/go.mod
-      - name: Install worker environment (needed by the licence scan)
-        run: uv sync --project apps/worker --locked
+      - name: Install worker environment, all groups and extras (needed by the licence scan)
+        run: uv sync --project apps/worker --locked --all-groups --all-extras
+      - name: Download Go modules (the licence scan reads their LICENSE files)
+        working-directory: apps/api
+        run: go mod download
       - name: Script tests (SAF-01, SAF-02, SAF-04, SYS-11)
         run: uv run --project apps/worker pytest scripts/tests -q
       - name: Deny-list (SAF-01, SAF-02)
@@ -42,6 +48,8 @@ jobs:
     name: Go API
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: apps/api
@@ -76,6 +84,8 @@ jobs:
     name: Python worker
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: apps/worker
@@ -92,6 +102,8 @@ jobs:
     name: Next.js web
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: apps/web
@@ -102,7 +114,7 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run lint
       - run: npm run format:check
       - run: npm run typecheck

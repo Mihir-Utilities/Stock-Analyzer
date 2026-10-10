@@ -39,6 +39,14 @@ import license_scan as ls  # noqa: E402
         (None, "unknown"),
         ("UNLICENSED", "unknown"),
         ("Some Proprietary Thing", "unknown"),
+        ("BSD-4-Clause", "unknown"),
+        ("BSD with advertising clause", "unknown"),
+        ("Apache-1.1", "unknown"),
+        ("Apache-2.0 WITH LLVM-exception", "ok"),
+        ("SSPL-1.0", "unknown"),
+        ("CC-BY-NC-4.0", "unknown"),
+        ("BUSL-1.1", "unknown"),
+        ("GPL-2.0-only WITH Classpath-exception-2.0", "copyleft"),
     ],
 )
 def test_classify(expr: str | None, expected: str) -> None:
@@ -99,3 +107,67 @@ def test_go_license_text_classification(tmp_path: Path) -> None:
     empty = tmp_path / "e"
     empty.mkdir()
     assert ls.classify(ls._go_license(empty)) == "unknown"
+
+
+def test_python_list_comes_from_the_lockfile_not_the_platform(tmp_path: Path) -> None:
+    """SAF-04: a Windows-only package (colorama) must appear on Linux too, with its licence taken
+    from the committed notices row; a locked package with no licence anywhere fails closed."""
+    lock = tmp_path / "uv.lock"
+    lock.write_text(
+        """
+[[package]]
+name = "india-analyzer-worker"
+version = "0.1.0"
+source = { editable = "." }
+
+[[package]]
+name = "Colorama"
+version = "0.4.6"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "typing_extensions"
+version = "4.16.0"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "newpkg"
+version = "1.0"
+source = { registry = "https://pypi.org/simple" }
+""",
+        encoding="utf-8",
+    )
+    locked = ls.lock_packages(lock)
+    assert locked == [("colorama", "0.4.6"), ("newpkg", "1.0"), ("typing-extensions", "4.16.0")]
+    previous = ls.previous_python_licenses(
+        "| python | colorama | 0.4.6 | BSD License | runtime/dev | ok |\n"
+    )
+    installed = {("typing-extensions", "4.16.0"): "PSF-2.0"}  # what a Linux runner has
+    entries = {e.name: e for e in ls.python_entries_from(locked, installed, previous)}
+    assert entries["colorama"].license == "BSD License"
+    assert entries["typing-extensions"].license == "PSF-2.0"
+    assert [e.name for e in ls.violations(list(entries.values()))] == ["newpkg"]
+
+
+def test_locked_package_with_a_gpl_licence_fails() -> None:
+    entries = ls.python_entries_from([("x", "1")], {("x", "1"): "GPL-3.0-only"}, {})
+    assert [e.name for e in ls.violations(entries)] == ["x"]
+
+
+def test_go_module_without_a_downloaded_dir_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A module whose Dir is empty must be UNKNOWN even when ./LICENSE (MIT) exists in the cwd."""
+    (tmp_path / "go.mod").write_text("module x\n\ngo 1.22\n", encoding="utf-8")
+    (tmp_path / "LICENSE").write_text(
+        "MIT License\n\nPermission is hereby granted, free of charge", encoding="utf-8"
+    )
+    monkeypatch.chdir(tmp_path)
+
+    class Result:
+        stdout = json.dumps({"Path": "example.com/dep", "Version": "v1.0.0"})
+
+    monkeypatch.setattr(ls.subprocess, "run", lambda *a, **k: Result())
+    entries = ls.go_entries(tmp_path)
+    assert [(e.name, e.license) for e in entries] == [("example.com/dep", "UNKNOWN")]
+    assert [e.name for e in ls.violations(entries)] == ["example.com/dep"]

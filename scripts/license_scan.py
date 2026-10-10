@@ -10,8 +10,12 @@ Usage:
   python scripts/license_scan.py            # scan, fail on violations, fail if notices are stale
   python scripts/license_scan.py --write    # scan, fail on violations, rewrite THIRD_PARTY_NOTICES.md
 
-Collectors read: apps/web/package-lock.json (npm), the uv environment of apps/worker (Python,
-via `uv run`), and `go list -m -json all` in apps/api (Go; LICENSE file text is classified).
+Collectors read: apps/web/package-lock.json (npm); apps/worker/uv.lock (Python: the package list
+comes from the lockfile so it is the same on every OS; licence text comes from the installed
+environment, with `uv sync --all-groups --all-extras`, or, for packages that only install on another
+platform such as colorama on Windows, from the row already committed in THIRD_PARTY_NOTICES.md);
+and `go list -m -json all` in apps/api (Go; LICENSE file text is classified, so run
+`go mod download` first).
 """
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ import json
 import re
 import subprocess
 import sys
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -51,7 +56,9 @@ REVIEW = {"MPL-2.0", "EPL-2.0", "CDDL-1.0"}
 
 _ALIASES: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"^(the )?mit( license)?$|^mit license", re.I), "MIT"),
+    (re.compile(r"^apache[- ]?(software )?(license)?[- ,]*(version |v)?1", re.I), "Apache-1.1"),
     (re.compile(r"apache", re.I), "Apache-2.0"),
+    (re.compile(r"^bsd[- ]?4|advertising", re.I), "BSD-4-Clause"),
     (re.compile(r"^bsd[- ]?2", re.I), "BSD-2-Clause"),
     (re.compile(r"^bsd[- ]?3|new bsd|modified bsd", re.I), "BSD-3-Clause"),
     (re.compile(r"^bsd", re.I), "BSD"),
@@ -170,20 +177,70 @@ print(json.dumps(out))
 """
 
 
-def python_entries(project: Path) -> list[Entry]:
-    if not (project / "pyproject.toml").exists():
+def normalize_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def lock_packages(lockfile: Path) -> list[tuple[str, str]]:
+    """(normalised name, version) of every package in uv.lock except the project itself."""
+    data = tomllib.loads(lockfile.read_text(encoding="utf-8"))
+    out = []
+    for pkg in data.get("package", []):
+        source = pkg.get("source", {})
+        if "editable" in source or "virtual" in source:
+            continue
+        out.append((normalize_name(pkg["name"]), pkg["version"]))
+    return sorted(out)
+
+
+def previous_python_licenses(notices: str) -> dict[tuple[str, str], str]:
+    """Python rows already committed in THIRD_PARTY_NOTICES.md: (name, version) -> licence."""
+    rows: dict[tuple[str, str], str] = {}
+    for line in notices.splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) >= 6 and cells[0] == "python":
+            rows[(normalize_name(cells[1]), cells[2])] = cells[3]
+    return rows
+
+
+def python_entries_from(
+    locked: list[tuple[str, str]],
+    installed: dict[tuple[str, str], str],
+    previous: dict[tuple[str, str], str],
+) -> list[Entry]:
+    entries = []
+    for name, version in locked:
+        lic = installed.get((name, version)) or previous.get((name, version)) or "UNKNOWN"
+        entries.append(Entry("python", name, version, lic, "runtime/dev"))
+    return entries
+
+
+def python_entries(project: Path, notices: str = "") -> list[Entry]:
+    lockfile = project / "uv.lock"
+    if not lockfile.exists():
         return []
     result = subprocess.run(
-        ["uv", "run", "--project", str(project), "python", "-c", _PY_PROBE],
+        [
+            "uv",
+            "run",
+            "--frozen",
+            "--all-groups",
+            "--all-extras",
+            "--project",
+            str(project),
+            "python",
+            "-c",
+            _PY_PROBE,
+        ],
         capture_output=True,
         text=True,
         check=True,
     )
     rows = json.loads(result.stdout.strip().splitlines()[-1])
-    return [
-        Entry("python", r["name"], r["version"], r["license"] or "UNKNOWN", "runtime/dev")
-        for r in rows
-    ]
+    installed = {(normalize_name(r["name"]), r["version"]): r["license"] for r in rows}
+    return python_entries_from(
+        lock_packages(lockfile), installed, previous_python_licenses(notices)
+    )
 
 
 def go_entries(module_dir: Path) -> list[Entry]:
@@ -211,7 +268,7 @@ def go_entries(module_dir: Path) -> list[Entry]:
                 "go",
                 obj["Path"],
                 obj.get("Version", "?"),
-                _go_license(Path(obj.get("Dir", ""))),
+                _go_license(Path(obj["Dir"])) if obj.get("Dir") else "UNKNOWN",
                 "runtime",
             )
         )
@@ -270,9 +327,10 @@ def violations(entries: list[Entry]) -> list[Entry]:
 
 
 def collect() -> list[Entry]:
+    notices = NOTICES.read_text(encoding="utf-8") if NOTICES.exists() else ""
     return (
         npm_entries(ROOT / "apps/web/package-lock.json")
-        + python_entries(ROOT / "apps/worker")
+        + python_entries(ROOT / "apps/worker", notices)
         + go_entries(ROOT / "apps/api")
     )
 

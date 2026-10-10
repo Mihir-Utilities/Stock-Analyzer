@@ -398,16 +398,16 @@ Packages: 404
 | npm | yocto-queue | 0.1.0 | MIT | dev | ok |
 | npm | zod | 4.6.5 | MIT | dev | ok |
 | npm | zod-validation-error | 4.0.2 | MIT | dev | ok |
-| python | ast_serialize | 0.12.1 | MIT | runtime/dev | ok |
+| python | ast-serialize | 0.12.1 | MIT | runtime/dev | ok |
 | python | colorama | 0.4.6 | BSD License | runtime/dev | ok |
 | python | iniconfig | 2.3.1 | MIT | runtime/dev | ok |
 | python | librt | 0.16.0 | MIT | runtime/dev | ok |
 | python | mypy | 2.4.0 | MIT | runtime/dev | ok |
-| python | mypy_extensions | 1.1.0 | MIT | runtime/dev | ok |
+| python | mypy-extensions | 1.1.0 | MIT | runtime/dev | ok |
 | python | packaging | 26.3 | Apache-2.0 OR BSD-2-Clause | runtime/dev | ok |
 | python | pathspec | 1.1.1 | Mozilla Public License 2.0 (MPL 2.0) | runtime/dev | Review |
 | python | pluggy | 1.6.0 | MIT License | runtime/dev | ok |
-| python | Pygments | 2.21.0 | BSD-2-Clause | runtime/dev | ok |
+| python | pygments | 2.21.0 | BSD-2-Clause | runtime/dev | ok |
 | python | pytest | 9.1.1 | MIT | runtime/dev | ok |
 | python | ruff | 0.17.0 | MIT | runtime/dev | ok |
-| python | typing_extensions | 4.16.0 | PSF-2.0 | runtime/dev | ok |
+| python | typing-extensions | 4.16.0 | PSF-2.0 | runtime/dev | ok |
