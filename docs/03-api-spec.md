@@ -61,7 +61,8 @@ Server search (fallback when index not cached): `q` min 1 char; ranking: exact s
   "flags": { "no_prices": false, "limited_history": false, "series_warning": null }
 } }
 ```
-Side effect: sets `last_opened_at = now()`. If `no_prices` and the broker session is active and `broker_ok != false`, the response includes `"backfill": { "status": "queued|running|none", "job_id": 5 }` and the API enqueues a `stock_backfill` job (see section 7).
+Side effect: sets `last_opened_at = now()`; if the stock is not tracked, sets `is_tracked=true, tracked_reason='opened'` (the API owns the tracked set; there is no `sync_instruments`). In **manual price mode** (current) there is no backfill and the response carries `"price_mode": "manual"`, `freshness.prices_as_of` (last imported bar) and, when `no_prices`, a hint "Import prices.csv for {symbol}". In broker mode (inactive, D-1): if `no_prices` and the broker session is active and `broker_ok != false`, the response includes `"backfill": { "status": "queued|running|none", "job_id": 5 }` and the API enqueues a `stock_backfill` job (section 7).
+When no instruments exist, `GET /stocks` and `/stocks/index` return an empty list (`count: 0`); the UI shows "No stocks yet. Import instruments.csv or add a stock."
 
 ## 4. Prices and indicators
 
@@ -69,7 +70,13 @@ Side effect: sets `last_opened_at = now()`. If `no_prices` and the broker sessio
 - `range` default 1Y. Max points returned 2,000: if more, server applies LTTB downsampling on `close` (keeping OHLC of the chosen bucket candle aggregation: weekly candles when > 2,000 daily points). `meta.interval` tells `1d` or `1w`.
 - Response: `{ "bars": [[date, open, high, low, close, volume], ...], "adjusted": true, "actions": [{"date":"2024-06-12","type":"split","label":"1:2 split"}] }`. Suspect rows excluded.
 - `adjusted=true` returns `adj_close` as close and scales open/high/low by the same factor (`adj_close/close`).
-- Empty -> `DATA_UNAVAILABLE` with `reason: "backfill_pending"|"broker_unavailable|broker_session_missing"|"no_history"`.
+- Empty -> `DATA_UNAVAILABLE` with `reason: "backfill_pending"|"broker_unavailable|broker_session_missing"|"no_history"|"no_prices_imported"` (manual mode: `no_prices_imported`).
+
+### DELETE `/stocks/{symbol}/prices?from=YYYY-MM-DD&to=YYYY-MM-DD`
+Owner-initiated delete of imported prices for one stock between two dates (inclusive); both required, `from <= to`. Body `{ "confirm": true }` required (the UI shows a ConfirmDialog with the row count from `POST /stocks/{symbol}/prices/delete-preview?from=&to=`, which returns `{ "rows": 120 }`). Writes an audit row (`import_batch` with `kind='manual_form'`, note "deleted prices {symbol} {from}..{to}, {n} rows") and enqueues `post_import` target `batch:<id>` to recompute analytics (and detection) for that symbol. Returns `{ "deleted": 120, "job_id": 14 }`. Shown on the stock's Data tab.
+
+### POST `/prices/trim`
+Owner-initiated "Trim history": body `{ "symbols": ["TCS","INFY"], "before": "2021-01-01", "confirm": true }`; deletes `price_daily` rows older than `before` for the chosen stocks (preview via `POST /prices/trim/preview` returning row counts per symbol and estimated MB freed). Audit row and `post_import` as above. Housekeeping never does this automatically (04 3.10).
 
 ### GET `/stocks/{symbol}/indicators`
 Returns the latest `analysis_snapshot` (see `05-analytics-spec.md`): `{ "as_of": "...", "returns": {...}, "technicals": {...}, "scores": { "trend": {...}, "risk": {...}, "quality": {...} }, "series": { "sma50": [[d,v]...], "sma200":..., "rsi14":..., "macd": {...}, "bollinger": {...} } }`. `series` limited to the last 750 trading days. If the series requested exceeds data, arrays contain nulls at warm-up positions (never fabricated).
@@ -133,7 +140,8 @@ Body none. Behavior: if an active job for `(stock_refresh, SYMBOL)` exists retur
 ### GET `/jobs/{id}`
 `{ "id":12, "kind":"stock_refresh", "target":"TCS", "status":"running", "requested_at":"...", "started_at":null, "finished_at":null, "error":null, "result": {"prices_rows":3,"fundamentals":"skipped_cooldown"} }`. UI polls every 3 s for up to 3 minutes, then shows "still waiting; will update automatically at next run".
 
-What `stock_refresh` does: latest quote + last 10 days of daily candles from the broker (requires an active broker session; otherwise job `failed` with `error=broker_session_missing`), then split/bonus detection for that stock. It never fetches fundamentals (those are owner-supplied).
+**Manual price mode (current):** the Refresh button is hidden; `stock_refresh`/`stock_backfill` return `422 PRICE_MODE_MANUAL`. The only job kind created by the API for stocks is `post_import` (target `batch:<id>`, enqueued after a prices commit, a delete-prices or trim action; deduped by the active-job index). `GET /jobs/{id}` for it returns `result: { "symbols_total": 80, "symbols_done": 40, "stage": "detect_actions|compute_analysis|alerts", "remaining": [...] }`; `status` `partial` means more work was re-enqueued (04 3.12).
+What `stock_refresh` does (broker mode, inactive): latest quote + last 10 days of daily candles from the broker (requires an active broker session; otherwise job `failed` with `error=broker_session_missing`), then split/bonus detection for that stock. It never fetches fundamentals (those are owner-supplied).
 What `stock_backfill` does: full daily-candle history up to `LAZY_BACKFILL_MAX_YEARS` from the broker, then detection; sets `is_tracked=true, tracked_reason='opened'`. In manual price mode both kinds are rejected with `422 PRICE_MODE_MANUAL` (use prices import).
 
 ### POST `/mf/schemes/{code}/refresh`
@@ -180,7 +188,7 @@ Return table keys: `r_1m,r_3m,r_6m,r_ytd,r_1y,r_3y,r_5y,r_since` (CAGR for >= 1y
 
 ## 11. Watchlist
 
-`GET /watchlist` -> `{ "stocks":[{symbol,name,ltp,change_pct,added_at,note}], "funds":[{code,name,nav,change_pct}] }`. `POST /watchlist` body `{"type":"stock","symbol":"TCS","note":""}` or `{"type":"mf","code":120503}` -> 201; duplicate -> 409. Adding a stock sets `is_tracked=true, tracked_reason='watchlist'` (if not already tracked for another reason) and enqueues a backfill. `DELETE /watchlist/{id}`: unsets tracked unless portfolio/training basket/LRU keeps it. `PATCH /watchlist/{id}` updates note (max 500 chars).
+`GET /watchlist` -> `{ "stocks":[{symbol,name,ltp,change_pct,added_at,note}], "funds":[{code,name,nav,change_pct}] }`. `POST /watchlist` body `{"type":"stock","symbol":"TCS","note":""}` or `{"type":"mf","code":120503}` -> 201; duplicate -> 409. Adding a stock sets `is_tracked=true, tracked_reason='watchlist'` (if not already tracked for another reason); no backfill in manual mode. `DELETE /watchlist/{id}`: unsets tracked unless portfolio, imported prices or the LRU keep it. `PATCH /watchlist/{id}` updates note (max 500 chars).
 
 ## 12. Portfolio (stocks only in v1)
 
@@ -189,7 +197,7 @@ Return table keys: `r_1m,r_3m,r_6m,r_ytd,r_1y,r_3y,r_5y,r_since` (CAGR for >= 1y
 { "symbol": "TCS", "side": "buy", "qty": "10", "price": "3500.00", "fees": "20.00", "trade_date": "2026-09-01", "note": "" }
 ```
 Validation: symbol must resolve to an instrument; `qty` 0 < qty <= 1e9 (up to 4 decimals; whole numbers recommended); `price` > 0; `fees` >= 0; `trade_date` not in the future (IST) and not before the instrument's `listing_date`; trade_date must not be a weekend or listed holiday (warning only, not an error); a **sell must not exceed the held quantity at that date** (computed with adjustments) -> 422 `INSUFFICIENT_HOLDINGS`. PATCH/DELETE re-validate the whole sequence for that symbol (reject any edit that would make a later sell exceed holdings).
-- Side effects: set `is_tracked=true, tracked_reason='portfolio'`, enqueue backfill.
+- Side effects: set `is_tracked=true, tracked_reason='portfolio'` (no backfill in manual mode).
 - `GET /portfolio/summary?as_of=` -> holdings, totals, XIRR, realized P&L (FIFO), unrealized (average-cost basis), day change, allocation by stock and sector, benchmark comparison. Detailed math in analytics spec section 8. Money fields are strings. Holdings include `adjustments_applied: [ {date, type, multiplier} ]`.
 - `GET /portfolio/adjustments` and `POST /portfolio/adjustments` (override) as per `portfolio_adjustment`.
 
@@ -210,7 +218,7 @@ Validation: symbol must resolve to an instrument; `qty` 0 < qty <= 1e9 (up to 4 
 | `holding_change` | `holder` promoter/fii/dii/mf, `delta_pct` 0.1-20 | new quarter filing changes the holding by at least delta |
 | `nav_above` / `nav_below` | `nav` > 0 (MF) | latest NAV crosses |
 
-- Alert text says "as of last update (time)"; v1 has no real-time ticks.
+- Alert text says "as of last update (time)"; v1 has no real-time ticks. **Manual price mode:** messages end "as of the last price import ({bar date})". Creation-time `THRESHOLD_ALREADY_MET` is checked against the **last imported bar**, and the 422 message says so ("already true at the last imported bar of {date}").
 - `GET /alerts?status=`, `PATCH /alerts/{id}` (status active/paused, params), `DELETE /alerts/{id}`, `GET /alerts/events?limit=` (history with delivery status).
 - Max 200 active alerts; 429-like `CONFLICT` beyond.
 - `POST /telegram/link-code` -> `{ "code":"A7K9-Q2XM", "expires_at":"...", "bot_username":"..." , "deep_link":"https://t.me/<bot>?start=<code>" }`; code = 8 chars from an unambiguous alphabet, stored as sha256, valid 15 min, one use. `DELETE /telegram/link` clears chat id. `POST /telegram/test` sends a test message (rate limited 1/min). `POST /telegram/webhook` as in data-sources section 8.
@@ -221,11 +229,12 @@ All files go through **validate -> preview -> commit**. Formats, columns and rul
 
 | Endpoint | Behavior |
 |---|---|
-| POST `/imports/{kind}/validate` | multipart `file` (<= 5 MB). `kind` in `prices`, `results_quarterly`, `results_annual`, `balance_cashflow`, `fundamentals_long`, `shareholding`, `corporate_actions`, `instrument_meta`, `screener_xlsx` (404 unless `SCREENER_IMPORT_ENABLED`). Returns `{ "upload_id":"uuid", "rows": 120, "preview": [first 20 normalized rows], "errors": [{"row":5,"column":"period_end","message":"..."}], "warnings": [...] }`. Nothing is written. Upload kept 1 h |
-| POST `/imports/{kind}/commit` | body `{ "upload_id":"uuid", "note":"as per filing dated 2026-08-12" }`. Rejected with 422 if the validated upload has any errors. Writes in one transaction; returns `{ "batch_id": 7, "inserted": 100, "updated": 20 }` |
+| POST `/imports/{kind}/validate` | multipart `file` (<= 5 MB and 50,000 rows; **`prices`: 25 MB / 300,000 rows**, enabled only after S9 passes, until then the lower limit applies). `kind` in `prices`, `instruments`, `results_quarterly`, `results_annual`, `balance_cashflow`, `fundamentals_long`, `shareholding`, `corporate_actions`, `instrument_meta`. (`screener_xlsx` is not built: D-5.) Parsed as a stream. Returns `{ "upload_id":"uuid", "upload_group":null, "rows": 120, "preview": [first 20 normalized rows], "errors": [{"row":5,"column":"period_end","message":"..."}], "warnings": [...], "estimated_growth_mb": 3.2 }` (`estimated_growth_mb` for `prices`). Nothing is written. The validated file is stored in the `import_upload` table, 1 h TTL, so it survives an API restart |
+| POST `/imports/{kind}/commit` | body `{ "upload_id":"uuid", "note":"as per filing dated 2026-08-12" }` (or `{ "upload_ids":[...], "upload_group":"uuid" }` when the browser split a large prices file; all parts commit in **one** transaction). Rejected with 422 if the upload has any errors, and for `prices` with `422 DB_SIZE_LIMIT` if current DB size + estimated growth would exceed `DB_SOFT_LIMIT_MB` (also rejected whenever the DB is already at the limit). Inserts in chunks of 5,000 rows inside one transaction (any error rolls back everything); deletes the `import_upload` row; returns `{ "batch_id": 7, "inserted": 100, "updated": 20, "post_import_job_id": 14, "warnings": ["TRACKED_OVER_400"] }`. Prices commits mark symbols `is_tracked` (`imported`) and enqueue `post_import` |
 | GET `/imports/batches?limit=` | List `import_batch` rows |
-| POST `/imports/batches/{id}/undo` | Allowed within 30 days for non-price batches; returns counts; 409 if already undone or if kind is `prices` |
-| GET `/imports/templates/{kind}` | Downloads the CSV template with the header row and one example row |
+| POST `/imports/batches/{id}/undo` | Allowed within 30 days for non-price, non-instruments batches; returns counts; 409 if already undone or if kind is `prices` or `instruments` |
+| GET `/imports/templates/{kind}` | Downloads the CSV template with the header row and one example row (includes `instruments`) |
+| POST `/instruments` | Manual **Add stock**: body `{ "symbol":"TCS", "name":"Tata Consultancy Services Ltd", "isin":"INE467B01029" }` (isin optional; same validators as `instruments.csv`, malformed ISIN = warning). 201 `{ "id": 1, "symbol":"TCS", "warnings":[] }`; existing symbol -> 409 (use the CSV to update) |
 | POST `/stocks/{symbol}/results` | Single-period manual entry (quarterly or annual) with the same validators; body `{ "basis":"consolidated","period_type":"Q","period_end":"2026-09-30","values": {"revenue": 1234.5, ...}, "note":"" }` |
 | POST `/stocks/{symbol}/shareholding` | Manual shareholding quarter entry |
 | POST `/stocks/{symbol}/actions` | Manual corporate action entry (status `confirmed`) |
@@ -235,6 +244,8 @@ All files go through **validate -> preview -> commit**. Formats, columns and rul
 Validators reject (422 with `details.fields`) what the spec calls errors and return warnings for suspicious values (unit mix-ups, tax/PBT mismatches).
 
 ## 14a. Broker connection (read-only data)
+
+**Manual price mode (current, D-1): only `GET /broker/status` is built and returns `{ "enabled": false, "mode": "manual" }`; the other routes below are not implemented (`422 BROKER_DISABLED` if called). Table kept as a design reference.**
 
 | Endpoint | Behavior |
 |---|---|
@@ -246,7 +257,7 @@ The token is never returned by any endpoint and never logged.
 
 ## 15. Admin / ops
 
-`GET /admin/status` -> `{ "sources": [source_health rows], "jobs": [latest ingestion_run per job], "coverage": { "instruments": 2231, "tracked": 612, "with_prices": 598, "with_fundamentals": 410, "with_shareholding": 401 }, "db": { "size_mb": 210, "tables": [ {name, mb, rows} ], "warn_level": "ok|70|85" }, "version": "git sha", "storage_policy": {...}` . `GET /healthz` -> `{ "ok": true }` (no DB call). `GET /readyz` (auth) -> DB ping.
+`GET /admin/status` -> `{ "sources": [source_health rows], "jobs": [latest ingestion_run per job], "coverage": { "instruments": 2231, "tracked": 612, "with_prices": 598, "with_fundamentals": 410, "with_shareholding": 401 }, "db": { "size_mb": 210, "tables": [ {name, mb, rows} ], "warn_level": "ok|70|85|95|limit" }, "version": "git sha", "storage_policy": {...}` . `GET /healthz` -> `{ "ok": true }` (no DB call). `GET /readyz` (auth) -> DB ping.
 
 ## 16. Rate limits and security headers
 - Per-IP login: 10/min. Authenticated general: 120/min. Refresh endpoints: as above. Return `X-RateLimit-*` headers (optional).

@@ -6,6 +6,11 @@
 | Depends on | B03 |
 | Size | M (S < 0.5 day, M 0.5-1.5 days, L 1.5-4 days of focused work) |
 
+## Amendment: manual price mode (decisions D-1, D-2 and follow-ups, 2026-10-10)
+Source of truth: `docs/OPEN_QUESTIONS.md` Decisions; updated specs: `docs/01` 7.0/7.1, `docs/03` 3, 4, 14, `docs/04` 3.9-3.13. Where this block conflicts with the sections below, **this block wins**.
+- Empty price series returns `DATA_UNAVAILABLE` with reason `no_prices_imported` (manual mode) instead of `backfill_pending`/`broker_*`.
+- `freshness.prices_as_of` = last imported bar date; no quote/`quote_ts` in manual mode (ltp = last close, source `import`).
+
 ## Read first
 - docs/03-api-spec.md section 4
 - docs/05-analytics-spec.md sections 3-4

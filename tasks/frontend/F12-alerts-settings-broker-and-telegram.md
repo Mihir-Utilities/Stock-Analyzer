@@ -3,8 +3,12 @@
 | Field | Value |
 |---|---|
 | Track | frontend |
-| Depends on | F02, B08, B12 |
+| Depends on | F02, B12 |
 | Size | M (S < 0.5 day, M 0.5-1.5 days, L 1.5-4 days of focused work) |
+
+## Amendment: manual price mode (decisions D-1, D-2 and follow-ups, 2026-10-10)
+Source of truth: `docs/OPEN_QUESTIONS.md` Decisions; updated specs: `docs/01` 7.0/7.1, `docs/03` 3, 4, 14, `docs/04` 3.9-3.13. Where this block conflicts with the sections below, **this block wins**.
+- Depends on F02, B12 (not B08). **No Broker card**, no Reconnect, no broker reminders; Settings keeps password, display, sessions, Telegram, export, About.
 
 ## Read first
 - docs/06-frontend-spec.md sections 6.8, 6.11

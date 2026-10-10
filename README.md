@@ -22,7 +22,7 @@ A single huge file overflows the working context, hides what matters for the cur
 ## Owner checklist (things only you can do)
 - Decide broker vs manual price mode (S1). Read the broker's terms on data use.
 - Create accounts: GitHub, Neon, Render, Vercel; Telegram bot via BotFather.
-- Prepare optional CSVs: sector/industry and index tags (`instrument_meta`), training basket list, results/shareholding for the stocks you care about.
+- Prepare optional CSVs: sector/industry and index tags (`instrument_meta`), results/shareholding for the stocks you care about.
 - Maintain `config/market_holidays.json` yearly (from the exchange's published holiday list).
 - Reconnect the broker each trading day (one tap) if you use broker prices.
 

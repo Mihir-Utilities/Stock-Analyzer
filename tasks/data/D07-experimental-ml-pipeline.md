@@ -6,6 +6,12 @@
 | Depends on | D05 |
 | Size | L (S < 0.5 day, M 0.5-1.5 days, L 1.5-4 days of focused work) |
 
+## Amendment: manual price mode (decisions D-1, D-2 and follow-ups, 2026-10-10)
+Source of truth: `docs/OPEN_QUESTIONS.md` Decisions; updated specs: `docs/01` 7.0/7.1, `docs/03` 3, 4, 14, `docs/04` 3.9-3.13. Where this block conflicts with the sections below, **this block wins**.
+- Universe (D-H): every tracked stock with >= 750 valid bars and no unconfirmed actions; there is no training basket and `TRAINING_BASKET_MAX` does not exist. The 20-stock minimum stays.
+- Forecasts stay **deferred** (D-4): ship the `insufficient_universe` path unless >= 20 eligible stocks exist when this task runs; the owner decides then.
+- `NIFTY50`/`INDIAVIX` market features come from `market_series` (reserved prices.csv symbols); omit them entirely if absent.
+
 ## Read first
 - docs/05-analytics-spec.md section 10
 - docs/04-worker-jobs.md 3.8

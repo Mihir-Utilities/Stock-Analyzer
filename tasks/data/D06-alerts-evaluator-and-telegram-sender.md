@@ -6,6 +6,10 @@
 | Depends on | D03, B12 |
 | Size | M (S < 0.5 day, M 0.5-1.5 days, L 1.5-4 days of focused work) |
 
+## Amendment: manual price mode (decisions D-1, D-2 and follow-ups, 2026-10-10)
+Source of truth: `docs/OPEN_QUESTIONS.md` Decisions; updated specs: `docs/01` 7.0/7.1, `docs/03` 3, 4, 14, `docs/04` 3.9-3.13. Where this block conflicts with the sections below, **this block wins**.
+- Manual-mode evaluation per `docs/04` 3.9: event-driven call at the end of `post_import` for the affected symbols **and** the 19:30 IST EOD run; no intraday run, no quotes, no broker reminders. Only bars newer than `alert.last_state.last_bar_date` can fire; the dedupe key includes the bar date; messages end "as of the last price import ({bar date})". ALR-14 is N/A in manual mode; add **ALR-18**.
+
 ## Read first
 - docs/04-worker-jobs.md 3.9
 - docs/01-data-sources.md section 6

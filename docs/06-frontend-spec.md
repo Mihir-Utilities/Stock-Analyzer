@@ -44,9 +44,9 @@ Unknown symbol -> not-found with search. Alias symbol -> `router.replace` to the
 ## 4. Global components (see design system for visuals)
 1. **Search palette** (`/` or Ctrl/Cmd+K): loads `/stocks/index` once (IndexedDB cache by `generated_at`; refresh if > 24 h or ETag changed). Normalize query (uppercase, remove spaces/punctuation except `&` and `-`); rank: exact symbol > symbol prefix > name word-prefix > substring > fuzzy (Jaro-Winkler >= 0.85). Max 12 results, grouped Stocks / Funds (funds via debounced 250 ms server search). Row: symbol, name, sector chip (if known), badges `Suspended`, `Delisted`, `ETF/REIT`, `No broker data`. Keyboard navigation; recent searches (8). Empty: "No match. Try the company name or exchange symbol."
 2. **Price header:** symbol, name, LTP, change, quote time + age badge, market status pill, RangeBar, Watchlist star, Alert bell, Refresh, "Add transaction", "Compare".
-3. **Refresh button:** `POST .../refresh`; spinner "Refreshing (can take up to a minute)"; poll `/jobs/{id}` every 3 s up to 3 min; `ok` -> invalidate queries + toast; 429 -> "You refreshed this recently. Try again in {n} min."; `failed` with `broker_session_missing` -> banner with Reconnect broker; timeout -> "Still working; data will update at the next scheduled run."
+3. **Refresh button:** **hidden in manual price mode** (current); the header instead shows a "Last price import: {bar date}" chip (amber when older than 1 trading day) and an "Import prices" link. Broker-mode behavior (inactive): `POST .../refresh`; spinner "Refreshing (can take up to a minute)"; poll `/jobs/{id}` every 3 s up to 3 min; `ok` -> invalidate queries + toast; 429 -> "You refreshed this recently. Try again in {n} min."; `failed` with `broker_session_missing` -> banner with Reconnect broker; timeout -> "Still working; data will update at the next scheduled run."
 4. **Freshness chips** on every card (source + as-of; amber when stale). **DepthChip** on fundamentals.
-5. **Banners:** broker disconnected (with Reconnect), manual price mode notice, `UNCONFIRMED_ACTION` banner (Confirm/Reject), experimental banner, API `warnings[]` rendered always.
+5. **Banners:** manual price mode notice (broker banners and Reconnect are not built in manual mode), `UNCONFIRMED_ACTION` banner (Confirm/Reject), experimental banner, API `warnings[]` rendered always.
 6. **Toasts, ConfirmDialog, Skeletons, ErrorBoundary per card** (one card failing never blanks the page).
 
 ## 5. States every data view implements
@@ -61,7 +61,7 @@ Password field (`autocomplete="current-password"`), show/hide, Enter submits, ge
 Tiles: Index sparklines (Nifty 50, India VIX; only if served, else reason), Market status/next open, Watchlist heatmap/treemap and movers, Upcoming events timeline (owner-entered), Portfolio snapshot (value, day change, XIRR) with allocation sunburst, Alerts activity, Data-health strip (broker session countdown with Reconnect, MF freshness, last job status).
 
 ### 6.3 Stocks browse
-Search input, filters (Tracked only toggle, Sector, Index tag, Kind, Status), sortable virtualized table (Symbol, Name, Price, 1D, 1Y with sparkline, P/E if entered, Quality if available). Untracked rows show "Open to fetch history".
+Search input, filters (Tracked only toggle, Sector, Index tag, Kind, Status), sortable virtualized table (Symbol, Name, Price, 1D, 1Y with sparkline, P/E if entered, Quality if available). Untracked rows show "Import prices to see history" (manual mode). With no instruments at all: "No stocks yet. Import instruments.csv or add a stock." with buttons to the Import center and the Add stock form.
 
 ### 6.4 Stock detail
 Header (4.2). Tabs:
@@ -82,7 +82,7 @@ Header (4.2). Tabs:
 
 **Events:** owner-entered calendar and corporate actions timeline (confirmed, detected-pending, rejected), add/edit forms, detected-action Confirm/Reject with the implied multiplier.
 
-**Data (tab `data`):** transparency view: price history rows count, first/last date, sources used, suspect rows count, import batches affecting this stock, and links to undo/edit.
+**Data (tab `data`):** transparency view: price history rows count, first/last date, sources used, suspect rows count, import batches affecting this stock, and links to undo/edit. **Manual mode:** a "Delete prices between {from} and {to}" action (date pickers, row-count preview, ConfirmDialog; `DELETE /stocks/{symbol}/prices`).
 
 ### 6.5 Compare
 Picker (2-5), range chips, rebased chart, metrics table with best/worst highlights (direction-aware, heuristic noted), radar overlay, correlation matrix heatmap, shareable URL; short-history badges.
@@ -100,7 +100,7 @@ List with status chips; create dialog (target, kind, dynamic params with units, 
 `/mf`: debounced search, filters (category, fund house, plan Direct default, option Growth default, show all, group variants), rows with latest NAV and 1Y when tracked. `/mf/[code]`: header (name, house, category, plan/option chips, NAV + date, star); NAV chart with rolling-return band; returns table + heatmap; calendar-year bars; rolling-return histogram; risk (volatility, drawdown, Sharpe-like); SIP calculator with growth area chart and installment markers; lumpsum calculator; warnings (IDCW, inactive); notice "AUM, expense ratio and manager are not available from this data source"; attribution "NAV data: AMFI via mfapi.in". `/mf/compare`: rebased chart, risk-return scatter, returns heatmap table.
 
 ### 6.10 Import center (`/imports`)
-Tabs: **Upload** (choose type -> Wizard: upload -> validate -> preview first 20 rows with row/column errors and warnings -> commit with note "as per filing dated ..."), **Templates** (download per kind), **Manual forms** (quarterly results, annual, shareholding, corporate action, calendar event), **Batches** (list, undo with overwrite warning; price batches not undoable). Persistent notice: "Enter or import only data you have the right to use. Prefer company filings and your own records." Screener tab appears only if enabled, with its terms notice.
+Tabs: **Upload** (choose type -> Wizard: upload -> validate -> preview first 20 rows with row/column errors and warnings -> commit with note "as per filing dated ..."), **Templates** (download per kind), **Manual forms** (**Add stock**, quarterly results, annual, shareholding, corporate action, calendar event), **Batches** (list, undo with overwrite warning; price and instruments batches not undoable), **Storage** (DB size meter vs 380 MB with 70/85/95% warnings; **Trim history**: choose stocks and a cutoff date, preview rows and MB freed, ConfirmDialog). The `instruments` and `prices` wizards show the estimated DB growth and block commit when the size guard fails. Large price CSVs: if spike S9 shows the proxy limit is below 25 MB, the wizard splits the file in the browser into parts under the measured limit and commits them as one logical batch (same upload group id, one transaction at commit). Persistent notice: "Enter or import only data you have the right to use. Prefer company filings and your own records." No Screener tab (not built, D-5).
 
 ### 6.11 Settings
 Password change; display (theme, number format, show experimental); Telegram; **Broker** (status, minutes left, Connect/Reconnect/Disconnect, "never stores your password; read-only data access"); sessions (list, revoke, logout all); export (watchlist/portfolio/alerts/owner data as JSON/CSV); About (versions, data sources, safe-use policy link, THIRD_PARTY_NOTICES).

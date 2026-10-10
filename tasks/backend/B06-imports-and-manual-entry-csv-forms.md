@@ -3,8 +3,16 @@
 | Field | Value |
 |---|---|
 | Track | backend |
-| Depends on | B05 |
+| Depends on | B06a: B03, B09; B06b: B05, B06a |
 | Size | L (S < 0.5 day, M 0.5-1.5 days, L 1.5-4 days of focused work) |
+
+## Amendment: manual price mode (decisions D-1, D-2 and follow-ups, 2026-10-10)
+Source of truth: `docs/OPEN_QUESTIONS.md` Decisions; updated specs: `docs/01` 7.0/7.1, `docs/03` 3, 4, 14, `docs/04` 3.9-3.13. Where this block conflicts with the sections below, **this block wins**.
+**This task is split (splitting rule):**
+- **B06a** (depends on B03, B09): upload store in table `import_upload` (UNLOGGED, 1 h TTL, deleted on commit and by housekeeping; survives API restart); **streamed parsing**; `instruments` importer (`docs/01` 7.0 incl. `previous_symbol` rename + alias and `status`) and `POST /instruments`; `prices` importer (7.1: reserved `NIFTY50`/`INDIAVIX` -> `market_series`; limits 25 MB / 300,000 rows **only enabled after spike S9 passes, otherwise 5 MB**; chunks of 5,000 rows in one transaction; projected-size guard -> `422 DB_SIZE_LIMIT`; warn above 400 tracked stocks; set `is_tracked/imported`; enqueue `post_import`); `upload_group` support for browser-split files (S9 fallback); templates for these kinds; `DELETE /stocks/{symbol}/prices` + delete-preview; `POST /prices/trim` + preview; undo refuses `prices` and `instruments` (409).
+  Required tests: IMP-20, IMP-21, IMP-22, IMP-23, IMP-24, INS-14, PRC-21, plus the shared-infrastructure rows IMP-01..04, 08..13, 15..17 exercised on the `instruments` and `prices` kinds, SEC-05, SAF-05.
+- **B06b** (depends on B05, B06a): every other importer (results, balance/cashflow, fundamentals long, shareholding, corporate actions, instrument_meta), manual-entry endpoints, undo, parity test. Required tests: IMP-05..07, 09, 14, 17, 18, FND-15, SHP-05 and the shared rows re-run for these kinds.
+- **Not built:** Screener import (D-5): ignore every Screener item below.
 
 ## Read first
 - docs/01-data-sources.md section 7

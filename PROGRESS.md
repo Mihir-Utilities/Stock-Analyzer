@@ -6,8 +6,8 @@ A new session starts with: "Resume. Read CLAUDE.md, PROGRESS.md, OPEN_QUESTIONS.
 ## Pointer
 - CURRENT: T00 (not started) - waiting for owner's "begin T00"
 - LAST COMPLETED: kickoff (layout reorganised, git init, decisions recorded in docs/OPEN_QUESTIONS.md and MASTER_PLAN 9)
-- MODE: manual price mode (no broker). Broker tasks/parts (T01 S2-S5, D02 broker adapter, B08, B09 broker parts, D03 broker ingestion, F12 broker UI) are dropped or reduced when reached; record in each task.
-- BLOCKED ON OWNER: OQ-4 source of the instrument list (needed by T02/B03); OQ-3 training basket before D07
+- MODE: manual price mode (no broker). Each affected task file starts with an "Amendment: manual price mode" block that overrides the text below it (D02 removed; B08 reduced; B06 and F13 split a/b; B09/D03/D06/D07/D08 changed).
+- BLOCKED ON OWNER: nothing blocks T00. Open for later: OQ-5 are uploaded prices raw or adjusted (before D03), OQ-6 holiday file upkeep
 
 ## Per-task phases (tick each; a task is DONE only when all five are ticked)
 1 EXEC   = Prompt 2 (plan, tests first, implement, tick acceptance criteria)
@@ -22,7 +22,7 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 | Wave | Task | Status | Phase reached | Commit | Notes / owner action needed |
 |---|---|---|---|---|---|
 | 0 | T00 | TODO | | | |
-| 0 | T01 | TODO | | | needs owner: broker login, spikes |
+| 0 | T01 | TODO | | | manual mode: S1 recorded, S2-S5 skipped; owner needed for S9 (25 MB upload), S12-S14, S17 |
 | 0 | T02 | TODO | | | parallel with T01 after T00 |
 | 1 | B01 | TODO | | | produces openapi.yaml; unlocks parallel FE/BE |
 | 1 | D01 | TODO | | | |
@@ -31,21 +31,23 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 | 1 | F02 | TODO | | | |
 | 2 | B03 | TODO | | | |
 | 2 | F03 | TODO | | | |
-| 2 | D02 | TODO | | | needs BROKER_DECISION.md approved |
+| 2 | D02 | REMOVED | | | manual price mode (D-1, D-2); stub file kept |
 | 3 | D03 | TODO | | | |
-| 3 | B08 | TODO | | | owner does broker login |
-| 3 | B09 | TODO | | | |
+| 1 | B08 (reduced) | TODO | | | status endpoint only; do with B02 |
+| 3 | B09 | TODO | | | depends on D01 only |
 | 3 | B04 | TODO | | | |
+| 3 | B06a | TODO | | | instruments + prices importers; needs B03, B09 |
 | 4 | D05a (indicators/returns) | TODO | | | |
 | 4 | F04 | TODO | | | |
 | 4 | F05 | TODO | | | |
 | 4 | F06 | TODO | | | |
+| 4 | F13a | TODO | | | instruments/prices wizard, Add stock, Storage tab; needs B06a |
 | 5 | B05 | TODO | | | |
-| 5 | B06 | TODO | | | |
+| 5 | B06b | TODO | | | rest of B06; needs B05, B06a |
 | 5 | B07 | TODO | | | |
 | 5 | F07 | TODO | | | |
 | 5 | F08 | TODO | | | |
-| 5 | F13 | TODO | | | |
+| 5 | F13b | TODO | | | rest of F13; needs B06b |
 | 6 | D05b (fundamentals/scores) | TODO | | | |
 | 6 | B13 | TODO | | | |
 | 6 | F10 | TODO | | | |
@@ -56,8 +58,8 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 | 8 | B12 | TODO | | | owner: Telegram bot |
 | 8 | D06 | TODO | | | |
 | 8 | F11 | TODO | | | |
-| 8 | F12 | TODO | | | |
-| 9 | D07 | TODO | | | needs training basket |
+| 8 | F12 | TODO | | | no Broker card |
+| 9 | D07 | TODO | | | forecasts deferred; insufficient_universe path unless >= 20 eligible stocks |
 | 9 | B14 | TODO | | | |
 | 9 | F09 | TODO | | | |
 | 10 | D08 | TODO | | | |
@@ -68,3 +70,4 @@ Frontend and backend tasks may run in separate git worktrees/sessions. Frontend 
 
 ## Session log (append newest at bottom)
 - 2026-10-10: Kickoff review done. Owner answered; decisions recorded; files moved to documented layout (from extracted zip, content verified identical); .gitignore added; first commit made. Awaiting "begin T00".
+- 2026-10-10: Owner decision D-2 and follow-ups (D-B..D-I) applied to specs (docs/01-08), tasks and MASTER_PLAN; B06/F13 split and D02 removal proposed by Claude (D-J) for owner review. Added edge-case rows IMP-20..24, INS-14, PRC-21, ALR-18, SYS-12. Awaiting "begin T00".

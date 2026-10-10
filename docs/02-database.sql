@@ -52,8 +52,8 @@ CREATE TABLE source_health (
 
 CREATE TABLE refresh_job (
   id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  kind          text NOT NULL CHECK (kind IN ('stock_refresh','stock_backfill','mf_refresh')),
-  target        text NOT NULL,                    -- symbol or scheme code
+  kind          text NOT NULL CHECK (kind IN ('stock_refresh','stock_backfill','mf_refresh','post_import')),
+  target        text NOT NULL,                    -- symbol or scheme code; for post_import: 'batch:<import_batch.id>'
   requested_at  timestamptz NOT NULL DEFAULT now(),
   status        text NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','ok','partial','failed','cancelled')),
   started_at    timestamptz,
@@ -82,9 +82,20 @@ CREATE TABLE broker_oauth_state (
   used_at       timestamptz
 );
 
+-- Validated uploads awaiting commit. UNLOGGED (cheap, truncated after a crash; the owner re-uploads). 1 h TTL; deleted on commit and by housekeeping.
+CREATE UNLOGGED TABLE import_upload (
+  id          uuid PRIMARY KEY,
+  kind        text NOT NULL,
+  content     bytea NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  expires_at  timestamptz NOT NULL
+);
+CREATE INDEX import_upload_expires_idx ON import_upload (expires_at);
+
 CREATE TABLE import_batch (
   id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  kind          text NOT NULL CHECK (kind IN ('prices','results_quarterly','results_annual','balance_cashflow','fundamentals_long','shareholding','corporate_actions','instrument_meta','screener_xlsx','manual_form')),
+  kind          text NOT NULL CHECK (kind IN ('prices','results_quarterly','results_annual','balance_cashflow','fundamentals_long','shareholding','corporate_actions','instrument_meta','instruments','screener_xlsx','manual_form')),
+  upload_group  uuid,                             -- logical batch when a large prices file is split in the browser (S9 fallback); one transaction at commit
   filename      text,
   sha256        bytea,
   row_count     integer NOT NULL DEFAULT 0,
@@ -114,7 +125,7 @@ CREATE TABLE instrument (
   status          text NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended','delisted','symbol_changed')),
   instrument_kind text NOT NULL DEFAULT 'equity' CHECK (instrument_kind IN ('equity','etf','reit','invit','sme','other')),
   is_tracked      boolean NOT NULL DEFAULT false, -- nightly price updates + history retained
-  tracked_reason  text CHECK (tracked_reason IN ('training_basket','watchlist','portfolio','opened')),
+  tracked_reason  text CHECK (tracked_reason IN ('watchlist','portfolio','opened','imported')),
   last_opened_at  timestamptz,
   last_seen_in_master date,
   created_at      timestamptz NOT NULL DEFAULT now(),
@@ -177,7 +188,7 @@ CREATE TABLE quote_latest (
 );
 
 CREATE TABLE market_series (
-  code          text NOT NULL,                    -- NIFTY50, INDIAVIX (and other index codes only if the broker serves them)
+  code          text NOT NULL,                    -- NIFTY50, INDIAVIX: filled from the reserved symbols in prices.csv (manual price mode)
   trade_date    date NOT NULL,
   value         double precision NOT NULL,
   PRIMARY KEY (code, trade_date)

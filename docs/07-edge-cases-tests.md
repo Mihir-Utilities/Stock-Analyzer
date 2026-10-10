@@ -65,13 +65,28 @@ Rule: every row needs an automated test before its feature is done. Test types: 
 | IMP-10 | Same file twice | Idempotent upsert | I |
 | IMP-11 | Preview then commit with errors present | Commit rejected 422 | I |
 | IMP-12 | Upload expires (1 h) | 404 on commit | I |
-| IMP-13 | Oversized file / >50k rows / wrong MIME | 413/422 | I |
+| IMP-13 | Oversized file / >50k rows (`prices`: >300k rows or >25 MB) / wrong MIME | 413/422 | I |
 | IMP-14 | Undo batch | Rows removed; overwritten values not restored (warned); price batches not undoable | I |
 | IMP-15 | CSV injection (`=cmd|...` cells) | Stored as text; exports prefix with `'` | U |
 | IMP-16 | Encoding (UTF-8 BOM, semicolons) | Parsed | F |
 | IMP-17 | Manual form validators identical to CSV | Shared validation code; parity test | U |
 | IMP-18 | Entering data for delisted/unknown instrument | Rejected with message | I |
-| IMP-19 | Optional Screener file with unknown layout (if enabled) | Reject whole file | F |
+| IMP-19 | Optional Screener file with unknown layout (if enabled) | Reject whole file (N/A: Screener import not built, D-5) | F |
+| IMP-20 | `instruments.csv` rules | Symbol charset `A-Z 0-9 & -`, uppercase, unique in file; malformed ISIN = warning (stored NULL); `NIFTY50`/`INDIAVIX` rejected; upsert never deletes and never overwrites sector/industry/company_type; batch not undoable | F |
+| IMP-21 | Reserved `NIFTY50`/`INDIAVIX` in `prices.csv` | Written to `market_series(code, trade_date, value=close)`, not `price_daily`; 50% sanity rule skipped; absent -> ML/benchmark features degrade (BRK-16) | I |
+| IMP-22 | 300,000-row price import (25 MB) | Streamed parse; inserts in chunks of 5,000 inside one transaction; any error (including at the last chunk) rolls back everything; memory stays bounded | I |
+| IMP-23 | Projected-size guard | Validate returns `estimated_growth_mb`; commit rejected with `DB_SIZE_LIMIT` and a plain message when current size + estimate > `DB_SOFT_LIMIT_MB`; warning (not block) when tracked stocks would exceed 400 | I |
+| IMP-24 | Validated upload survives an API restart before commit | Upload stored in UNLOGGED `import_upload`; restart API; commit succeeds; row deleted on commit; expired rows (1 h) 404 and are removed by housekeeping | I |
+
+## INS: instruments
+| ID | Scenario | Required behavior | Test |
+|---|---|---|---|
+| INS-14 | `previous_symbol` rename | Matching existing instrument + new symbol free: instrument renamed, `symbol_alias` written, prices/fundamentals/portfolio links kept; new symbol already taken or no match: ignored with warning | I |
+
+## PRC: manual price data actions
+| ID | Scenario | Required behavior | Test |
+|---|---|---|---|
+| PRC-21 | Delete prices for {symbol} between {from} and {to} | Preview count, confirm required, rows deleted, audit row written, `post_import` recomputes analytics/detection; `from > to` 422; other symbols untouched | I |
 
 ## FND: fundamentals (owner data) and analytics
 | ID | Scenario | Required behavior | Test |
@@ -156,10 +171,11 @@ Rule: every row needs an automated test before its feature is done. Test types: 
 | ALR-11 | Webhook secret mismatch | 401; nothing stored | I |
 | ALR-12 | /start with used/expired code | Polite failure | I |
 | ALR-13 | Other chat messages the bot | Ignored | I |
-| ALR-14 | No fresh price (broker session expired) | Uses last bar; message says "as of {time}"; no price alert fired if data older than 1 trading day | U |
+| ALR-14 | No fresh price (broker session expired) | Uses last bar; message says "as of {time}"; no price alert fired if data older than 1 trading day (broker mode only; does not apply in manual mode, see ALR-18) | U |
 | ALR-15 | 200-alert limit | 409 | I |
 | ALR-16 | Webhook while API asleep | Link UI tolerates delay (S12) | M |
 | ALR-17 | `results_upcoming` relies on owner-entered calendar | No event -> no alert; UI hint to add events | U |
+| ALR-18 | Manual mode: event-driven evaluation after a prices import | `post_import` evaluates alerts for affected symbols (and 19:30 EOD run); dedupe key includes bar date so the same bar never fires twice; only bars newer than the alert's last evaluated bar can fire; no staleness block; message ends "as of the last price import ({bar date})"; creation-time THRESHOLD_ALREADY_MET uses the last imported bar and says so | I |
 
 ## ML: predictions
 | ID | Scenario | Required behavior | Test |
@@ -223,3 +239,4 @@ Rule: every row needs an automated test before its feature is done. Test types: 
 | SYS-09 | HMAC clock skew | 120 s tolerance | U |
 | SYS-10 | Holiday file missing for the year | Weekend-only + detection; warning on admin page | U |
 | SYS-11 | Dependency drift | Lockfiles; renovate PRs with tests | CI |
+| SYS-12 | `post_import` resumes after the 3.5-minute stop | With a slow fixture set, the job stops starting new symbols at 3.5 min, stores `symbols_done/remaining` in `refresh_job.result`, sets `partial`, enqueues the remainder; `process_queued_jobs` completes it; no duplicate actions/snapshots/alerts | I |

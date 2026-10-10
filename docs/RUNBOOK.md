@@ -1,7 +1,10 @@
 # RUNBOOK (kept up to date by every task)
 
 ## 1. Daily routine
-- If using broker prices: reconnect the broker in Settings once per trading day (Telegram reminder at 08:30 and 17:30 IST if the session is missing).
+- Manual price mode (current): after market close, upload the day's `prices.csv` in Import center. Alerts and analytics run automatically right after the import (`post_import`) and at 19:30 IST (EOD). Alerts say "as of the last price import".
+- First setup: import `instruments.csv` (or use Add stock), then `prices.csv`.
+- Watch DB size (Import center > Storage). Notices at 70/85/95% of 380 MB; at 380 MB price imports are refused. Nothing is deleted automatically: free space with Trim history or Delete prices.
+- Broker reconnect is not applicable (broker mode dormant).
 ## 2. Deploy
 (Fill during T00/T02/B01/F01: Neon setup, Render services (API + worker-http), Vercel project, GitHub secrets, environment variables from .env.example.)
 ## 3. Scheduled jobs

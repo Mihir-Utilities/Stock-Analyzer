@@ -6,6 +6,10 @@
 | Depends on | B02 |
 | Size | M (S < 0.5 day, M 0.5-1.5 days, L 1.5-4 days of focused work) |
 
+## Amendment: manual price mode (decisions D-1, D-2 and follow-ups, 2026-10-10)
+Source of truth: `docs/OPEN_QUESTIONS.md` Decisions; updated specs: `docs/01` 7.0/7.1, `docs/03` 3, 4, 14, `docs/04` 3.9-3.13. Where this block conflicts with the sections below, **this block wins**.
+- **Reduced to `GET /broker/status`** returning `{enabled:false, mode:"manual"}`. No OAuth, no `broker_oauth_state`, no token encryption, no login/callback/session routes (`422 BROKER_DISABLED` if called). Ignore the broker items below. Size drops to S.
+
 ## Read first
 - docs/01-data-sources.md sections 3.1, 3.4
 - docs/03-api-spec.md section 14a

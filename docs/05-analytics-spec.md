@@ -173,7 +173,7 @@ Inputs: monthly `amount`, `start`, `end`, `day` (1-28, default 1). Installment d
 ## 10. Experimental ML specification
 
 ### 10.1 Scope
-Targets: direction over `h in {5, 21}` trading days and the 80% return band. Universe: tracked stocks with >= 750 valid bars and no unconfirmed actions; training requires **at least 20 such stocks** (the owner can import a `training_basket` list through `instrument_meta` with `index_tags` such as NIFTY50|NIFTY100, which the app then tracks), otherwise training is skipped with status `insufficient_universe` and all forecasts are hidden. Survivorship bias exists (delisted stocks absent) and is documented in the UI model card.
+Targets: direction over `h in {5, 21}` trading days and the 80% return band. Universe: tracked stocks with >= 750 valid bars and no unconfirmed actions; training requires **at least 20 such stocks** (there is no separate "training basket" concept: the universe is simply every tracked stock that meets the bar and unconfirmed-action rules; the owner grows it by importing prices), otherwise training is skipped with status `insufficient_universe` and all forecasts are hidden. Survivorship bias exists (delisted stocks absent) and is documented in the UI model card.
 
 ### 10.2 Timing and leakage rules (hard requirements)
 - A prediction made for date `t` uses only data available after the close of `t` in India. Row features use bars up to and including `t`.

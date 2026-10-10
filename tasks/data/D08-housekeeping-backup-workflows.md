@@ -3,8 +3,13 @@
 | Field | Value |
 |---|---|
 | Track | data |
-| Depends on | D01..D07 |
+| Depends on | D01, D03..D07 (D02 removed) |
 | Size | M (S < 0.5 day, M 0.5-1.5 days, L 1.5-4 days of focused work) |
+
+## Amendment: manual price mode (decisions D-1, D-2 and follow-ups, 2026-10-10)
+Source of truth: `docs/OPEN_QUESTIONS.md` Decisions; updated specs: `docs/01` 7.0/7.1, `docs/03` 3, 4, 14, `docs/04` 3.9-3.13. Where this block conflicts with the sections below, **this block wins**.
+- Housekeeping per `docs/04` 3.10 (manual mode): **never delete imported prices automatically**; imported/watchlist/portfolio stocks are exempt from LRU and the 12-month rule; Telegram notice + admin warning at 70/85/95% of `DB_SOFT_LIMIT_MB`; delete expired `import_upload` rows. Owner-initiated trim/delete live in B06a/F13a.
+- Workflows: no `sync_instruments`, `broker_session_check`, `ingest_prices_eod`, retry or intraday alert workflows; add `process_queued_jobs`; keep `evaluate_alerts` (EOD only), `ingest_mf_navs`, `sync_mf_schemes`, `housekeeping`, `backup_user_data` (no broker tokens exist), `keepalive`.
 
 ## Read first
 - docs/04-worker-jobs.md sections 2, 3.10, 3.11, 5

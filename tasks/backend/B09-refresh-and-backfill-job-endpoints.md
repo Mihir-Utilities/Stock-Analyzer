@@ -3,8 +3,13 @@
 | Field | Value |
 |---|---|
 | Track | backend |
-| Depends on | B08, D01 |
+| Depends on | D01 |
 | Size | M (S < 0.5 day, M 0.5-1.5 days, L 1.5-4 days of focused work) |
+
+## Amendment: manual price mode (decisions D-1, D-2 and follow-ups, 2026-10-10)
+Source of truth: `docs/OPEN_QUESTIONS.md` Decisions; updated specs: `docs/01` 7.0/7.1, `docs/03` 3, 4, 14, `docs/04` 3.9-3.13. Where this block conflicts with the sections below, **this block wins**.
+- Depends on **D01 only** (not B08).
+- Scope: `refresh_job` plumbing, HMAC-signed fire-and-forget call to worker-http, `GET /jobs/{id}`, unique-active-job dedupe, **`post_import` enqueue** (target `batch:<id>`, result fields `symbols_total/symbols_done/remaining`), cooldown/global limits for `mf_refresh`. `stock_refresh` and `stock_backfill` return `422 PRICE_MODE_MANUAL`; no `broker_session_missing` handling.
 
 ## Read first
 - docs/03-api-spec.md section 7

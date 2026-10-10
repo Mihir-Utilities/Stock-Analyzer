@@ -4,7 +4,7 @@ One Python package `apps/worker`:
 - CLI: `python -m worker run <job> [--symbols A,B] [--dry-run] [--record-fixtures]` (GitHub Actions or a home machine).
 - HTTP: `uvicorn worker.http:app` on Render free (on-demand jobs only: `stock_refresh`, `stock_backfill`, `mf_refresh`).
 
-Allowed data sources: broker API (owner session), mfapi.in, AMFI file, Telegram. Nothing else (`00-legal-and-safety.md`).
+Allowed data sources: mfapi.in, AMFI file, Telegram (and the owner's broker API in broker mode, which is **inactive** in manual price mode, D-1). Stock prices arrive only through owner imports processed by the Go API (`01` 7.1). Nothing else (`00-legal-and-safety.md`).
 
 ## 1. Common rules
 1. **Lock:** insert `ingestion_run(status='running')`; the partial unique index allows one running instance per job; a conflict exits as `skipped`. A run older than 2x its timeout may be marked `failed` by the next run.
@@ -22,13 +22,14 @@ Allowed data sources: broker API (owner session), mfapi.in, AMFI file, Telegram.
 
 | Job | IST | Cron (UTC) | Timeout |
 |---|---|---|---|
-| `sync_instruments` | 07:00 daily | `30 1 * * *` | 10 min |
-| `broker_session_check` | 08:30 and 17:30 Mon-Fri | `0 3 * * 1-5` and `0 12 * * 1-5` | 2 min |
-| `ingest_prices_eod` | 18:30 Mon-Fri | `0 13 * * 1-5` | 40 min (then chains `detect_actions`, `compute_analysis`, `predict`) |
-| `price_completeness_retry` | 20:30 Mon-Fri | `0 15 * * 1-5` | 20 min |
+| ~~`sync_instruments`~~ | OFF in manual mode (no workflow) | | |
+| ~~`broker_session_check`~~ | OFF in manual mode | | |
+| ~~`ingest_prices_eod`~~ | OFF in manual mode (replaced by event-driven `post_import`, 3.12) | | |
+| ~~`price_completeness_retry`~~ | OFF in manual mode | | |
+| `process_queued_jobs` | 19:00 daily | `30 13 * * *` | 20 min (runs queued/partial `post_import`, `mf_refresh` jobs older than 15 min; then `predict` when models exist) |
 | `ingest_mf_navs` | 22:00 and 04:00 daily | `30 16 * * *` and `30 22 * * *` | 30 min |
 | `sync_mf_schemes` | Sun 05:00 | `30 23 * * 6` | 20 min |
-| `evaluate_alerts` (intraday) | every 15 min 09:30-15:30 Mon-Fri | `*/15 4-9 * * 1-5` and `0 10 * * 1-5` | 8 min (private repo mode: every 30 min) |
+| ~~`evaluate_alerts` (intraday)~~ | OFF in manual mode (no intraday data) | | |
 | `evaluate_alerts` (EOD) | 19:30 Mon-Fri | `0 14 * * 1-5` | 8 min |
 | `train_models` | Sat 11:00 | `30 5 * * 6` | 90 min |
 | `housekeeping` | Sun 12:00 | `30 6 * * 0` | 20 min |
@@ -39,8 +40,10 @@ Late-run tolerance: every job computes its work from data state ("bars missing s
 
 ## 3. Job specifications
 
+> Jobs 3.1, 3.3 and 3.4 are **not run in manual price mode** (D-1, D-2). They are kept as a reference for a future broker mode. The tracked set (`is_tracked`) is maintained by the API (opened stock, watchlist add, portfolio txn, prices import), not by a worker job.
+
 ### 3.1 `sync_instruments`
-Requires an active broker session (skip with reason otherwise; manual price mode skips the job entirely). Download the broker instrument master; validate (>= 1,500 NSE equity rows; contains RELIANCE, TCS, INFY); upsert; change detection per `01` 3.3; probe up to 100 never-probed/stale (> 30 days) instruments by requesting 5 days of candles; set `broker_ok`. Recompute `is_tracked` = watchlist + portfolio + training basket + most recently opened (LRU cap `OPENED_STOCKS_LRU_CAP`, default 150).
+Requires an active broker session (skip with reason otherwise; manual price mode skips the job entirely). Download the broker instrument master; validate (>= 1,500 NSE equity rows; contains RELIANCE, TCS, INFY); upsert; change detection per `01` 3.3; probe up to 100 never-probed/stale (> 30 days) instruments by requesting 5 days of candles; set `broker_ok`. Recompute `is_tracked` = watchlist + portfolio + most recently opened (LRU cap `OPENED_STOCKS_LRU_CAP`, default 150) + imported.
 
 ### 3.2 `detect_actions`
 For each tracked stock with new bars: run the split/bonus detector (`01` 3.7). Insert `corporate_action(status='detected')` rows (unique on instrument+ex_date+type). Send one Telegram note per newly detected action: "Possible split/bonus on {symbol} ({date}). Confirm in the app."
@@ -66,13 +69,13 @@ Paginate `GET /mf?limit=1000&offset=` until empty; upsert code/name; derive `pla
 ### 3.7 `compute_analysis`
 For each tracked stock with >= 60 valid bars: indicators + scores (`05` sections 3-6) and, where the owner supplied data exist, derived fundamentals/valuation/shareholding analytics (`05` section 5) -> `analysis_snapshot` (`as_of` = last bar date; keep latest 30). Risk percentiles need >= 20 eligible stocks. Rebuild `screener_row` (price metrics for all tracked stocks; fundamental metrics only where entered; coverage recorded). For MF: `mf_return_cache` for tracked schemes. Stocks with unconfirmed detected actions get `warnings=['UNCONFIRMED_ACTION']`.
 
-### 3.8 `train_models` / `predict` (Phase 7)
-Per `05` section 10. If fewer than 20 eligible stocks: status `insufficient_universe`, no model, forecasts hidden with reason `no_model`. `predict` resolves past predictions into `prediction_outcome` when horizon bars exist.
+### 3.8 `train_models` / `predict` (Phase 7; deferred by the owner, D-4)
+Per `05` section 10; universe = tracked stocks with >= 750 valid bars and no unconfirmed actions (D-H; there is no separate training basket). If fewer than 20 eligible stocks: status `insufficient_universe`, no model, forecasts hidden with reason `no_model`. `predict` resolves past predictions into `prediction_outcome` when horizon bars exist.
 
 ### 3.9 `evaluate_alerts`
 1. Load active alerts; expire past `expires_on`; alerts on delisted stocks are expired with a note.
-2. Latest known price: `quote_latest` if its `quote_ts` is within 30 minutes during market hours; else last bar. Intraday runs refresh quotes **only** for stocks with active price/day-change alerts (needs an active broker session; otherwise use last bar and say so in the message).
-3. Evaluate by kind (rules below); compute `dedupe_key`; insert `alert_event` (conflict = already fired).
+2. Latest known price: **manual price mode (current):** the last imported bar only (no quotes, no intraday run). Evaluation is **event-driven** (called at the end of `post_import` for the affected symbols) and also runs in the 19:30 IST EOD run for all active alerts. Only bars **newer than the alert's last evaluated bar** (`alert.last_state.last_bar_date`) can fire; after evaluating, store that bar date. The staleness rule (ALR-14: no price alert if data older than 1 trading day) **does not apply** in manual mode. (Broker mode, inactive: `quote_latest` if its `quote_ts` is within 30 minutes during market hours; else last bar; intraday runs refresh quotes only for stocks with active price/day-change alerts.)
+3. Evaluate by kind (rules below); compute `dedupe_key` (**includes the bar date**, e.g. `alert_id|kind|bar_date|threshold`, so the same bar never fires twice); insert `alert_event` (conflict = already fired).
 4. For new events: set alert state (`fired` if one-shot, else `last_fired_at=now`); deliver via Telegram per rules.
 5. Delivery: respect quiet hours (events stay `pending` until quiet hours end); sequential sends with 1.1 s spacing; > 10 events -> digest; failures retried 5 times at 15-minute spacing then `failed`. If `telegram_chat_id` is null: events stay `pending`; when linked later, pending events younger than 24 h are sent, older ones marked `failed(not_linked)`.
 
@@ -86,21 +89,31 @@ Per `05` section 10. If fewer than 20 eligible stocks: status `insufficient_univ
 - `results_declared`: a new quarterly `period_end` appears in `fundamental_value` for that stock after the alert's `last_state.latest_period`.
 - `holding_change`: a newly entered shareholding quarter differs from the previous quarter by >= `delta_pct` for the chosen holder.
 - `nav_above/below`: latest NAV crosses; MF NAV freshness 1 business day.
-Message format (HTML): `<b>TCS</b> above 4,000 | price 4,012.50 as of 14:45 IST (09 Oct). Alert #12`.
+Message format (HTML): `<b>TCS</b> above 4,000 | price 4,012.50 as of 14:45 IST (09 Oct). Alert #12`. **Manual mode:** `<b>TCS</b> above 4,000 | close 4,012.50, as of the last price import (09 Oct 2026). Alert #12`.
 
 ### 3.10 `housekeeping`
-- Evict non-watchlist, non-portfolio, non-training-basket tracked stocks beyond the LRU cap (oldest `last_opened_at`) or unopened for 12 months: delete `price_daily`, `analysis_snapshot`, `prediction*`; `is_tracked=false`. Owner-entered data (fundamentals, shareholding, actions) is never evicted automatically.
-- If `pg_database_size` > 380 MB: trim price history beyond `PRICE_HISTORY_YEARS_TRACKED` for non-watchlist/portfolio stocks, then reduce the LRU cap by 20%; notify via Telegram.
-- Delete: sessions expired/revoked > 7 days; link codes and OAuth states expired > 1 day; `refresh_job` > 90 days; `ingestion_run` > 180 days; `alert_event` > 400 days; stale `import` uploads; MF NAVs for unopened schemes > 12 months.
+- **Manual price mode: imported price data is never deleted automatically, not even by size.** Stocks with `tracked_reason='imported'` (and watchlist/portfolio stocks) are exempt from the LRU cap and the 12-month rule. The LRU cap (`OPENED_STOCKS_LRU_CAP`) applies only to stocks tracked solely as `opened` that have **no** imported prices (they hold only derived rows: `analysis_snapshot`, `prediction*`; set `is_tracked=false`). Owner-entered data (fundamentals, shareholding, actions) is never evicted automatically.
+- **Size thresholds** at 70%, 85% and 95% of `DB_SOFT_LIMIT_MB` (380): send one Telegram notice per threshold crossing and set `db.warn_level` (admin page shows a warning). At 100% (380 MB) price imports are rejected (`DB_SIZE_LIMIT`) until the owner frees space. Space is freed only by owner actions: **Trim history** (`POST /prices/trim`) and **Delete prices for {symbol} between {from} and {to}** (`DELETE /stocks/{symbol}/prices`).
+- Delete: sessions expired/revoked > 7 days; link codes and OAuth states expired > 1 day; `refresh_job` > 90 days; `ingestion_run` > 180 days; `alert_event` > 400 days; `import_upload` rows past `expires_at`; MF NAVs for unopened schemes > 12 months.
 
 ### 3.11 `backup_user_data`
 Export `watchlist_item`, `portfolio_txn`, `portfolio_adjustment`, `alert`, `app_setting`, owner-entered `fundamental_value/shareholding/corporate_action/import_batch`, and `app_user` **without** `password_hash` and without any broker tokens. Encrypt with `age` to the owner's public key **before** uploading as a workflow artifact (30-day retention). Restore requires resetting the password via the seed command and reconnecting the broker. Never back up `broker_session`.
 
+### 3.12 `post_import` (event-driven; manual mode)
+Triggered by the API (via worker-http) after a prices import commit, a delete-prices action or a trim. Input: the `import_batch` id in `refresh_job.target` (`batch:<id>`); the affected symbol list is derived from the batch (stored in `refresh_job.result.remaining` at enqueue).
+1. Process symbols **in order**; for each: `detect_actions` (3.2), then `compute_analysis` (3.7) for that symbol, then alert evaluation (3.9) for that symbol. Per-item isolation (rule 1.4).
+2. **Resumable:** worker-http jobs have a 4-minute cap. Stop starting new symbols at **3.5 minutes**; write progress to `refresh_job.result` (`symbols_total`, `symbols_done`, `remaining`), set `status='partial'` and enqueue a continuation job for the remainder (same target, new row; the unique active-job index is satisfied because the partial row is no longer `queued/running`). `process_queued_jobs` (3.13) continues any job left `queued`/`partial` with remaining work.
+3. After the last symbol: recompute `screener_row` for the affected symbols and set `status='ok'`.
+4. Idempotent: re-running a symbol never duplicates actions, snapshots or alert events (dedupe by bar date).
+
+### 3.13 `process_queued_jobs` (daily 19:00 IST)
+Selects `refresh_job` rows that are `queued` for > 15 minutes or `partial` with remaining work, and runs them with the same resumable logic (no 4-minute cap when run by GitHub Actions; the 3.5-minute stop does not apply there, the 20-minute workflow timeout does). Then runs `predict` if models exist (Phase 7).
+
 ## 4. worker-http (on-demand)
-Routes `POST /run {job_id}` and `GET /health`. Auth: headers `X-Timestamp` and `X-Signature = hex(HMAC_SHA256(WORKER_HMAC_KEY, f"{ts}.{method}.{path}.{sha256_hex(body)}"))`; reject if the timestamp is more than 120 s off, the signature mismatches (constant-time), or the job row is not `queued`. Allow-listed kinds: `stock_refresh`, `stock_backfill`, `mf_refresh`. One job at a time (in-process lock); max 4 minutes; the target is read from the DB row, never from request input. Jobs left `queued` for > 15 minutes are executed by the nightly `process_queued_jobs` step at the end of `ingest_prices_eod`.
+Routes `POST /run {job_id}` and `GET /health`. Auth: headers `X-Timestamp` and `X-Signature = hex(HMAC_SHA256(WORKER_HMAC_KEY, f"{ts}.{method}.{path}.{sha256_hex(body)}"))`; reject if the timestamp is more than 120 s off, the signature mismatches (constant-time), or the job row is not `queued`. Allow-listed kinds: `post_import`, `mf_refresh` (and `stock_refresh`, `stock_backfill` in broker mode, inactive). One job at a time (in-process lock); max 4 minutes (`post_import` stops at 3.5 minutes, see 3.12); the target is read from the DB row, never from request input. Jobs left `queued` for > 15 minutes are executed by the daily `process_queued_jobs` workflow (3.13).
 
 ## 5. GitHub Actions workflows
-One workflow per row of section 2 with `workflow_dispatch`, `timeout-minutes` = table value, secrets `DATABASE_URL`, `BROKER_TOKEN_KEY`, `TELEGRAM_BOT_TOKEN`, `WORKER_HMAC_KEY`, optional `AGE_PUBLIC_KEY`. If the broker rejects the runner's IP (S1/S2), run the same CLI from the owner's machine (cron/Task Scheduler) and document it in `RUNBOOK.md`.
+One workflow per row of section 2 with `workflow_dispatch`, `timeout-minutes` = table value, secrets `DATABASE_URL`, `BROKER_TOKEN_KEY`, `TELEGRAM_BOT_TOKEN`, `WORKER_HMAC_KEY`, optional `AGE_PUBLIC_KEY`. Manual mode: no broker workflows are created. (Broker mode, inactive: if the broker rejects the runner's IP, run the same CLI from a static-IP machine; the owner decided not to pay for one, D-8.)
 
 ## 6. Budgets (estimates; measure in S11)
-Alerts about 790 min/month at 15-minute cadence; nightly prices much smaller than before (only tracked stocks, one candle request each) at roughly 10 min/night; weekly ML <= 45 min. A private repo is workable at 30-minute alert cadence; a public repo has no minute limit. Never commit secrets (use Actions secrets).
+Manual mode: no intraday alert cadence; EOD alerts and `process_queued_jobs` are a few minutes per day; `post_import` runs on demand in worker-http; weekly ML <= 45 min (deferred). A private repo is workable at 30-minute alert cadence; a public repo has no minute limit. Never commit secrets (use Actions secrets).

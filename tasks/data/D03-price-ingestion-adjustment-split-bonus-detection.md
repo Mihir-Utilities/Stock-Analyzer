@@ -3,8 +3,15 @@
 | Field | Value |
 |---|---|
 | Track | data |
-| Depends on | D02 |
+| Depends on | D01 |
 | Size | L (S < 0.5 day, M 0.5-1.5 days, L 1.5-4 days of focused work) |
+
+## Amendment: manual price mode (decisions D-1, D-2 and follow-ups, 2026-10-10)
+Source of truth: `docs/OPEN_QUESTIONS.md` Decisions; updated specs: `docs/01` 7.0/7.1, `docs/03` 3, 4, 14, `docs/04` 3.9-3.13. Where this block conflicts with the sections below, **this block wins**.
+- Depends on **D01** (D02 removed).
+- **Not built:** `ingest_prices_eod`, `price_completeness_retry`, holiday auto-detection from broker candles, partial-bar rule, `BROKER_PRICES_ADJUSTED` (whether owner-imported prices are raw or already adjusted is open question OQ-5; assume raw until the owner answers).
+- **Built:** `detect_actions`; re-adjustment job; **`post_import`** (`docs/04` 3.12: ordered symbols; per symbol detect_actions -> compute_analysis (D05 hook) -> alert evaluation (D06 hook); stop starting symbols at 3.5 min, write progress to `refresh_job.result`, status `partial`, enqueue the remainder); **`process_queued_jobs`** (3.13, daily 19:00 IST).
+- Tests: SYS-12, ACT-* rows assigned here, SYS-09. At task start list each assigned BRK-* row and record in `docs/OPEN_QUESTIONS.md` which are N/A in manual mode (price sanity rules now run in the Go importer).
 
 ## Read first
 - docs/04-worker-jobs.md 3.2, 3.4

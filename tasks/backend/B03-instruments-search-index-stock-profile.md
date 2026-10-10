@@ -6,6 +6,13 @@
 | Depends on | B02 |
 | Size | M (S < 0.5 day, M 0.5-1.5 days, L 1.5-4 days of focused work) |
 
+## Amendment: manual price mode (decisions D-1, D-2 and follow-ups, 2026-10-10)
+Source of truth: `docs/OPEN_QUESTIONS.md` Decisions; updated specs: `docs/01` 7.0/7.1, `docs/03` 3, 4, 14, `docs/04` 3.9-3.13. Where this block conflicts with the sections below, **this block wins**.
+- Depends on B02 (unchanged). Instruments are written by the **importer/form in B06a**, not by a worker (D02 is removed).
+- Opening a stock sets `last_opened_at` and, if untracked, `is_tracked=true, tracked_reason='opened'` (API owns the tracked set). **No `stock_backfill` enqueue** in manual mode; return `price_mode:"manual"`, `freshness.prices_as_of`, and a hint to import prices when `no_prices`.
+- Empty state: with zero instruments, `GET /stocks` and `/stocks/index` return empty and the UI text is "No stocks yet. Import instruments.csv or add a stock." (acceptance criterion added; test it).
+- Flags: the `broker_ok` bit is always 0.
+
 ## Read first
 - docs/03-api-spec.md section 3
 - docs/02-database.sql instrument tables
