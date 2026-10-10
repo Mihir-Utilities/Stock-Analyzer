@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Actions are pinned by commit SHA (docs/04-worker-jobs.md 1.8); renovate keeps them current.
+
+jobs:
+  guards:
+    name: Safety guards, licences, repo checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: apps/api/go.mod
+      - name: Install worker environment (needed by the licence scan)
+        run: uv sync --project apps/worker --locked
+      - name: Script tests (SAF-01, SAF-02, SAF-04, SYS-11)
+        run: uv run --project apps/worker pytest scripts/tests -q
+      - name: Deny-list (SAF-01, SAF-02)
+        run: python scripts/deny_list_check.py
+      - name: Lockfiles and renovate (SYS-11)
+        run: python scripts/check_lockfiles.py
+      - name: .env.example completeness
+        run: python scripts/check_env_example.py
+      - name: Licence scan and notices (SAF-04)
+        run: python scripts/license_scan.py
+
+  api:
+    name: Go API
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/api
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: analyzer
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: analyzer_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U analyzer" --health-interval 5s --health-timeout 5s
+          --health-retries 10
+    env:
+      # Throwaway CI database; integration tests (B01+) read this.
+      TEST_DATABASE_URL: postgres://analyzer:ci-only-password@localhost:5432/analyzer_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: apps/api/go.mod
+      - run: go vet ./...
+      - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
+        with:
+          version: v2.14.0
+          working-directory: apps/api
+      - run: go test ./... -race -count=1
+      - run: go build ./...
+
+  worker:
+    name: Python worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/worker
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run pytest -q
+
+  web:
+    name: Next.js web
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

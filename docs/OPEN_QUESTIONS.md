@@ -3,9 +3,9 @@
 Claude Code: add questions here instead of guessing. The owner answers; move answered items to "Decisions" with the date.
 
 ## Open
-(none)
-
-<!-- open-question table template: | # | Question | Interim assumption | Blocks | -->
+| # | Question | Interim assumption | Blocks |
+|---|---|---|---|
+| OQ-8 | Licence policy for weak copyleft. `docs/00` 1.7 says CI fails on GPL/AGPL/unknown. Next.js ships optional `sharp` image binaries (`@img/sharp-*`) under **LGPL-3.0-or-later** (libvips, dynamically loaded, unmodified), and `axe-core` and `pathspec` are **MPL-2.0**. Allow these as "Review" (not fail), or forbid LGPL/MPL and work around it (e.g. strip sharp via overrides, drop axe-core, avoid mypy)? | Literal spec reading: fail only on GPL/AGPL/unknown; LGPL/MPL pass and are listed as `Review` in `THIRD_PARTY_NOTICES.md` (SAF-08). Recommended: keep this, and in F01 set `images.unoptimized` so sharp is never executed. | T00 (decided provisionally), F01, S15 |
 
 ## Decisions
 | Date | Decision | Reason | Spec files updated |

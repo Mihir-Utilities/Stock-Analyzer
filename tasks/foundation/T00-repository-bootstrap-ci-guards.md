@@ -54,6 +54,7 @@ Create the monorepo, tooling, CI and the automated safety guards so every later 
 - `SAF-02` (see `docs/07-edge-cases-tests.md`)
 - `SAF-04` (see `docs/07-edge-cases-tests.md`)
 - `SYS-11` (see `docs/07-edge-cases-tests.md`)
+- `SAF-07`, `SAF-08` (added during T00, see `docs/07-edge-cases-tests.md`)
 
 ## Definition of done
 - [ ] Behavior matches the cited spec sections exactly (note section numbers in the PR description).

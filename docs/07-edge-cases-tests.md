@@ -13,6 +13,8 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | SAF-04 | Licence scan finds GPL/AGPL/unknown | CI fails | CI |
 | SAF-05 | `SCREENER_IMPORT_ENABLED=false` | Endpoint 404; UI hides the option | I/E |
 | SAF-06 | Research links never fetched by server/browser | No network call test (no iframes/prefetch) | E |
+| SAF-07 | `.env.example` missing a config key from MASTER_PLAN 5 or holding a secret-like value | `scripts/check_env_example.py` fails CI | CI |
+| SAF-08 | Dependency with MPL/LGPL licence (weak copyleft, e.g. Next's optional `sharp` libvips) | Scan passes but lists it as `Review` in `THIRD_PARTY_NOTICES.md`; GPL/AGPL/unknown still fail (OQ-8) | U |
 
 ## BRK: broker session and prices
 | ID | Scenario | Required behavior | Test |

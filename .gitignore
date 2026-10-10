@@ -6,3 +6,13 @@ node_modules/
 __pycache__/
 .venv/
 
+.next/
+next-env.d.ts
+*.tsbuildinfo
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+*.exe
+*.test
+/apps/api/api
+
