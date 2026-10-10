@@ -44,10 +44,10 @@ Create the monorepo, tooling, CI and the automated safety guards so every later 
 6. Make `main` branch protected by CI in the repo notes
 
 ## Acceptance criteria (all must be true)
-- [ ] CI is green on an empty project
-- [ ] Deny-list check fails when a forbidden package is added (demonstrate with a throwaway branch)
-- [ ] Licence scan produces `THIRD_PARTY_NOTICES.md`
-- [ ] `.env.example` lists all variables from the specs
+- [ ] CI is green on an empty project  _(evidence: every step of `.github/workflows/ci.yml` passes locally, 19/19 incl. actionlint; NOT yet run on GitHub because the repo has no remote. Tick after the first push.)_
+- [x] Deny-list check fails when a forbidden package is added (demonstrate with a throwaway branch)  _(evidence: branch `throwaway/deny-list-demo` with `yfinance==0.2.40` in a requirements file -> `deny-list check FAILED`, exit 1; on `main` exit 0; tests `scripts/tests/test_deny_list.py`)_
+- [x] Licence scan produces `THIRD_PARTY_NOTICES.md`  _(evidence: `python scripts/license_scan.py --write` -> 404 unique packages; `scripts/license_scan.py` also fails when the file is stale; tests `scripts/tests/test_license_scan.py`)_
+- [x] `.env.example` lists all variables from the specs  _(evidence: `scripts/check_env_example.py` checks core vars + every MASTER_PLAN section 5 key and rejects secret-like values; `test_repo_checks.py`)_
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `SAF-01` (see `docs/07-edge-cases-tests.md`)
@@ -57,9 +57,9 @@ Create the monorepo, tooling, CI and the automated safety guards so every later 
 - `SAF-07`, `SAF-08` (added during T00, see `docs/07-edge-cases-tests.md`)
 
 ## Definition of done
-- [ ] Behavior matches the cited spec sections exactly (note section numbers in the PR description).
-- [ ] Tests above exist, run in CI and pass; new edge cases discovered are added to `docs/07-edge-cases-tests.md`.
-- [ ] Loading/empty/partial/stale/error states implemented for any UI work.
-- [ ] No secrets or personal data in code, logs or fixtures; deny-list check passes.
-- [ ] `docs/RUNBOOK.md` updated for any new variable, job or failure mode.
-- [ ] Questions or spec conflicts recorded in `docs/OPEN_QUESTIONS.md` instead of guessed.
+- [x] Behavior matches the cited spec sections exactly (note section numbers in the PR description).  _(MASTER_PLAN 3-5, docs/00 section 1, CLAUDE.md 1)_
+- [x] Tests above exist, run in CI and pass; new edge cases discovered are added to `docs/07-edge-cases-tests.md`.  _(SAF-01/02/04, SYS-11 plus new SAF-07, SAF-08; pass locally)_
+- [x] Loading/empty/partial/stale/error states implemented for any UI work.  _(N/A: hello-world page only)_
+- [x] No secrets or personal data in code, logs or fixtures; deny-list check passes.
+- [x] `docs/RUNBOOK.md` updated for any new variable, job or failure mode.  _(sections 3a, 5a)_
+- [x] Questions or spec conflicts recorded in `docs/OPEN_QUESTIONS.md` instead of guessed.  _(OQ-8)_
