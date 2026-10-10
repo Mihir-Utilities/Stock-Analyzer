@@ -1,18 +1,58 @@
-﻿.env
+# Secrets and local configuration (the repo is public: never commit these)
+.env
 .env.*
 !.env.example
-*.zip
+*.pem
+*.key
+*.p12
+*.pfx
+*.age
+id_rsa*
+id_ed25519*
+
+# Local databases, dumps and backups
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.bak
+dump*.sql
+/data/
+/uploads/
+
+# Real or personal data (use synthetic fixtures only)
+fixtures/real/
+fixtures/private/
+fixtures/**/*.local.*
+*.local.csv
+*.local.json
+
+# Build, test and tool output
 node_modules/
 __pycache__/
 .venv/
-
 .next/
 next-env.d.ts
 *.tsbuildinfo
 .ruff_cache/
 .mypy_cache/
 .pytest_cache/
+dist/
+build/
+out/
+coverage/
+coverage.out
+*.prof
+*.log
 *.exe
 *.test
+*.zip
 /apps/api/api
+/apps/api/bin/
 
+# Hosting and editor folders
+.vercel/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
