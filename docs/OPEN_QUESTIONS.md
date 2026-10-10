@@ -5,13 +5,13 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 ## Open
 | # | Question | Interim assumption | Blocks |
 |---|---|---|---|
-| OQ-1 | Which broker does the owner already have an account with (Angel One / Fyers / Upstox / DhanHQ) or "none yet"? Owner's answer was left as a placeholder. | Manual price mode (`BROKER_ENABLED=false`). | T01 S2-S5 (no login until owner approves), D02, B08 |
-| OQ-2 | Does the owner have a static IP at home (yes / no / not sure)? Answer left as a placeholder. | Treat as "no": no paid static IP; if the broker rejects Actions/Render IPs for data calls, fall back to manual price mode and tell the owner. | S2 fallback, worker hosting plan |
+| OQ-4 | In manual price mode the broker instrument master (`01` 3.3) is gone. Where does the stock list (symbol, name, ISIN, series; 1,500+ rows) come from? Spec is silent; forbidden: NSE/BSE downloads by the app. Options: owner supplies an `instruments.csv` they download personally; or add symbols manually as needed. | None yet; do not invent. | T02 seed, B03, D02, T01 |
 | OQ-3 | Training basket CSV (>= 20 symbols). | D07 ships with the `insufficient_universe` path only unless supplied before D07. | D07 |
 
 ## Decisions
 | Date | Decision | Reason | Spec files updated |
 |---|---|---|---|
+| 2026-10-10 | D-1 (answers Q1 and Q8) **Manual price mode.** `BROKER_ENABLED=false`; prices come from `prices.csv` uploads. No broker is chosen, no broker login, no static-IP question. Per `08` S1 fail path, broker code is removed from scope. Impact to apply when each task runs (spec text to be amended then, not silently): T01 records S1 as "manual price mode" and skips S2-S5; D02 reduces to instrument master from an owner-supplied file (needs owner question, see OQ-4); B08, B09 broker parts, D03 broker ingestion, F12 broker UI and Telegram broker reminders are dropped; `prices.csv` import (B06/F13) becomes the primary price path. | Owner choice | MASTER_PLAN 9 |
 | 2026-10-10 | D-2 Repo is public. Zero secrets in code (GitHub Actions secrets + host env vars only). Keep the monthly keep-alive workflow. Never commit `.env` or real data. | More free Actions minutes | MASTER_PLAN 9 |
 | 2026-10-10 | D-3 No keep-warm pings; accept ~1 min wake-up. UI "waking up the server" state handles it. | Preserves Render free hours | MASTER_PLAN 9 |
 | 2026-10-10 | D-4 Forecasts deferred; build everything else first. Owner decides the basket before D07; fewer than 20 symbols -> D07 ships `insufficient_universe` path only. | Prediction needs >= 20 tracked stocks | MASTER_PLAN 9 |

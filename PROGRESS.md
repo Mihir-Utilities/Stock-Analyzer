@@ -6,7 +6,8 @@ A new session starts with: "Resume. Read CLAUDE.md, PROGRESS.md, OPEN_QUESTIONS.
 ## Pointer
 - CURRENT: T00 (not started) - waiting for owner's "begin T00"
 - LAST COMPLETED: kickoff (layout reorganised, git init, decisions recorded in docs/OPEN_QUESTIONS.md and MASTER_PLAN 9)
-- BLOCKED ON OWNER: OQ-1 broker name, OQ-2 static IP (both default to manual price mode / no static IP); OQ-3 training basket before D07
+- MODE: manual price mode (no broker). Broker tasks/parts (T01 S2-S5, D02 broker adapter, B08, B09 broker parts, D03 broker ingestion, F12 broker UI) are dropped or reduced when reached; record in each task.
+- BLOCKED ON OWNER: OQ-4 source of the instrument list (needed by T02/B03); OQ-3 training basket before D07
 
 ## Per-task phases (tick each; a task is DONE only when all five are ticked)
 1 EXEC   = Prompt 2 (plan, tests first, implement, tick acceptance criteria)

@@ -108,12 +108,12 @@ See `tasks/README.md` for the dependency graph. Phases:
 
 ## 9. Open decisions for the owner (answer before T01 completes)
 Answered 2026-10-10 (details in `docs/OPEN_QUESTIONS.md`):
-1. Broker: **PENDING** (OQ-1). Assume manual price mode until the owner names a broker; S1 runs as a read-only comparison and no login starts without owner approval.
+1. Broker: **none; manual price mode** (`BROKER_ENABLED=false`, prices via `prices.csv`). Broker code removed from scope (per S1 fail path). Open: where the instrument list comes from (OQ-4).
 2. Repo: **public**; zero secrets in code (Actions secrets and host env vars only); keep the monthly keep-alive workflow; never commit `.env` or real data.
 3. Keep-warm pings: **no**; accept ~1 min wake-up (UI "waking up the server" state).
 4. Training basket: **deferred**; owner decides before D07. Under 20 symbols: D07 ships the `insufficient_universe` path only.
 5. Screener Excel import: **no**; `SCREENER_IMPORT_ENABLED=false`; importer and UI tab are not built.
-6. Static IP at home: **PENDING** (OQ-2). If the broker rejects Actions/Render IPs: run at home only with a static IP, else manual price mode (no paid IP).
+6. Static IP: **not applicable**; manual price mode (no broker, no paid IP).
 7. Telegram bot: owner creates it at S12 / alerts tasks; no earlier task blocks on it.
 
 ## 10. Definition of "finished" for v1
