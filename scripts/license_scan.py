@@ -21,6 +21,7 @@ and `go list -m -json all` in apps/api (Go; LICENSE file text is classified, so 
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -246,33 +247,40 @@ def python_entries(project: Path, notices: str = "") -> list[Entry]:
 def go_entries(module_dir: Path) -> list[Entry]:
     if not (module_dir / "go.mod").exists():
         return []
+    # Modules that actually provide a built package (including test-only packages). `go list -m all`
+    # also lists modules that only appear in dependencies' go.mod files and are never compiled or
+    # downloaded (e.g. testcontainers pulls hundreds), which cannot be classified and are not shipped.
     result = subprocess.run(
-        ["go", "list", "-m", "-json", "all"],
+        ["go", "list", "-deps", "-test", "-json=Module", "./..."],
         cwd=module_dir,
         capture_output=True,
         text=True,
         check=True,
+        # Fixed target so the module list (and the notices file) is identical on every machine.
+        env={**os.environ, "GOOS": "linux", "GOARCH": "amd64", "CGO_ENABLED": "0"},
     )
     decoder = json.JSONDecoder()
-    text, pos, out = result.stdout, 0, []
+    text, pos = result.stdout, 0
+    seen: dict[tuple[str, str], Entry] = {}
     while pos < len(text):
         while pos < len(text) and text[pos].isspace():
             pos += 1
         if pos >= len(text):
             break
-        obj, pos = decoder.raw_decode(text, pos)
-        if obj.get("Main"):
+        pkg, pos = decoder.raw_decode(text, pos)
+        obj = pkg.get("Module")
+        if not obj or obj.get("Main"):
             continue
-        out.append(
-            Entry(
+        key = (obj["Path"], obj.get("Version", "?"))
+        if key not in seen:
+            seen[key] = Entry(
                 "go",
-                obj["Path"],
-                obj.get("Version", "?"),
+                key[0],
+                key[1],
                 _go_license(Path(obj["Dir"])) if obj.get("Dir") else "UNKNOWN",
                 "runtime",
             )
-        )
-    return out
+    return sorted(seen.values(), key=lambda e: (e.name, e.version))
 
 
 def _go_license(directory: Path) -> str:

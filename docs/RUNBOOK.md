@@ -7,6 +7,22 @@
 - Broker reconnect is not applicable (broker mode dormant).
 ## 2. Deploy
 (Fill during T00/T02/B01/F01: Neon setup, Render services (API + worker-http), Vercel project, GitHub secrets, environment variables from .env.example.)
+
+### 2a. Database migrations and seed (T02)
+Migrations live in `db/migrations` (goose, numbered, forward-only; never edit an applied file, add a new one). Each runs in its own transaction, so a failing migration leaves nothing half-applied (SYS-07). Run from the repo root with `DATABASE_URL` set (Neon: `sslmode=require`):
+```
+go run github.com/pressly/goose/v3/cmd/goose@v3.22.1 -dir db/migrations postgres "$DATABASE_URL" up
+go run github.com/pressly/goose/v3/cmd/goose@v3.22.1 -dir db/migrations postgres "$DATABASE_URL" status
+```
+`pg_trgm` is created by migration 0001; if the host forbids the extension, `up` stops with the Postgres error and nothing else is applied. `down` exists for local/CI round-trip tests only; **in production never run `down`**: fix forward with a new migration, or restore the latest backup (section 5).
+Seed (after `up`, from `apps/api`; `INITIAL_PASSWORD_HASH` and `DATABASE_URL` from the environment):
+```
+printf '%s\n' "your long password" | go run ./cmd/seed hash-password   # prints the argon2id hash; put it in INITIAL_PASSWORD_HASH
+go run ./cmd/seed -config-dir ../../config                           # idempotent; never overwrites owner edits
+```
+The seed creates the single owner row, the default `app_setting` rows (MASTER_PLAN section 5; `BROKER_ENABLED=false`, `DB_SOFT_LIMIT_MB=380`; `PRICES_ALREADY_ADJUSTED` stays unset), and `market_holiday` rows from `config/market_holidays.json` only for years that have no rows yet. It creates no instruments. A year with an empty list prints a "weekends only" warning. Re-running with a different hash does not change the stored password; change it through the app. Regenerate typed queries after editing `apps/api/queries/*.sql` (from `apps/api`): `docker run --rm -v "$PWD/../..:/src" -w /src/apps/api sqlc/sqlc:1.27.0 generate`.
+Integration tests use `TEST_DATABASE_URL` (CI service) or start a throwaway Postgres with testcontainers; without Docker they skip locally and fail in CI.
+
 ## 3. Scheduled jobs
 (Link to .github/workflows; how to trigger manually with workflow_dispatch; how to run the worker from a home machine.)
 
@@ -25,7 +41,7 @@ uv run --project apps/worker pytest scripts/tests apps/worker/tests
 ```
 Adding a dependency: run `python scripts/license_scan.py --write` and commit the regenerated `THIRD_PARTY_NOTICES.md`. The scan fails on GPL/AGPL and unknown licences; MPL-2.0 and LGPL packages are listed as **Review** (OQ-8).
 The deny-list scans every non-binary file except Markdown, tool directories (`node_modules`, `.venv`, `.next`, caches), `config/research_links.json` (plain hyperlinks the app never requests) and its own script/test. It also checks joined string literals, decoded escapes, base64 tokens and UTF-16 files (SAF-09). It cannot see values built at runtime; the egress allow-list in D01/B01 (D-N) covers that.
-The licence scan lists Python packages from `uv.lock`, so `THIRD_PARTY_NOTICES.md` is identical on Windows, Linux and CI. Licence text comes from the installed environment (`uv sync --all-groups --all-extras`); a platform-only package (colorama on Windows) reuses the row already in the notices file. If CI says a package has an UNKNOWN licence, run `--write` on a machine where it installs. The Go collector needs `go mod download` first and fails closed without it (SAF-12).
+The licence scan lists Python packages from `uv.lock`, so `THIRD_PARTY_NOTICES.md` is identical on Windows, Linux and CI. Licence text comes from the installed environment (`uv sync --all-groups --all-extras`); a platform-only package (colorama on Windows) reuses the row already in the notices file. If CI says a package has an UNKNOWN licence, run `--write` on a machine where it installs. The Go collector needs `go mod download` first and fails closed without it (SAF-12). Since T02 it lists only modules that provide a package in `go list -deps -test ./...` for a fixed `GOOS=linux GOARCH=amd64 CGO_ENABLED=0` (not the whole `go list -m all` graph, which includes hundreds of never-built modules pulled in by testcontainers and cannot be classified); the list is therefore identical on every machine.
 ## 4. Failure modes and responses
 | Symptom | Likely cause | Action |
 |---|---|---|
