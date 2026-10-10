@@ -56,3 +56,6 @@ coverage.out
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Local agent worktrees (copies of the repo; never commit)
+.claude/worktrees/
