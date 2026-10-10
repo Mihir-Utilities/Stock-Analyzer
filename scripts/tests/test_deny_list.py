@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import subprocess
 import sys
 from pathlib import Path
@@ -63,7 +64,7 @@ def test_forbidden_items_are_detected(tmp_path: Path, rel: str, text: str, rule:
 
 
 def test_exemptions(tmp_path: Path) -> None:
-    # research links are plain hyperlinks (T00): exempt. Specs and tasks are not code.
+    # research links are plain hyperlinks (T00): exempt. Specs and notes are Markdown prose.
     write(
         tmp_path,
         "config/research_links.json",
@@ -78,6 +79,114 @@ def test_exemptions(tmp_path: Path) -> None:
 def test_other_config_files_are_not_exempt(tmp_path: Path) -> None:
     write(tmp_path, "config/other.json", '{"url": "https://www.nseindia.com"}\n')
     assert [v.rule for v in dl.scan(tmp_path)] == ["nse-bse-host"]
+
+
+# ---- bypass attempts found in the T00 review: every one must now be caught ---------------------
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "apps/worker/worker/tasks/a.py",  # directories named tasks/docs/build/dist/vendor/coverage
+        "apps/web/src/app/docs/a.py",
+        "apps/api/build/a.py",
+        "apps/api/vendor/x/a.py",
+        "apps/worker/dist/a.py",
+        "apps/web/coverage/a.py",
+        "docs/field-map.json",  # only Markdown is skipped, not code-like files under docs/
+        "scripts/tests/other_test.py",  # only test_deny_list.py itself is exempt
+        "apps/api/Dockerfile.api",
+        "apps/api/api.Dockerfile",
+        "apps/api/Containerfile",
+        ".env.example",
+        ".env",
+        "scripts/x.ps1",
+        "apps/web/src/a.mts",
+        "apps/web/public/a.html",
+        "fixtures/a.csv",
+        "apps/worker/requirements.in",
+        "apps/worker/Pipfile",
+        "go.work",
+        ".github/workflows/x.yml",
+    ],
+)
+def test_location_and_file_type_bypasses(tmp_path: Path, rel: str) -> None:
+    write(tmp_path, rel, "pip install yfinance\n")
+    assert [v.rule for v in dl.scan(tmp_path)] == ["yahoo-finance"], rel
+
+
+def test_utf16_files_are_decoded(tmp_path: Path) -> None:
+    target = tmp_path / "apps/worker/requirements.txt"
+    target.parent.mkdir(parents=True)
+    target.write_bytes("yfinance==0.2.40\n".encode("utf-16"))  # BOM, as PowerShell writes it
+    assert [v.rule for v in dl.scan(tmp_path)] == ["yahoo-finance"]
+    target.write_bytes("import yfinance\n".encode("utf-16-le"))  # no BOM
+    assert [v.rule for v in dl.scan(tmp_path)] == ["yahoo-finance"]
+
+
+def test_real_binary_files_are_skipped(tmp_path: Path) -> None:
+    target = tmp_path / "apps/web/public/blob.bin"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(bytes(range(256)) * 20)
+    assert dl.scan(tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    ("rel", "text"),
+    [
+        ("apps/web/package.json", '{"dependencies": {"yahoo-finance2": "^2"}}\n'),
+        ("apps/worker/requirements.txt", "yahoo_fin\n"),
+        ("apps/worker/requirements.txt", "yahooquery\n"),
+        ("apps/worker/requirements.txt", "yfinance2\n"),
+        ("apps/worker/requirements.txt", "pandas-datareader\n"),
+        ("apps/worker/requirements.txt", "investpy\nnselib\n"),
+        ("apps/worker/requirements.txt", "beautifulsoup4\n"),
+        ("apps/worker/worker/a.py", "import my_yfinance\n"),
+        ("apps/web/src/a.ts", 'fetch("https://nsearchives.nseindia.com/x")\n'),
+        ("apps/web/src/a.ts", 'fetch("https://WWW.NSEINDIA.COM./x")\n'),
+        ("apps/web/src/a.ts", 'fetch("https://www.moneycontrol.com/x")\n'),
+        ("apps/api/internal/k.go", "func placeOrderRegular() {}\n"),
+        ("apps/api/internal/k.go", "func placeGttOrder() {}\n"),
+        ("apps/api/internal/k.go", "func SquareOff() {}\n"),
+        ("apps/api/internal/k.go", 'const p = "/v2/order/place"\n'),
+        ("apps/api/internal/k.go", 'const p = "/orders/regular"\n'),
+        ("apps/api/internal/k.go", 'const p = "/v2/orders"\n'),
+    ],
+)
+def test_pattern_gaps_are_closed(tmp_path: Path, rel: str, text: str) -> None:
+    write(tmp_path, rel, text)
+    assert dl.scan(tmp_path) != [], text
+
+
+_B64_HOST = base64.b64encode(b"https://www.nseindia.com/api").decode()
+
+
+@pytest.mark.parametrize(
+    ("text", "view"),
+    [
+        ('m = import_module("yfin" + "ance")\n', "split"),
+        ("H = ('https://query1.finance.'\n     'yahoo.com')\n", "split"),
+        ('x := "nse" +\n "india.com"\n', "split"),
+        ('fetch("https://query1.finance%2Eyahoo%2Ecom/v8")\n', "escaped"),
+        ('fetch("https://www.\\u006eseindia.com")\n', "escaped"),
+        ('H = "\\x79finance"\n', "escaped"),
+        (f"H = base64.b64decode('{_B64_HOST}')\n", "base64"),
+    ],
+)
+def test_simple_obfuscation_is_caught(tmp_path: Path, text: str, view: str) -> None:
+    write(tmp_path, "apps/worker/worker/a.py", text)
+    found = dl.scan(tmp_path)
+    assert found, text
+    assert found[0].rule.endswith(f":{view}"), (text, found)
+
+
+def test_prose_does_not_false_positive(tmp_path: Path) -> None:
+    write(tmp_path, "apps/web/src/a.ts", 'const s = "my finance";\nconst r = replaceOrder();\n')
+    write(
+        tmp_path,
+        "apps/web/src/b.ts",
+        "import { x } from './screener.index';\nscreener.input.focus();\n",
+    )
+    write(tmp_path, "apps/web/src/c.ts", 'const t = "Sort order of columns";\n')
+    assert dl.scan(tmp_path) == []
 
 
 def test_cli_exit_codes(tmp_path: Path) -> None:
