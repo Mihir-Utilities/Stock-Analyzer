@@ -42,10 +42,10 @@ Turn the DDL into ordered forward-only goose migrations with a seed command and 
 4. Add a test that inserts invalid rows to prove CHECK constraints work (one per table family)
 
 ## Acceptance criteria (all must be true)
-- [ ] `goose up` then `goose down`/`up` works on a clean DB
-- [ ] All tables from the DDL exist; constraints reject bad data
-- [ ] Seed creates exactly one user and default settings
-- [ ] `pg_trgm` extension is created (or task fails with clear message)
+- [x] `goose up` then `goose down`/`up` works on a clean DB (TestMigrateUpDownUp, verified locally via testcontainers and via a TEST_DATABASE_URL server)
+- [x] All tables from the DDL exist; constraints reject bad data (TestConstraintsRejectBadRows, 65 cases across every table family)
+- [x] Seed creates exactly one user and default settings (TestSeedCreatesOneUserAndDefaults)
+- [x] `pg_trgm` extension is created (or task fails with clear message) (migration 0001; test checks it is present and usable)
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `API-05` (see `docs/07-edge-cases-tests.md`)

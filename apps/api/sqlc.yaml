@@ -1,0 +1,22 @@
+version: "2"
+# Typed query generation (T02). Regenerate with:
+#   docker run --rm -v "$PWD:/src" -w /src sqlc/sqlc:1.27.0 generate        (from apps/api)
+# The schema is the goose migrations themselves (sqlc reads the "-- +goose Up" sections only).
+sql:
+  - engine: postgresql
+    schema: ../../db/migrations
+    queries: queries
+    gen:
+      go:
+        package: dbq
+        out: internal/dbq
+        sql_package: pgx/v5
+        emit_json_tags: false
+        emit_empty_slices: true
+        overrides:
+          # User money is numeric(18,4): always shopspring/decimal, never float (CLAUDE.md section 3).
+          - db_type: pg_catalog.numeric
+            go_type: github.com/shopspring/decimal.Decimal
+          - db_type: pg_catalog.numeric
+            nullable: true
+            go_type: github.com/shopspring/decimal.NullDecimal

@@ -264,3 +264,7 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | SYS-12 | `post_import` resumes after the 3.5-minute stop | With a slow fixture set, the job stops starting new symbols at 3.5 min, stores `symbols_done/remaining` in `refresh_job.result`, sets `partial`, enqueues the remainder; `process_queued_jobs` completes it; no duplicate actions/snapshots/alerts | I |
 | SYS-13 | Staleness rule | With holiday data for the year: stale when last bar < expected last trading date; without: stale only after 4 calendar days without a new bar | U |
 | SYS-14 | Missing holiday year surfaces | Persistent warning on `/admin/status` and "holiday list missing" notice in the stock header chip | E |
+| SYS-15 | Seed run twice (T02) | Second run changes nothing; owner-edited settings and the stored password hash are kept | I |
+| SYS-16 | Seed holidays for a year that already has rows (T02) | Year skipped; only years with no rows are seeded from `config/market_holidays.json`; an empty year only warns | I |
+| SYS-17 | `INITIAL_PASSWORD_HASH` is plaintext or not argon2id (T02) | Seed refuses and writes nothing | I |
+| SYS-18 | Migration round trip (T02) | up, down to 0, up again on a clean DB; every table/index/named constraint of `docs/02-database.sql` exists; `import_upload` is UNLOGGED; `pg_trgm` present | I |

@@ -165,7 +165,7 @@ def test_go_module_without_a_downloaded_dir_fails_closed(
     monkeypatch.chdir(tmp_path)
 
     class Result:
-        stdout = json.dumps({"Path": "example.com/dep", "Version": "v1.0.0"})
+        stdout = json.dumps({"Module": {"Path": "example.com/dep", "Version": "v1.0.0"}})
 
     monkeypatch.setattr(ls.subprocess, "run", lambda *a, **k: Result())
     entries = ls.go_entries(tmp_path)
