@@ -60,6 +60,8 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ACT-10 | Future ex-date | Not applied until `ex_date <= as_of` | U |
 | ACT-11 | Detected action whose ex-date lies inside bars imported as already adjusted | Action inserted as `detected`; stock gets `ADJUSTMENT_CONFLICT`; Data tab warning text; nothing adjusted automatically | I |
 | ACT-12 | Mixed `src_adjusted` bars for one stock; owner confirms an action | `adj_close` factors applied only to `src_adjusted=false` bars; `src_adjusted=true` bars keep `adj_close = close`; never adjusted twice | U |
+| ACT-13 | Reverse split / consolidation (price ratio above 1.35, e.g. 1:10 gives about x10) | Not matched by the detector (fractions are all below 1); the bar fails the 50% day-change sanity rule and is `suspect`; no action is created; owner enters it manually (S8) | U |
+| ACT-14 | Detector reachability | Fractions 2/3, 3/4, 4/5, 5/6 can never pass the `abs(C_t/C_{t-1} - 1) > 0.35` trigger (a 1:2 bonus, ratio 0.667, is not detected, consistent with ACT-07); a unit test pins this so a threshold change is deliberate (S8; see OQ-13) | U |
 
 ## IMP: imports and manual entry
 | ID | Scenario | Required behavior | Test |
@@ -91,6 +93,7 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | IMP-25 | Prices commit while `PRICES_ALREADY_ADJUSTED` is unset | `422 PRICES_ADJUSTMENT_UNSET`; choosing raw/adjusted persists the setting via `PUT /settings/prices-adjustment`; "I don't know" persists nothing; later commits do not re-ask; each stored bar gets `src_adjusted` = setting at import time | I |
 | IMP-26 | Adjustment check on a validated upload | Returns closes for up to 5 trading days each side of the ex-date, observed ratio, nearest fraction and hint (`raw_likely` within 3% of the expected ratio/fraction, `adjusted_likely` within 3% of 1, else `inconclusive`); writes nothing; unknown symbol/ex-date outside file -> 422 | I |
 | IMP-27 | `holidays.csv` import | Columns/segment validated; weekend date = warning; duplicate `(date, segment)` = error; replace-per-year on commit; not undoable; template has no example dates; shipped 2026 list is empty (no invented dates) | F |
+| IMP-28 | Decimal comma in a semicolon-delimited file (`1234,56`, `12,34`) | Rejected as ambiguous, never silently read as 123456 or 1234.56; a comma is accepted only as a thousands separator in valid groupings (`1,234.56`, Indian `1,23,456.78`) (S13; interim behaviour, see OQ-9) | F |
 
 ## INS: instruments
 | ID | Scenario | Required behavior | Test |
@@ -149,6 +152,11 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | MF-13 | Wrong scheme code | 404; suggestions | E |
 | MF-14 | Compare different starts | Rebased at first common date; flag | U |
 | MF-15 | mfapi header `data` order reversed | Sorted ascending always | U |
+| MF-16 | Weekend-dated NAV in mfapi history (e.g. `31-03-2024`, a Sunday) | Kept like any other NAV; the weekend-drop rule applies only to stock bars (S6) | U |
+| MF-17 | AMFI row whose value date is after the file date (liquid funds, e.g. `11-Oct-2026` in a file of 10 Oct) | Kept with its own date; not rejected as future; `last_nav_date` and as-of display use that date; latest-NAV comparison with mfapi is by date (S7; interim behaviour, see OQ-12) | U |
+| MF-18 | `sync_mf_schemes` on the full mfapi list (about 38k schemes, about 23.6k absent from AMFI) | Paginated with `limit=10000`; schemes absent from AMFI or with an old last NAV follow the MF-06 inactive rule; default search excludes inactive; run stays inside the 20-minute workflow timeout (S6) | I |
+| MF-19 | AMFI file layout drift | Columns read by header name; missing required header rejects the whole file and keeps old data; extra columns ignored; the 8-field layout and a hypothetical 6-field layout both parse (S7) | U |
+| MF-20 | AMFI scheme-type line vs AMC line | A no-`;` line is a scheme-type line only if it starts with `Open Ended Schemes`, `Close Ended Schemes` or `Interval Fund Schemes`, else it is an AMC line; blank lines may hold one space; no row is attached to a missing AMC or type (S7) | U |
 
 ## PF: portfolio
 | ID | Scenario | Required behavior | Test |

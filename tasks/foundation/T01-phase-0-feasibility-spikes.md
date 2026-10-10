@@ -44,7 +44,7 @@ Measure every unverified assumption and decide the broker (or manual price mode)
 
 ## Acceptance criteria (all must be true)
 - [ ] Every spike has a verdict and evidence
-- [ ] `BROKER_DECISION.md` states the chosen broker or manual price mode with reasons
+- [x] `BROKER_DECISION.md` states the chosen broker or manual price mode with reasons
 - [ ] Specs amended and consistent after changes
 - [ ] Owner has reviewed `TERMS_NOTES.md`
 

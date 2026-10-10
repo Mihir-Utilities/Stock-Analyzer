@@ -29,6 +29,9 @@ The licence scan lists Python packages from `uv.lock`, so `THIRD_PARTY_NOTICES.m
 ## 4. Failure modes and responses
 | Symptom | Likely cause | Action |
 |---|---|---|
+| AMFI import rejects the file (missing header) or rows lack an AMC | AMFI changed the layout of `NAVAll.txt` (it went from 6 to 8 fields on or before 2026-10-10) | Keep last good data; save the new file as a fixture; read columns by header name; scheme-type lines start with `Open Ended`/`Close Ended`/`Interval Fund`, others are AMC lines (docs/01 section 5, MF-19, MF-20) |
+| MF scheme search slower than 300 ms | Planner picks a sequential scan instead of `mf_scheme_name_trgm` on long queries (seen at 10k rows, 330-590 ms) | Make sure the API role uses `random_page_cost=1.1` (or `SET LOCAL enable_seqscan = off` for the search query); re-run `scripts/spikes/s10_sizing.sql` timings on Neon (S10) |
+| mfapi list or history looks reversed or has a weekend date | Normal: `data` is newest first and Sunday 31 March rows exist | Always sort ascending after parsing; keep weekend NAVs (docs/01 section 4, MF-16) |
 ## 5. Backup and restore drill
 (Fill in D08.)
 ## 5a. Repository settings (owner, once, on GitHub)
