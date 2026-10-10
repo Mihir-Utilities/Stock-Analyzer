@@ -21,6 +21,7 @@ Create the Go API foundation: config, logging, routing, error envelope, health, 
 - `openapi.yaml` generated from the spec and kept in sync; generated Go server types and TS client types
 - Security headers middleware, request size limits, timeouts
 - Rate-limit middleware (in-memory token bucket) with `Retry-After`
+- **Egress allow-list (D-N):** the Go API never calls third-party sites (CLAUDE.md section 7). The only outbound HTTP client is `internal/egress`, whose transport allows only the host of `WORKER_BASE_URL` (plus `api.telegram.org` once B12 needs it), https/http as configured, no redirects to other hosts. golangci `forbidigo`/`depguard` forbid `http.Get`, `http.Post`, `http.DefaultClient` and `http.Client{}` outside that package
 
 ## Out of scope (do not do in this task)
 - Auth (B02)
@@ -43,12 +44,14 @@ Create the Go API foundation: config, logging, routing, error envelope, health, 
 - [ ] Unknown route returns the error envelope
 - [ ] OpenAPI validates; TS types compile
 - [ ] Scrubber test passes (SEC-08)
+- [ ] An outbound request to any non-allowed host (including a redirect hop) fails before dialing; `golangci-lint` rejects a direct `http.Get`; test `SAF-13`
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `SEC-08` (see `docs/07-edge-cases-tests.md`)
 - `SEC-10` (see `docs/07-edge-cases-tests.md`)
 - `API-01` (see `docs/07-edge-cases-tests.md`)
 - `SYS-01` (see `docs/07-edge-cases-tests.md`)
+- `SAF-13` (added in the T00 review, see `docs/07-edge-cases-tests.md`)
 
 ## Definition of done
 - [ ] Behavior matches the cited spec sections exactly (note section numbers in the PR description).

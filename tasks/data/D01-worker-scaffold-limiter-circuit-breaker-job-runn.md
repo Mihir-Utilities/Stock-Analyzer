@@ -19,6 +19,7 @@ Build the shared worker foundation: CLI, HTTP service, locks, throttling, circui
 - `ingestion_run` lock/unlock helper, per-item isolation helper, structured logging with scrubber
 - Async rate limiter with jitter, retry/backoff helper, circuit breaker backed by `source_health`
 - Deny-list unit test (SAF-01) for worker imports
+- **Egress allow-list (D-N):** one shared `httpx` client factory whose transport refuses any host outside `config/allowed_hosts.json` (`mfapi.in`, `www.amfiindia.com`, `api.telegram.org`; docs/00 section 1.1), checked on every request and every redirect hop, https only, no proxies from the environment. ruff `flake8-tidy-imports.banned-api` forbids `requests`, `urllib.request`, `urllib3`, `http.client`, `aiohttp` everywhere and `httpx` outside the factory module. Tests run with sockets disabled (pytest fixture) so no test can reach the network
 - Fixture recorder/loader utilities
 
 ## Out of scope (do not do in this task)
@@ -37,6 +38,7 @@ Build the shared worker foundation: CLI, HTTP service, locks, throttling, circui
 - [ ] SYS-05 and SEC-07 tests pass
 - [ ] Breaker opens after 5 failures and recovers after 3 successes
 - [ ] Runner marks `partial` on timeout
+- [ ] A request to any host outside the allow-list (including via redirect, a host read from an environment variable, or an IP literal) raises before any socket is opened; test `SAF-13`
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `SYS-05` (see `docs/07-edge-cases-tests.md`)
@@ -44,6 +46,7 @@ Build the shared worker foundation: CLI, HTTP service, locks, throttling, circui
 - `SEC-08` (see `docs/07-edge-cases-tests.md`)
 - `SAF-01` (see `docs/07-edge-cases-tests.md`)
 - `SYS-09` (see `docs/07-edge-cases-tests.md`)
+- `SAF-13` (added in the T00 review, see `docs/07-edge-cases-tests.md`)
 
 ## Definition of done
 - [ ] Behavior matches the cited spec sections exactly (note section numbers in the PR description).

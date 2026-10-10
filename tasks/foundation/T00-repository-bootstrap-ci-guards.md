@@ -44,7 +44,7 @@ Create the monorepo, tooling, CI and the automated safety guards so every later 
 6. Make `main` branch protected by CI in the repo notes
 
 ## Acceptance criteria (all must be true)
-- [ ] CI is green on an empty project  _(evidence: every step of `.github/workflows/ci.yml` passes locally, 19/19 incl. actionlint; NOT yet run on GitHub because the repo has no remote. Tick after the first push.)_
+- [ ] CI is green on an empty project  _(evidence: first GitHub run (921a1ba) FAILED in the licence scan, notices generated on Windows (RUNBOOK incident 2026-10-10); fixed in the T00 review fix commit. Tick when the next run is green.)_
 - [x] Deny-list check fails when a forbidden package is added (demonstrate with a throwaway branch)  _(evidence: branch `throwaway/deny-list-demo` with `yfinance==0.2.40` in a requirements file -> `deny-list check FAILED`, exit 1; on `main` exit 0; tests `scripts/tests/test_deny_list.py`)_
 - [x] Licence scan produces `THIRD_PARTY_NOTICES.md`  _(evidence: `python scripts/license_scan.py --write` -> 404 unique packages; `scripts/license_scan.py` also fails when the file is stale; tests `scripts/tests/test_license_scan.py`)_
 - [x] `.env.example` lists all variables from the specs  _(evidence: `scripts/check_env_example.py` checks core vars + every MASTER_PLAN section 5 key and rejects secret-like values; `test_repo_checks.py`)_

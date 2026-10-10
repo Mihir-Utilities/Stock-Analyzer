@@ -14,7 +14,12 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | SAF-05 | `SCREENER_IMPORT_ENABLED=false` | Endpoint 404; UI hides the option | I/E |
 | SAF-06 | Research links never fetched by server/browser | No network call test (no iframes/prefetch) | E |
 | SAF-07 | `.env.example` missing a config key from MASTER_PLAN 5 or holding a secret-like value | `scripts/check_env_example.py` fails CI | CI |
-| SAF-08 | Dependency with MPL/LGPL licence (weak copyleft, e.g. Next's optional `sharp` libvips) | Scan passes but lists it as `Review` in `THIRD_PARTY_NOTICES.md`; GPL/AGPL/unknown still fail (OQ-8) | U |
+| SAF-08 | Dependency with MPL/LGPL licence (weak copyleft, e.g. Next's optional `sharp` libvips) | Scan passes but lists it as `Review` in `THIRD_PARTY_NOTICES.md`; GPL/AGPL/unknown still fail (OQ-8, D-OQ8) | U |
+| SAF-09 | Deny-list bypass attempts: directories named tasks/docs/build/dist/vendor, Dockerfile variants, `.env*`, UTF-16 files, split string literals, escapes (backslash-u, backslash-x, %XX), base64 tokens, look-alike package names (`yahoo-finance2`, `yahoo_fin`, `pandas-datareader`), camel-case order methods, REST order paths | Every one is caught; prose (`my finance`, `screener.index`, `replaceOrder`) is not flagged. Values built at runtime (env vars) are covered by the egress allow-list (D01/B01, D-N) | CI |
+| SAF-10 | `.gitignore` coverage: `.env*`, local DBs, build output, keys, backups, real-data fixtures; no BOM | `scripts/tests/test_repo_hygiene.py` | CI |
+| SAF-11 | Workflow hardening: every action pinned by commit SHA, top-level `permissions`, no job-level write, no fork-secret trigger, no secret echo | `scripts/tests/test_repo_hygiene.py` | CI |
+| SAF-13 | Runtime egress: request to a host outside the allow-list (literal, from an env var, via redirect, IP literal, non-https) from the worker or the Go API | Rejected before any socket is opened; direct HTTP client use outside the egress package fails lint (D01, B01, D-N) | U |
+| SAF-12 | `THIRD_PARTY_NOTICES.md` generated on Windows must still match on a Linux runner (platform-only packages such as colorama); a locked Python package with no licence fails closed; a Go module without a downloaded `Dir` fails closed | `scripts/tests/test_license_scan.py` | CI |
 
 ## BRK: broker session and prices
 | ID | Scenario | Required behavior | Test |

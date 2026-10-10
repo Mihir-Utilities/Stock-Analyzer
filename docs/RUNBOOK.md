@@ -21,10 +21,11 @@ python scripts/license_scan.py           # SAF-04; add --write to regenerate THI
 uv run --project apps/worker pytest scripts/tests apps/worker/tests
 (cd apps/api && go vet ./... && go test ./... && golangci-lint run ./...)
 (cd apps/worker && uv run ruff check . && uv run ruff format --check . && uv run mypy)
-(cd apps/web && npm ci && npm run lint && npm run format:check && npm run typecheck && npm test && npm run build)
+(cd apps/web && npm ci --ignore-scripts && npm run lint && npm run format:check && npm run typecheck && npm test && npm run build)
 ```
 Adding a dependency: run `python scripts/license_scan.py --write` and commit the regenerated `THIRD_PARTY_NOTICES.md`. The scan fails on GPL/AGPL and unknown licences; MPL-2.0 and LGPL packages are listed as **Review** (OQ-8).
-The deny-list scans code, manifests and lockfiles only (not `docs/`, `tasks/`, `*.md`); `config/research_links.json` is exempt (plain hyperlinks the app never requests).
+The deny-list scans every non-binary file except Markdown, tool directories (`node_modules`, `.venv`, `.next`, caches), `config/research_links.json` (plain hyperlinks the app never requests) and its own script/test. It also checks joined string literals, decoded escapes, base64 tokens and UTF-16 files (SAF-09). It cannot see values built at runtime; the egress allow-list in D01/B01 (D-N) covers that.
+The licence scan lists Python packages from `uv.lock`, so `THIRD_PARTY_NOTICES.md` is identical on Windows, Linux and CI. Licence text comes from the installed environment (`uv sync --all-groups --all-extras`); a platform-only package (colorama on Windows) reuses the row already in the notices file. If CI says a package has an UNKNOWN licence, run `--write` on a machine where it installs. The Go collector needs `go mod download` first and fails closed without it (SAF-12).
 ## 4. Failure modes and responses
 | Symptom | Likely cause | Action |
 |---|---|---|
@@ -35,4 +36,4 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 ## 6. Plan B
 - Render free hours exhausted; broker blocks cloud IP; Neon limit reached; GitHub schedule disabled.
 ## 7. Incident log
-(none yet)
+- 2026-10-10: first CI run failed in the licence scan ("THIRD_PARTY_NOTICES.md is missing or stale"). Cause: notices generated on Windows listed colorama, which a Linux runner never installs. Fix: Python packages are listed from `uv.lock` (section 3a), test SAF-12.
