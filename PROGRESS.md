@@ -4,7 +4,7 @@ Rule: ONE task per session. Each session does: Execute -> Review -> Fix -> Commi
 A new session starts with: "Resume. Read CLAUDE.md, PROGRESS.md, OPEN_QUESTIONS.md; continue at CURRENT."
 
 ## Pointer
-- CURRENT: T00, phases 1 EXEC and 4 COMMIT done (commit 344d67f). NEXT: phase 2 REVIEW (Prompt 3, ideally in a fresh session), then 3 FIX, then 5 LOGGED. Do not start T01/T02 before T00 is DONE.
+- CURRENT: T00, phases 1 EXEC and 4 COMMIT done (commit f55371c). NEXT: phase 2 REVIEW (Prompt 3, ideally in a fresh session), then 3 FIX, then 5 LOGGED. Do not start T01/T02 before T00 is DONE.
 - LAST COMPLETED: kickoff (layout reorganised, git init, decisions recorded in docs/OPEN_QUESTIONS.md and MASTER_PLAN 9)
 - MODE: manual price mode (no broker). Each affected task file starts with an "Amendment: manual price mode" block that overrides the text below it (D02 removed; B08 reduced; B06 and F13 split a/b; B09/D03/D06/D07/D08 changed).
 - COUNTS: 39 active task files; 42 tracked work items below (D05, B06, F13 each split in two; D02 REMOVED).
@@ -22,7 +22,7 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 ## Task list (order from tasks/README.md waves)
 | Wave | Task | Status | Phase reached | Commit | Notes / owner action needed |
 |---|---|---|---|---|---|
-| 0 | T00 | IN-PROGRESS (review next) | 1 EXEC, 4 COMMIT | 344d67f | first GitHub run pending (no remote yet); OQ-8 licence policy open |
+| 0 | T00 | IN-PROGRESS (review next) | 1 EXEC, 4 COMMIT | f55371c | first GitHub run pending (not pushed yet); OQ-8 licence policy open |
 | 0 | T01 | TODO | | | manual mode: S1 recorded, S2/S3/S5 skipped, S4 = manual adjustment check; owner needed for S4, S9 (25 MB upload), S12-S14, S17 |
 | 0 | T02 | TODO | | | parallel with T01 after T00 |
 | 1 | B01 | TODO | | | produces openapi.yaml; unlocks parallel FE/BE |
@@ -73,4 +73,4 @@ Frontend and backend tasks may run in separate git worktrees/sessions. Frontend 
 - 2026-10-10: Kickoff review done. Owner answered; decisions recorded; files moved to documented layout (from extracted zip, content verified identical); .gitignore added; first commit made. Awaiting "begin T00".
 - 2026-10-10: Owner decision D-2 and follow-ups (D-B..D-I) applied to specs (docs/01-08), tasks and MASTER_PLAN; B06/F13 split and D02 removal proposed by Claude (D-J) for owner review. Added edge-case rows IMP-20..24, INS-14, PRC-21, ALR-18, SYS-12. Awaiting "begin T00".
 - 2026-10-10: Owner approved split (D-J) and decided OQ-5/6/7 (D-K, D-L, D-M); applied to docs/01-08, tasks, config, .env.example. New rows IMP-25..27, ACT-11/12, SYS-13/14. Awaiting approval of the summary before T00.
-- 2026-10-10: T00 executed and committed (344d67f): API/worker/web skeletons, CI, deny-list, licence scan + notices, lockfile and .env.example checks, RUNBOOK 3a/5a. All CI steps pass locally; GitHub run and branch protection need the owner (push repo, enable protection). OQ-8 opened. Next session: review T00 (Prompt 3).
+- 2026-10-10: T00 executed and committed (f55371c): API/worker/web skeletons, CI, deny-list, licence scan + notices, lockfile and .env.example checks, RUNBOOK 3a/5a. All CI steps pass locally; GitHub run and branch protection need the owner (push repo, enable protection). OQ-8 opened. Next session: review T00 (Prompt 3).
