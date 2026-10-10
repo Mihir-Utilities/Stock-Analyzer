@@ -55,7 +55,7 @@ If no active session or it expires before the next scheduled broker job: send **
 1. Needs an active broker session; otherwise `skipped (broker_session_missing)`.
 2. `expected_date` = last completed trading day. Universe = tracked, `broker_ok`, active stocks plus index series (`NIFTY50`, `INDIAVIX` if served).
 3. For each stock (sequential, throttled): request candles from `last_bar_date + 1` to `expected_date` (full backfill when no rows). Write bars after sanity rules.
-4. `adj_close` = `close` x factor from confirmed actions (or `= close` when `BROKER_PRICES_ADJUSTED=true`). When a confirmed action's re-adjustment is pending, recompute that stock's `adj_close` for the whole history (single UPDATE by date range).
+4. `adj_close` = `close` x factor from confirmed actions (or `= close` when `PRICES_ALREADY_ADJUSTED=true`). When a confirmed action's re-adjustment is pending, recompute that stock's `adj_close` for the whole history (single UPDATE by date range).
 5. Update `quote_latest` from the last bar if no fresher quote exists.
 6. Completeness = `with_expected_bar / universe`; < 90% -> `partial` and the retry job runs at 20:30 IST. (Broker mode only; there is no holiday auto-detection.)
 7. Details: `{expected_date, universe, with_bar, rate_limited, session_ok}`.
