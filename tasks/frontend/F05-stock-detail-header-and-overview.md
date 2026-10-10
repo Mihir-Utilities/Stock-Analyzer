@@ -8,7 +8,7 @@
 
 ## Amendment: manual price mode (decisions D-1, D-2 and follow-ups, 2026-10-10)
 Source of truth: `docs/OPEN_QUESTIONS.md` Decisions; updated specs: `docs/01` 7.0/7.1, `docs/03` 3, 4, 14, `docs/04` 3.9-3.13. Where this block conflicts with the sections below, **this block wins**.
-- The Refresh button is **hidden** in manual mode; show the "Last price import: {bar date}" chip (amber if older than 1 trading day) and an "Import prices" link. No broker banners.
+- The Refresh button is **hidden** in manual mode; show the "Last price import: {bar date}" chip (amber if older than 1 trading day) and an "Import prices" link. No broker banners. Show the small "holiday list missing" notice when `freshness.holidays_missing`; stale chip uses `freshness.prices_stale`. Test: **SYS-14** (header part).
 
 ## Read first
 - docs/06-frontend-spec.md sections 4.2, 6.4 (Overview)

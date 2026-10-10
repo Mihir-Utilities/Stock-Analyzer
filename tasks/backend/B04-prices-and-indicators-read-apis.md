@@ -9,6 +9,7 @@
 ## Amendment: manual price mode (decisions D-1, D-2 and follow-ups, 2026-10-10)
 Source of truth: `docs/OPEN_QUESTIONS.md` Decisions; updated specs: `docs/01` 7.0/7.1, `docs/03` 3, 4, 14, `docs/04` 3.9-3.13. Where this block conflicts with the sections below, **this block wins**.
 - Empty price series returns `DATA_UNAVAILABLE` with reason `no_prices_imported` (manual mode) instead of `backfill_pending`/`broker_*`.
+- Test **BRK-06** (imported history shorter than expected: `limited_history`, depth stated).
 - `freshness.prices_as_of` = last imported bar date; no quote/`quote_ts` in manual mode (ltp = last close, source `import`).
 
 ## Read first

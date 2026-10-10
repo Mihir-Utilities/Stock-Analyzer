@@ -4,7 +4,7 @@
 - `MASTER_PLAN.md`: the main file (scope, decisions, architecture, phases). Short by design.
 - `CLAUDE.md`: rules Claude Code follows automatically (it is loaded from the repo root).
 - `docs/`: reference specifications (data sources, DB schema, API, jobs, analytics, frontend, design system, edge cases, spikes, legal/safety).
-- `tasks/`: 40 scoped work packages in four tracks (foundation, backend, data/worker, frontend), with an index and order in `tasks/README.md`.
+- `tasks/`: 39 active task files (42 tracked work items: D05, B06 and F13 are each split in two; D02 is removed) in four tracks (foundation, backend, data/worker, frontend), with an index and order in `tasks/README.md`.
 - `config/`, `.env.example`: templates.
 - `PROMPT_FOR_CLAUDE_CODE.md`: copy-paste prompts.
 

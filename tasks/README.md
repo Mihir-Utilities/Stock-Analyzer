@@ -7,7 +7,7 @@ Each file is a self-contained work package: goal, scope, out-of-scope, deliverab
 |---|---|---|---|
 | Foundation | `foundation/` | T00-T02 | Repo, CI, safety guards, spikes, migrations |
 | Backend (Go API) | `backend/` | B01-B14 | HTTP API, auth, imports, portfolio, alerts API, MF API |
-| Data/Worker (Python) | `data/` | D01-D08 | Broker adapter, ingestion, analytics, alerts, ML, jobs |
+| Data/Worker (Python) | `data/` | D01-D08 | Ingestion jobs (`post_import`), analytics, alerts, ML, housekeeping (broker adapter D02 removed) |
 | Frontend (Next.js) | `frontend/` | F01-F15 | Design system, screens, visualisations |
 
 ## Recommended order (sequential waves; tasks inside a wave can run in parallel)
@@ -29,6 +29,9 @@ Each file is a self-contained work package: goal, scope, out-of-scope, deliverab
 1. B01 produces `openapi.yaml` and generated TypeScript types from `docs/03-api-spec.md`.
 2. Frontend tasks develop against a mock server generated from the OpenAPI examples (MSW), then switch to the real API when the backend task lands.
 3. Any change to an endpoint contract must update `docs/03-api-spec.md`, `openapi.yaml` and `docs/field-map.json` in the same PR.
+
+## Counts
+39 active task files (T00-T02, B01-B14, D01 and D03-D08, F01-F15; D02 is a REMOVED stub). Tracked work items in `PROGRESS.md` = 42: D05 -> D05a + D05b, B06 -> B06a + B06b, F13 -> F13a + F13b.
 
 ## Dependency summary
 ```

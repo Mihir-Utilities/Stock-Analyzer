@@ -1,4 +1,4 @@
 {
-  "_comment": "Maintained by a human from the exchange's published trading-holiday circular each year. Format: { \"YYYY\": [ {\"date\": \"YYYY-MM-DD\", \"description\": \"...\"} ] }. If a year is missing the app falls back to weekends-only plus 'no candles returned' holiday detection and shows a warning on /admin/status.",
+  "_comment": "Maintained by a human from the exchange's published trading-holiday circular each year. Format: { \"YYYY\": [ {\"date\": \"YYYY-MM-DD\", \"description\": \"...\"} ] }. Never invent dates: leave a year empty until the owner provides it. If a year has no rows the app uses weekends only, shows a warning on /admin/status and a 'holiday list missing' notice in the stock header chip. Owners can also load a year with the holidays import (docs/01 section 7.8). No automatic holiday detection.",
   "2026": []
 }

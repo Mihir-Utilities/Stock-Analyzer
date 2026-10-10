@@ -6,6 +6,10 @@
 | Depends on | B04, D07 |
 | Size | M (S < 0.5 day, M 0.5-1.5 days, L 1.5-4 days of focused work) |
 
+## Amendment: manual price mode (decisions D-1, D-2 and follow-ups, 2026-10-10)
+Source of truth: `docs/OPEN_QUESTIONS.md` Decisions; updated specs: `docs/03` 15, `docs/06` 6.12. Where this block conflicts with the sections below, **this block wins**.
+- Admin status: no broker session state (manual mode); add `holiday_list_missing_years`, DB `warn_level` 70/85/95/limit, and the per-year persistent holiday warning data. Market overview indices come from `market_series` (reserved prices.csv symbols), empty with reason when absent. Test: **SYS-14** (admin part).
+
 ## Read first
 - docs/03-api-spec.md sections 6, 8, 15
 - docs/05-analytics-spec.md section 10.6

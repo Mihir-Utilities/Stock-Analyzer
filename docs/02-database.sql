@@ -11,6 +11,7 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;   -- fuzzy search (confirm availability 
 -- ---------------------------------------------------------------------------
 -- Settings and operations
 -- ---------------------------------------------------------------------------
+-- Keys include PRICES_ALREADY_ADJUSTED (absent until the owner chooses; blocks prices commit while absent), RISK_FREE_RATE, DB_SOFT_LIMIT_MB, ...
 CREATE TABLE app_setting (
   key        text PRIMARY KEY,
   value      jsonb NOT NULL,
@@ -21,6 +22,7 @@ CREATE TABLE market_holiday (
   holiday_date date NOT NULL,
   segment      text NOT NULL DEFAULT 'trading' CHECK (segment IN ('trading','clearing')),
   description  text,
+  source       text NOT NULL DEFAULT 'seed' CHECK (source IN ('seed','import')),  -- no auto-detected holidays
   PRIMARY KEY (holiday_date, segment)
 );
 
@@ -94,7 +96,7 @@ CREATE INDEX import_upload_expires_idx ON import_upload (expires_at);
 
 CREATE TABLE import_batch (
   id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  kind          text NOT NULL CHECK (kind IN ('prices','results_quarterly','results_annual','balance_cashflow','fundamentals_long','shareholding','corporate_actions','instrument_meta','instruments','screener_xlsx','manual_form')),
+  kind          text NOT NULL CHECK (kind IN ('prices','results_quarterly','results_annual','balance_cashflow','fundamentals_long','shareholding','corporate_actions','instrument_meta','instruments','holidays','screener_xlsx','manual_form')),
   upload_group  uuid,                             -- logical batch when a large prices file is split in the browser (S9 fallback); one transaction at commit
   filename      text,
   sha256        bytea,
@@ -161,10 +163,11 @@ CREATE TABLE price_daily (
   open          double precision NOT NULL,
   high          double precision NOT NULL,
   low           double precision NOT NULL,
-  close         double precision NOT NULL,        -- as stored from source (raw unless BROKER_PRICES_ADJUSTED=true)
+  close         double precision NOT NULL,        -- as stored from source (raw or adjusted according to src_adjusted)
   adj_close     double precision NOT NULL,        -- close x cumulative factor of CONFIRMED split/bonus actions after the date; dividends NOT adjusted
   volume        bigint NOT NULL DEFAULT 0,
   source        text NOT NULL CHECK (source IN ('broker','import')),
+  src_adjusted  boolean NOT NULL DEFAULT false,   -- copy of app_setting PRICES_ALREADY_ADJUSTED at import time; true => adj_close = close, never multiplied by action factors
   suspect       boolean NOT NULL DEFAULT false,   -- failed a sanity rule; excluded from analytics
   PRIMARY KEY (instrument_id, trade_date),
   CONSTRAINT price_positive CHECK (open > 0 AND high > 0 AND low > 0 AND close > 0 AND adj_close > 0),

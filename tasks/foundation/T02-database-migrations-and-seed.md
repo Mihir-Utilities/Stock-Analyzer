@@ -8,8 +8,8 @@
 
 ## Amendment: manual price mode (decisions D-1, D-2 and follow-ups, 2026-10-10)
 Source of truth: `docs/OPEN_QUESTIONS.md` Decisions; updated specs: `docs/01` 7.0/7.1, `docs/03` 3, 4, 14, `docs/04` 3.9-3.13. Where this block conflicts with the sections below, **this block wins**.
-- Schema changes to apply from `docs/02-database.sql`: `import_batch.kind` includes `instruments`, `import_batch.upload_group`, UNLOGGED `import_upload`, `refresh_job.kind` includes `post_import`, `instrument.tracked_reason` in (`watchlist`,`portfolio`,`opened`,`imported`) (no `training_basket`). Broker columns/tables stay (nullable/unused).
-- Seed: **no instrument rows** (the stock list comes from the owner's import); no `TRAINING_BASKET_MAX` or broker settings; `BROKER_ENABLED=false`, `DB_SOFT_LIMIT_MB=380`.
+- Schema changes to apply from `docs/02-database.sql`: `import_batch.kind` includes `instruments`, `import_batch.upload_group`, UNLOGGED `import_upload`, `refresh_job.kind` includes `post_import`, `import_batch.kind` includes `holidays`, `market_holiday.source`, `price_daily.src_adjusted`, `instrument.tracked_reason` in (`watchlist`,`portfolio`,`opened`,`imported`) (no `training_basket`). Broker columns/tables stay (nullable/unused).
+- Seed: **no instrument rows** (the stock list comes from the owner's import); no `TRAINING_BASKET_MAX` or broker settings; `BROKER_ENABLED=false`, `DB_SOFT_LIMIT_MB=380`; `PRICES_ALREADY_ADJUSTED` is **not** seeded (absent = unset); seed `market_holiday` from `config/market_holidays.json` (2026 list is empty: no invented dates).
 
 ## Read first
 - docs/02-database.sql

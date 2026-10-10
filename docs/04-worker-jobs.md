@@ -11,7 +11,7 @@ Allowed data sources: mfapi.in, AMFI file, Telegram (and the owner's broker API 
 2. **Idempotent:** upserts by natural key; re-running never duplicates.
 3. **Timeout:** hard per-job timeout below; on timeout finish the current item, write progress, mark `partial`.
 4. **Per-item isolation:** one symbol failing never fails the run; keep the first 50 errors in `details`.
-5. **Market date:** expected last trading date from `config/market_holidays.json` + weekends (+ detected holidays). Never infer from the server date alone.
+5. **Market date:** expected last trading date from `market_holiday` (seeded from `config/market_holidays.json`, plus owner `holidays` imports) + weekends; if the year has no holiday rows, weekends only (no auto-detection) and the stale chip uses the 4-calendar-day rule. Never infer from the server date alone.
 6. **Source health + circuit breaker:** per `01-data-sources.md` section 1.
 7. **Owner notifications:** a job failing or `partial` with > 20% items failed twice in a row triggers one Telegram message per 24 h per job. Broker session problems have their own reminder rules (job 3.3).
 8. **GitHub Actions:** each workflow uses `concurrency: { group: <job-group>, cancel-in-progress: false }`, pins actions by SHA, never prints secrets.
@@ -46,7 +46,7 @@ Late-run tolerance: every job computes its work from data state ("bars missing s
 Requires an active broker session (skip with reason otherwise; manual price mode skips the job entirely). Download the broker instrument master; validate (>= 1,500 NSE equity rows; contains RELIANCE, TCS, INFY); upsert; change detection per `01` 3.3; probe up to 100 never-probed/stale (> 30 days) instruments by requesting 5 days of candles; set `broker_ok`. Recompute `is_tracked` = watchlist + portfolio + most recently opened (LRU cap `OPENED_STOCKS_LRU_CAP`, default 150) + imported.
 
 ### 3.2 `detect_actions`
-For each tracked stock with new bars: run the split/bonus detector (`01` 3.7). Insert `corporate_action(status='detected')` rows (unique on instrument+ex_date+type). Send one Telegram note per newly detected action: "Possible split/bonus on {symbol} ({date}). Confirm in the app."
+For each tracked stock with new bars (in manual mode: each symbol of the `post_import` batch): run the split/bonus detector (`01` 3.7). If the ex-date falls inside bars with `src_adjusted=true`, still insert the action but set `warnings=['ADJUSTMENT_CONFLICT']` (never adjust those bars; `01` 3.7). Insert `corporate_action(status='detected')` rows (unique on instrument+ex_date+type). Send one Telegram note per newly detected action: "Possible split/bonus on {symbol} ({date}). Confirm in the app."
 
 ### 3.3 `broker_session_check` and reminders
 If no active session or it expires before the next scheduled broker job: send **one** Telegram reminder per slot ("Broker session expired. Open the app and tap Reconnect.") and write `source_health(broker, ok=false, note='session_missing')`. Never attempt automated login.
@@ -57,7 +57,7 @@ If no active session or it expires before the next scheduled broker job: send **
 3. For each stock (sequential, throttled): request candles from `last_bar_date + 1` to `expected_date` (full backfill when no rows). Write bars after sanity rules.
 4. `adj_close` = `close` x factor from confirmed actions (or `= close` when `BROKER_PRICES_ADJUSTED=true`). When a confirmed action's re-adjustment is pending, recompute that stock's `adj_close` for the whole history (single UPDATE by date range).
 5. Update `quote_latest` from the last bar if no fresher quote exists.
-6. Completeness = `with_expected_bar / universe`; < 90% -> `partial` and the retry job runs at 20:30 IST. A weekday with bars for < 10% of the universe is recorded as a detected holiday (`market_holiday.description='detected'`) and not treated as an error.
+6. Completeness = `with_expected_bar / universe`; < 90% -> `partial` and the retry job runs at 20:30 IST. (Broker mode only; there is no holiday auto-detection.)
 7. Details: `{expected_date, universe, with_bar, rate_limited, session_ok}`.
 
 ### 3.5 `ingest_mf_navs`

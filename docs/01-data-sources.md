@@ -24,7 +24,7 @@ Read `00-legal-and-safety.md` first. Anything not listed in section 2 as ALLOWED
 |---|---|---|
 | mfapi.in | ALLOWED (open API, no auth) | MF scheme list, NAV history |
 | AMFI `NAVAll.txt` | ALLOWED (public NAV publication; check terms in S14) | MF metadata, fallback latest NAV |
-| Owner's broker API (one of Angel One SmartAPI, Fyers, Upstox, Dhan; chosen in spike S1) | ALLOWED with owner's own account, OAuth, read-only scope | Instrument master, daily candles, quotes, index candles |
+| Owner's broker API (one of Angel One SmartAPI, Fyers, Upstox, Dhan; chosen in spike S1) | ALLOWED in principle with owner's own account, OAuth, read-only scope; **INACTIVE: manual price mode (D-1), nothing implemented** | Instrument master, daily candles, quotes, index candles |
 | Telegram Bot API | ALLOWED | Alerts |
 | Owner-supplied CSV/forms | ALLOWED (owner's responsibility) | Prices (if no broker), fundamentals, shareholding, corporate actions, sector/index tags |
 | Optional Screener Excel (owner's own export) | OFF by default (`SCREENER_IMPORT_ENABLED=false`); gray area under Screener's terms | Fundamentals backfill |
@@ -74,11 +74,16 @@ Internal types: `Bar(date, open, high, low, close, volume)`, `Quote(ts, ltp, pre
 ### 3.6 Quotes
 `quotes()` for up to N keys per call (U). Used for `quote_latest` (watchlist/portfolio/alert stocks only). During market hours the broker feed may be delayed or real-time (U). UI shows `quote_ts` age always.
 
-### 3.7 Adjustment policy (decision; confirm with spike S4)
-- Config `BROKER_PRICES_ADJUSTED` (true/false), set from spike S4.
+### 3.7 Adjustment policy
+- Global setting `PRICES_ALREADY_ADJUSTED` (true|false) in `app_setting` (replaces the former broker config; decision D-K). It is **unset until the owner chooses** and must be set before the first prices commit (see the manual-mode block below).
 - If **false** (raw prices): `price_daily.close` = raw close; `adj_close` = raw close x cumulative factor from **confirmed** split/bonus actions after that date (dividends are not adjusted; returns are price returns, stated in the UI).
 - If **true**: `adj_close = close`; actions are still stored for portfolio math.
-- **Detection:** for each stock nightly, flag day t when `|C_t/C_{t-1} - 1| > 0.35` and the ratio `r = C_t/C_{t-1}` is within 3% of one of: 1/2, 1/3, 1/4, 1/5, 1/10, 1/20, 2/3, 3/4, 4/5, 5/6, and volume is > 1.5x its 20-day average. Insert `corporate_action(status='detected', action_type='split_or_bonus', ratio_num/den from the matched fraction)`. Detected actions are **not** applied until the owner confirms; the stock page shows a banner "Possible split/bonus on {date}: price changed {x}%. Confirm to adjust history" with Confirm / Reject. While unconfirmed, analytics set `warnings=['UNCONFIRMED_ACTION']` and ML is hidden for that stock.
+- **Manual price mode (current) rules (D-K):**
+  1. **Required choice.** The validate step for kind `prices` shows the required choice "These prices are: raw / already adjusted for splits and bonus / I don't know". `raw` sets `PRICES_ALREADY_ADJUSTED=false`, `already adjusted` sets `true` (via `PUT /settings/prices-adjustment`). **`I don't know` sets nothing** and shows the adjustment check below. While the setting is unset, commit of a prices file is blocked (`422 PRICES_ADJUSTMENT_UNSET`).
+  2. **Adjustment check (replaces spike S4 in manual mode).** The owner uploads (validates) prices spanning a split or bonus they know about; `POST /imports/prices/adjustment-check` (symbol, ex-date, optional expected ratio) shows the closes on the trading days around the ex-date from the uploaded file and the observed ratio `close(ex)/close(prev)`. A gap near the expected ratio (within the 3% tolerance of the detector) means **raw**; a ratio within 3% of 1 (no gap) means **already adjusted**; anything else is "inconclusive". The hint is advisory; the owner records the answer by choosing raw/adjusted. Nothing is written by the check.
+  3. **Per source, not per file.** The setting is global (one price source). Each stored bar carries `price_daily.src_adjusted` (copy of the setting at import time). Bars with `src_adjusted=true` always have `adj_close = close` and are **never multiplied** by action factors; bars with `src_adjusted=false` use `adj_close = close x factor` of confirmed actions. The app therefore never adjusts the same bar twice. Mixing raw and adjusted files for the same stock is an owner error: if `detect_actions` finds a `detected` action whose ex-date lies inside data imported with `src_adjusted=true`, the action is still inserted but the stock gets `warnings=['ADJUSTMENT_CONFLICT']` and the Data tab shows "A possible split/bonus on {date} was found inside prices imported as already adjusted. Check which file is raw. Nothing was adjusted automatically." Confirming such an action does not touch `src_adjusted=true` bars.
+  4. **Wizard text** (shown on the prices wizard): "Raw prices jump at splits and bonuses; adjusted prices are already smoothed. Choose what your file contains and keep one kind per source. Do not mix raw and adjusted files."
+- **Detection:** for each affected stock (in `post_import` in manual mode; nightly in broker mode), flag day t when `|C_t/C_{t-1} - 1| > 0.35` and the ratio `r = C_t/C_{t-1}` is within 3% of one of: 1/2, 1/3, 1/4, 1/5, 1/10, 1/20, 2/3, 3/4, 4/5, 5/6, and volume is > 1.5x its 20-day average. Insert `corporate_action(status='detected', action_type='split_or_bonus', ratio_num/den from the matched fraction)`. Detected actions are **not** applied until the owner confirms; the stock page shows a banner "Possible split/bonus on {date}: price changed {x}%. Confirm to adjust history" with Confirm / Reject. While unconfirmed, analytics set `warnings=['UNCONFIRMED_ACTION']` and ML is hidden for that stock.
 - On confirmation: write `adj_close` factors (re-computation job), recompute analytics.
 - This heuristic cannot see small splits/bonus (ratio between 0.65 and 1) or rights/demergers; owners can add those manually.
 
@@ -137,15 +142,19 @@ Equivalents of 7.2-7.4 for single entries (quarterly results, annual results, sh
 ### 7.7 Optional Screener Excel (disabled unless `SCREENER_IMPORT_ENABLED=true`)
 Only if the owner enables it after reading Screener's terms (restricts copying/mirroring). Parser mapped from owner-provided sample files (S13). Source `screener_import`. UI shows a persistent notice. Never fetch pages from Screener.
 
+### 7.8 `holidays.csv` (market holidays for a year)
+Columns: `date` (required), `description` (optional), `segment` (optional: `trading|clearing`, default `trading`). Rules: valid date; years 2000 to current year + 1; a date that is already a Saturday/Sunday gives a **warning** (kept); duplicate `(date, segment)` in the file = error. **Replace-per-year semantics:** on commit, all `market_holiday` rows for each year present in the file are replaced by the file's rows (so re-importing a corrected file fixes mistakes), `source='import'`. Batches of this kind are not undoable (re-import to correct). The template contains the header row only (no example dates). The app never downloads holiday lists; the owner reads the exchange's circular and types or pastes the dates.
+
 ## 8. Static files maintained by the owner/Claude Code
-- `config/market_holidays.json`: `{ "2026": [ {"date":"2026-01-26","description":"Republic Day"}, ... ] }`. Updated yearly from the exchange's published holiday circular (read by a human). Fallback if missing: weekends only, plus "no candle returned by the broker" detection (a weekday with no candles for > 90% of tracked stocks is treated as a holiday and recorded in `market_holiday` with `description='detected'`).
+- `config/market_holidays.json` (reference file in the repo): `{ "2026": [ {"date":"YYYY-MM-DD","description":"..."}, ... ] }`. **Never invent holiday dates**: the 2026 list stays empty until the owner provides it from the exchange's published holiday circular (read by a human). The seed command loads the file into `market_holiday` (`source='seed'`) only for years that have no rows yet. The owner can load a whole year at once with the `holidays` import (7.8) instead of editing JSON; import rows (`source='import'`) take precedence.
+- **Missing year:** weekends only, a persistent warning on `/admin/status`, and a small "holiday list missing" notice in the stock header chip. Staleness with no holiday data for the year: show the stale chip only after **4 calendar days** without a new bar; with holiday data use the expected-trading-date rule. There is **no holiday auto-detection** (it needed broker candles).
 - `config/financial_industry_patterns.json`: patterns marking `company_type='financial'` (bank, NBFC, insurance, housing finance, asset management, capital markets).
 
 ## 9. Research links (no data fetched)
 The stock page shows plain hyperlinks (opened by the owner in a new tab; `rel="noopener noreferrer"`): NSE quote page, BSE quote page (needs BSE code only if known), company investor-relations search, Google search for "{name} results", TradingView symbol page, Screener company page, Moneycontrol search. Templates in `config/research_links.json` with `{symbol}` and `{name}` placeholders (URL-encoded). The app never requests these URLs from the server or the browser (no iframes, no previews).
 
 ## 10. Adapter interfaces and error handling summary
-- `BrokerSource` (3.2), `MFSource` (`search`, `nav_history`, `latest_navs`), `TelegramSender`.
+- (`BrokerSource` (3.2) is inactive, not implemented.) `MFSource` (`search`, `nav_history`, `latest_navs`), `TelegramSender`.
 - Importers (Go): `ParsePricesCSV`, `ParseResultsCSV`, `ParseBalanceCashflowCSV`, `ParseFundamentalsLong`, `ParseShareholdingCSV`, `ParseActionsCSV`, `ParseInstrumentMetaCSV`, each returning `{rows, errors[], warnings[]}`.
 - Jobs catch typed errors and apply the fallback matrix:
 

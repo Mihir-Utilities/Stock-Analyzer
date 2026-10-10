@@ -12,6 +12,7 @@ Source of truth: `docs/OPEN_QUESTIONS.md` Decisions; updated specs: `docs/01` 7.
 - Opening a stock sets `last_opened_at` and, if untracked, `is_tracked=true, tracked_reason='opened'` (API owns the tracked set). **No `stock_backfill` enqueue** in manual mode; return `price_mode:"manual"`, `freshness.prices_as_of`, and a hint to import prices when `no_prices`.
 - Empty state: with zero instruments, `GET /stocks` and `/stocks/index` return empty and the UI text is "No stocks yet. Import instruments.csv or add a stock." (acceptance criterion added; test it).
 - Flags: the `broker_ok` bit is always 0.
+- `freshness.prices_stale` and `freshness.holidays_missing` per `docs/03` section 3 (4-calendar-day rule when the year's holiday list is missing). Test: **SYS-13**. Also **BRK-07** (instrument with no imported prices: `no_prices`, hint to import).
 
 ## Read first
 - docs/03-api-spec.md section 3

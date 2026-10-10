@@ -1,6 +1,8 @@
 # 07. Edge-Case Catalogue and Test Matrix (Safe Edition)
 
-Rule: every row needs an automated test before its feature is done. Test types: **U** unit, **I** integration (real Postgres via testcontainers), **E** Playwright end-to-end, **F** fixture parser/importer test, **M** manual checklist in RUNBOOK, **CI** pipeline check. New edge cases found later get the next ID in the right category; rows are never deleted. Process rule: every production bug becomes a row plus a regression test. This catalogue cannot prove completeness.
+Gaps in numbering are intentional; IDs are stable references.
+
+Rule: every row needs an automated test before its feature is done. Rows marked **N/A in manual mode** (broker mode inactive, D-1) need no test now; they are kept (IDs never deleted) for a possible future broker mode. Test types: **U** unit, **I** integration (real Postgres via testcontainers), **E** Playwright end-to-end, **F** fixture parser/importer test, **M** manual checklist in RUNBOOK, **CI** pipeline check. New edge cases found later get the next ID in the right category; rows are never deleted. Process rule: every production bug becomes a row plus a regression test. This catalogue cannot prove completeness.
 
 ## SAF: Safe Edition guards
 | ID | Scenario | Required behavior | Test |
@@ -15,26 +17,26 @@ Rule: every row needs an automated test before its feature is done. Test types: 
 ## BRK: broker session and prices
 | ID | Scenario | Required behavior | Test |
 |---|---|---|---|
-| BRK-01 | No broker session | Broker jobs `skipped(broker_session_missing)`; banner; one Telegram reminder per slot | I |
-| BRK-02 | Token expires mid-job | Job stops at the current item, marks `partial`, reminds once | I |
-| BRK-03 | OAuth `state` mismatch/expired/reused | Callback rejected; nothing stored | I |
-| BRK-04 | Token encrypted at rest | DB column is ciphertext; no log contains token (scrubber test) | U/I |
-| BRK-05 | Broker rate-limited (429) | Backoff + circuit breaker; stale chip; no data corruption | I |
-| BRK-06 | Broker has fewer years than requested | Store what exists; `limited_history` flag; UI states depth | I |
-| BRK-07 | Instrument present in master but no candles | `broker_ok=false`; selectable with "No price data from broker" | I |
+| BRK-01 | No broker session | **N/A in manual mode (D-1; broker mode inactive).** Broker jobs `skipped(broker_session_missing)`; banner; one Telegram reminder per slot | I |
+| BRK-02 | Token expires mid-job | **N/A in manual mode (D-1; broker mode inactive).** Job stops at the current item, marks `partial`, reminds once | I |
+| BRK-03 | OAuth `state` mismatch/expired/reused | **N/A in manual mode (D-1; broker mode inactive).** Callback rejected; nothing stored | I |
+| BRK-04 | Token encrypted at rest | **N/A in manual mode (D-1; broker mode inactive).** DB column is ciphertext; no log contains token (scrubber test) | U/I |
+| BRK-05 | Broker rate-limited (429) | **N/A in manual mode (D-1; broker mode inactive).** Backoff + circuit breaker; stale chip; no data corruption | I |
+| BRK-06 | Imported history shorter than the depth the UI/analytics expect (manual mode) | Use what exists; `limited_history` flag; UI states depth | I |
+| BRK-07 | Instrument exists but has no imported prices (manual mode) | `no_prices` flag; selectable; page shows "No prices imported. Import prices.csv" | I |
 | BRK-08 | Daily candle sanity failures (OHLC inconsistent, <=0, huge jump) | `suspect=true`, excluded from analytics | U |
-| BRK-09 | Weekend/holiday rows | Dropped; holiday detection when < 10% of universe has a bar | U |
-| BRK-10 | Partial/in-progress bar before 18:00 IST | Not persisted | U |
-| BRK-11 | < 90% tracked stocks have expected bar at 18:30 | Status `partial`; retry at 20:30; UI "prices as of {prev date}" | I |
+| BRK-09 | Weekend rows in `prices.csv` (manual mode) | Dropped with a warning (`01` 3.5); a listed holiday is only a warning; no holiday auto-detection | U |
+| BRK-10 | Partial/in-progress bar before 18:00 IST | **N/A in manual mode (D-1; broker mode inactive).** Not persisted | U |
+| BRK-11 | < 90% tracked stocks have expected bar at 18:30 | **N/A in manual mode (D-1; broker mode inactive).** Status `partial`; retry at 20:30; UI "prices as of {prev date}" | I |
 | BRK-12 | Manual price mode (no broker) | Refresh/backfill rejected `PRICE_MODE_MANUAL`; UI explains and links to prices import | I/E |
-| BRK-13 | Prices import overlaps broker data | Upsert; `source` shows import; a visible label if one series mixes sources | I |
-| BRK-14 | Static-IP/IP block for data calls | Source health red; documented home-run procedure | M |
-| BRK-15 | Broker changes instrument key | Master sync updates `broker_key`; history continuity by `instrument.id` | I |
+| BRK-13 | Prices import overlaps broker data | **N/A in manual mode (D-1; broker mode inactive).** Upsert; `source` shows import; a visible label if one series mixes sources | I |
+| BRK-14 | Static-IP/IP block for data calls | **N/A in manual mode (D-1; broker mode inactive).** Source health red; documented home-run procedure | M |
+| BRK-15 | Broker changes instrument key | **N/A in manual mode (D-1; broker mode inactive).** Master sync updates `broker_key`; history continuity by `instrument.id` | I |
 | BRK-16 | Index/VIX series unavailable | Dashboard shows reason; ML omits market features for all rows | U/E |
 | BRK-17 | Price at tiny/huge values | Format correct; no overflow | U |
 | BRK-18 | Timezone boundaries (IST vs UTC dates) | Market date test around 00:00 | U |
 | BRK-19 | Duplicate candles in a response | Upsert; counts stable | I |
-| BRK-20 | Broker returns already-adjusted history | With `BROKER_PRICES_ADJUSTED=true` no double adjustment | U |
+| BRK-20 | Broker returns already-adjusted history | With `PRICES_ALREADY_ADJUSTED=true` no double adjustment (broker mode inactive; manual-mode equivalent: ACT-11, ACT-12) | U |
 
 ## ACT: corporate actions and adjustments
 | ID | Scenario | Required behavior | Test |
@@ -49,6 +51,8 @@ Rule: every row needs an automated test before its feature is done. Test types: 
 | ACT-08 | Rights/buyback/merger/demerger | Never auto-applied; "review needed" | U |
 | ACT-09 | Duplicate action rows | Unique constraint | I |
 | ACT-10 | Future ex-date | Not applied until `ex_date <= as_of` | U |
+| ACT-11 | Detected action whose ex-date lies inside bars imported as already adjusted | Action inserted as `detected`; stock gets `ADJUSTMENT_CONFLICT`; Data tab warning text; nothing adjusted automatically | I |
+| ACT-12 | Mixed `src_adjusted` bars for one stock; owner confirms an action | `adj_close` factors applied only to `src_adjusted=false` bars; `src_adjusted=true` bars keep `adj_close = close`; never adjusted twice | U |
 
 ## IMP: imports and manual entry
 | ID | Scenario | Required behavior | Test |
@@ -77,6 +81,9 @@ Rule: every row needs an automated test before its feature is done. Test types: 
 | IMP-22 | 300,000-row price import (25 MB) | Streamed parse; inserts in chunks of 5,000 inside one transaction; any error (including at the last chunk) rolls back everything; memory stays bounded | I |
 | IMP-23 | Projected-size guard | Validate returns `estimated_growth_mb`; commit rejected with `DB_SIZE_LIMIT` and a plain message when current size + estimate > `DB_SOFT_LIMIT_MB`; warning (not block) when tracked stocks would exceed 400 | I |
 | IMP-24 | Validated upload survives an API restart before commit | Upload stored in UNLOGGED `import_upload`; restart API; commit succeeds; row deleted on commit; expired rows (1 h) 404 and are removed by housekeeping | I |
+| IMP-25 | Prices commit while `PRICES_ALREADY_ADJUSTED` is unset | `422 PRICES_ADJUSTMENT_UNSET`; choosing raw/adjusted persists the setting via `PUT /settings/prices-adjustment`; "I don't know" persists nothing; later commits do not re-ask; each stored bar gets `src_adjusted` = setting at import time | I |
+| IMP-26 | Adjustment check on a validated upload | Returns closes for up to 5 trading days each side of the ex-date, observed ratio, nearest fraction and hint (`raw_likely` within 3% of the expected ratio/fraction, `adjusted_likely` within 3% of 1, else `inconclusive`); writes nothing; unknown symbol/ex-date outside file -> 422 | I |
+| IMP-27 | `holidays.csv` import | Columns/segment validated; weekend date = warning; duplicate `(date, segment)` = error; replace-per-year on commit; not undoable; template has no example dates; shipped 2026 list is empty (no invented dates) | F |
 
 ## INS: instruments
 | ID | Scenario | Required behavior | Test |
@@ -229,7 +236,7 @@ Rule: every row needs an automated test before its feature is done. Test types: 
 | UI-09 | Every API field visible somewhere | Field-coverage test against `06-frontend-spec.md` matrix | E |
 | UI-10 | Every chart has a data-table view | Test per chart | E |
 | SYS-01 | Neon cold start | One retry with backoff | I |
-| SYS-02 | DB > 380 MB | Eviction order; Telegram notice | I |
+| SYS-02 | DB approaches/exceeds 380 MB (manual mode) | One Telegram notice per 70/85/95% crossing and admin warning; at 380 MB price imports rejected (`DB_SIZE_LIMIT`); imported prices never deleted automatically | I |
 | SYS-03 | Late/skipped cron | Catch-up from data state | I |
 | SYS-04 | Public-repo schedule auto-disable | Keepalive; checklist | M |
 | SYS-05 | Overlapping job runs | Second exits `skipped` | I |
@@ -237,6 +244,8 @@ Rule: every row needs an automated test before its feature is done. Test types: 
 | SYS-07 | Migration failure | Forward-only, transactional; rollback plan | M |
 | SYS-08 | Backup restore drill | Restore encrypted dump; verify counts | M |
 | SYS-09 | HMAC clock skew | 120 s tolerance | U |
-| SYS-10 | Holiday file missing for the year | Weekend-only + detection; warning on admin page | U |
+| SYS-10 | Holiday list missing for the year | Weekends only (no auto-detection); persistent warning on `/admin/status`; `holidays_missing` in profile | U |
 | SYS-11 | Dependency drift | Lockfiles; renovate PRs with tests | CI |
 | SYS-12 | `post_import` resumes after the 3.5-minute stop | With a slow fixture set, the job stops starting new symbols at 3.5 min, stores `symbols_done/remaining` in `refresh_job.result`, sets `partial`, enqueues the remainder; `process_queued_jobs` completes it; no duplicate actions/snapshots/alerts | I |
+| SYS-13 | Staleness rule | With holiday data for the year: stale when last bar < expected last trading date; without: stale only after 4 calendar days without a new bar | U |
+| SYS-14 | Missing holiday year surfaces | Persistent warning on `/admin/status` and "holiday list missing" notice in the stock header chip | E |

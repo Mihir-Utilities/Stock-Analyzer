@@ -49,7 +49,7 @@ Free-tier facts that shape the design (verified, see `docs/00-legal-and-safety.m
 | `PROMPT_FOR_CLAUDE_CODE.md` | Copy-paste prompts (kickoff, per-task, review) |
 | `CLAUDE.md` | Rules Claude Code follows (auto-loaded) |
 | `docs/00-legal-and-safety.md` | Safe-source policy, verified facts, residual risks |
-| `docs/01-data-sources.md` | Broker adapter, mfapi, AMFI, Telegram, CSV templates, validation |
+| `docs/01-data-sources.md` | mfapi, AMFI, Telegram, CSV templates, validation (broker adapter section kept as an inactive design reference) |
 | `docs/02-database.sql` | Full schema |
 | `docs/03-api-spec.md` | Every endpoint contract |
 | `docs/04-worker-jobs.md` | Every scheduled/on-demand job |
@@ -59,7 +59,7 @@ Free-tier facts that shape the design (verified, see `docs/00-legal-and-safety.m
 | `docs/07-edge-cases-tests.md` | 170+ edge cases, each needs a test |
 | `docs/08-phase0-spikes.md` | Feasibility spikes with pass/fail criteria |
 | `tasks/README.md` | Task index, order, parallel tracks |
-| `tasks/foundation|backend|data|frontend/*.md` | 39 active work packages (D02 removed in manual mode; B06 and F13 split into a/b) |
+| `tasks/foundation|backend|data|frontend/*.md` | 39 active task files (D02 removed in manual mode); 42 tracked work items (D05, B06, F13 each split in two) |
 | `config/*.json`, `.env.example` | Config templates |
 
 ## 5. Configuration constants (rows in `app_setting`, env-overridable)
@@ -69,6 +69,7 @@ Free-tier facts that shape the design (verified, see `docs/00-legal-and-safety.m
 | `LAZY_BACKFILL_MAX_YEARS` | 20 (limited by what the broker serves) |
 | `OPENED_STOCKS_LRU_CAP` | 150 (applies only to opened stocks with no imported prices) |
 | `BROKER_ENABLED` | false (manual price mode) |
+| `PRICES_ALREADY_ADJUSTED` | unset; owner must choose (raw / already adjusted) before the first prices commit |
 | `MFAPI_MIN_INTERVAL_SEC` | 0.5 |
 | `REFRESH_COOLDOWN_MIN` | 15 |
 | `REFRESH_GLOBAL_PER_HOUR` | 30 |
@@ -117,4 +118,4 @@ Answered 2026-10-10 (details in `docs/OPEN_QUESTIONS.md`):
 7. Telegram bot: owner creates it at S12 / alerts tasks; no earlier task blocks on it.
 
 ## 10. Definition of "finished" for v1
-All 39 active tasks done; all rows in `docs/07-edge-cases-tests.md` covered by tests; CI gates green (tests, licence scan, deny-list, Lighthouse/axe, bundle budgets); RUNBOOK complete including restore drill; owner has reviewed `docs/TERMS_NOTES.md`.
+All 39 active task files (42 work items) done; all rows in `docs/07-edge-cases-tests.md` covered by tests; CI gates green (tests, licence scan, deny-list, Lighthouse/axe, bundle budgets); RUNBOOK complete including restore drill; owner has reviewed `docs/TERMS_NOTES.md`.

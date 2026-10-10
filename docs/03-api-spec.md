@@ -57,11 +57,12 @@ Server search (fallback when index not cached): `q` min 1 char; ranking: exact s
   "company_type": "general", "status": "active", "instrument_kind": "equity", "listing_date": "2004-08-25",
   "broker_ok": true, "tracked": true, "price_mode": "broker|manual",
   "quote": { "ltp": 0, "prev_close": 0, "change": 0, "change_pct": 0, "day_high": 0, "day_low": 0, "wk52_high": 0, "wk52_low": 0, "volume": 0, "market_cap_cr": 0, "quote_ts": "...", "source": "broker" },
-  "freshness": { "prices_as_of": "2026-10-09", "fundamentals_as_of": "2026-08-20", "shareholding_as_of": "2026-06-30", "predictions_as_of": "2026-10-09" },
+  "freshness": { "prices_stale": false, "holidays_missing": false, "prices_as_of": "2026-10-09", "fundamentals_as_of": "2026-08-20", "shareholding_as_of": "2026-06-30", "predictions_as_of": "2026-10-09" },
   "flags": { "no_prices": false, "limited_history": false, "series_warning": null }
 } }
 ```
 Side effect: sets `last_opened_at = now()`; if the stock is not tracked, sets `is_tracked=true, tracked_reason='opened'` (the API owns the tracked set; there is no `sync_instruments`). In **manual price mode** (current) there is no backfill and the response carries `"price_mode": "manual"`, `freshness.prices_as_of` (last imported bar) and, when `no_prices`, a hint "Import prices.csv for {symbol}". In broker mode (inactive, D-1): if `no_prices` and the broker session is active and `broker_ok != false`, the response includes `"backfill": { "status": "queued|running|none", "job_id": 5 }` and the API enqueues a `stock_backfill` job (section 7).
+`freshness.prices_stale`: with holiday data for the year, true when the last bar is older than the expected last trading date; **without** holiday data (`holidays_missing=true`) true only after 4 calendar days without a new bar.
 When no instruments exist, `GET /stocks` and `/stocks/index` return an empty list (`count: 0`); the UI shows "No stocks yet. Import instruments.csv or add a stock."
 
 ## 4. Prices and indicators
@@ -150,10 +151,10 @@ Same pattern, kind `mf_refresh`.
 ## 8. Market and compare
 
 ### GET `/market/overview`
-`{ "indices": [ {code,name,value,change,change_pct,as_of} ]  /* only indices the broker serves; otherwise empty with reason */, "vix": {...}, "movers": { "gainers": [...top 10 by day change among tracked, min volume filter], "losers": [...] }, "market_status": { "is_open": false, "next_open": "2026-10-12T03:45:00Z", "holiday": null } }`. Market hours 09:15-15:30 IST Mon-Fri excluding `market_holiday` (from `config/market_holidays.json`). There is no FII/DII data in the Safe Edition.
+`{ "indices": [ {code,name,value,change,change_pct,as_of} ]  /* from `market_series` (reserved prices.csv symbols NIFTY50/INDIAVIX); otherwise empty with reason */, "vix": {...}, "movers": { "gainers": [...top 10 by day change among tracked, min volume filter], "losers": [...] }, "market_status": { "is_open": false, "next_open": "2026-10-12T03:45:00Z", "holiday": null } }`. Market hours 09:15-15:30 IST Mon-Fri excluding `market_holiday` (from `config/market_holidays.json`). There is no FII/DII data in the Safe Edition.
 
 ### GET `/market/holidays?year=`
-List from `market_holiday` (trading).
+List from `market_holiday` (trading) plus `"year_loaded": true|false`. When no rows exist for the year, `year_loaded=false` and the app treats only weekends as closed.
 
 ### GET `/compare?symbols=A,B,C&range=1Y&metrics=pe,pb,roe,...`
 2-5 symbols (422 otherwise; duplicates removed). Returns `{ "rebased": { "dates":[...], "series": { "A":[100,...] } }, "metrics": { "A": {...}, "B": {...} }, "best": { "pe": "B", ... } }`. Rebasing: first common trading date in range = 100, using `adj_close`. If a symbol has less than 60% of the range's dates, it is included but flagged `short_history`.
@@ -229,11 +230,14 @@ All files go through **validate -> preview -> commit**. Formats, columns and rul
 
 | Endpoint | Behavior |
 |---|---|
-| POST `/imports/{kind}/validate` | multipart `file` (<= 5 MB and 50,000 rows; **`prices`: 25 MB / 300,000 rows**, enabled only after S9 passes, until then the lower limit applies). `kind` in `prices`, `instruments`, `results_quarterly`, `results_annual`, `balance_cashflow`, `fundamentals_long`, `shareholding`, `corporate_actions`, `instrument_meta`. (`screener_xlsx` is not built: D-5.) Parsed as a stream. Returns `{ "upload_id":"uuid", "upload_group":null, "rows": 120, "preview": [first 20 normalized rows], "errors": [{"row":5,"column":"period_end","message":"..."}], "warnings": [...], "estimated_growth_mb": 3.2 }` (`estimated_growth_mb` for `prices`). Nothing is written. The validated file is stored in the `import_upload` table, 1 h TTL, so it survives an API restart |
-| POST `/imports/{kind}/commit` | body `{ "upload_id":"uuid", "note":"as per filing dated 2026-08-12" }` (or `{ "upload_ids":[...], "upload_group":"uuid" }` when the browser split a large prices file; all parts commit in **one** transaction). Rejected with 422 if the upload has any errors, and for `prices` with `422 DB_SIZE_LIMIT` if current DB size + estimated growth would exceed `DB_SOFT_LIMIT_MB` (also rejected whenever the DB is already at the limit). Inserts in chunks of 5,000 rows inside one transaction (any error rolls back everything); deletes the `import_upload` row; returns `{ "batch_id": 7, "inserted": 100, "updated": 20, "post_import_job_id": 14, "warnings": ["TRACKED_OVER_400"] }`. Prices commits mark symbols `is_tracked` (`imported`) and enqueue `post_import` |
+| POST `/imports/{kind}/validate` | multipart `file` (<= 5 MB and 50,000 rows; **`prices`: 25 MB / 300,000 rows**, enabled only after S9 passes, until then the lower limit applies). `kind` in `prices`, `instruments`, `holidays`, `results_quarterly`, `results_annual`, `balance_cashflow`, `fundamentals_long`, `shareholding`, `corporate_actions`, `instrument_meta`. (`screener_xlsx` is not built: D-5.) Parsed as a stream. Returns `{ "upload_id":"uuid", "upload_group":null, "rows": 120, "preview": [first 20 normalized rows], "errors": [{"row":5,"column":"period_end","message":"..."}], "warnings": [...], "estimated_growth_mb": 3.2, "prices_already_adjusted": null }` (`estimated_growth_mb` and `prices_already_adjusted` for `prices`; `null` = the owner has not yet chosen, the wizard must show the required raw / already adjusted / I don't know choice). Nothing is written. The validated file is stored in the `import_upload` table, 1 h TTL, so it survives an API restart |
+| POST `/imports/{kind}/commit` | body `{ "upload_id":"uuid", "note":"as per filing dated 2026-08-12" }` (or `{ "upload_ids":[...], "upload_group":"uuid" }` when the browser split a large prices file; all parts commit in **one** transaction). Rejected with 422 if the upload has any errors, for `prices` with `422 PRICES_ADJUSTMENT_UNSET` while `PRICES_ALREADY_ADJUSTED` is unset, and for `prices` with `422 DB_SIZE_LIMIT` if current DB size + estimated growth would exceed `DB_SOFT_LIMIT_MB` (also rejected whenever the DB is already at the limit). Inserts in chunks of 5,000 rows inside one transaction (any error rolls back everything); deletes the `import_upload` row; returns `{ "batch_id": 7, "inserted": 100, "updated": 20, "post_import_job_id": 14, "warnings": ["TRACKED_OVER_400"] }`. Prices commits mark symbols `is_tracked` (`imported`) and enqueue `post_import` |
 | GET `/imports/batches?limit=` | List `import_batch` rows |
 | POST `/imports/batches/{id}/undo` | Allowed within 30 days for non-price, non-instruments batches; returns counts; 409 if already undone or if kind is `prices` or `instruments` |
 | GET `/imports/templates/{kind}` | Downloads the CSV template with the header row and one example row (includes `instruments`) |
+| GET `/settings/prices-adjustment` | `{ "value": null|true|false, "set_at": "..." }` |
+| PUT `/settings/prices-adjustment` | body `{ "value": true|false }` (`false` = raw, `true` = already adjusted). Used by the wizard choice; "I don't know" calls nothing. Changing an already-set value requires `{ "confirm": true }` and shows the mixing warning (existing bars keep their own `src_adjusted`) |
+| POST `/imports/prices/adjustment-check` | body `{ "upload_id":"uuid", "symbol":"TCS", "ex_date":"2024-06-12", "expected_ratio": {"num":1,"den":2} (optional) }` -> `{ "bars": [[date, close], ... up to 5 trading days each side, from the uploaded file], "ratio": 0.5003, "nearest_fraction": "1/2"|null, "hint": "raw_likely|adjusted_likely|inconclusive" }`. Reads only the validated upload; writes nothing |
 | POST `/instruments` | Manual **Add stock**: body `{ "symbol":"TCS", "name":"Tata Consultancy Services Ltd", "isin":"INE467B01029" }` (isin optional; same validators as `instruments.csv`, malformed ISIN = warning). 201 `{ "id": 1, "symbol":"TCS", "warnings":[] }`; existing symbol -> 409 (use the CSV to update) |
 | POST `/stocks/{symbol}/results` | Single-period manual entry (quarterly or annual) with the same validators; body `{ "basis":"consolidated","period_type":"Q","period_end":"2026-09-30","values": {"revenue": 1234.5, ...}, "note":"" }` |
 | POST `/stocks/{symbol}/shareholding` | Manual shareholding quarter entry |
@@ -257,7 +261,7 @@ The token is never returned by any endpoint and never logged.
 
 ## 15. Admin / ops
 
-`GET /admin/status` -> `{ "sources": [source_health rows], "jobs": [latest ingestion_run per job], "coverage": { "instruments": 2231, "tracked": 612, "with_prices": 598, "with_fundamentals": 410, "with_shareholding": 401 }, "db": { "size_mb": 210, "tables": [ {name, mb, rows} ], "warn_level": "ok|70|85|95|limit" }, "version": "git sha", "storage_policy": {...}` . `GET /healthz` -> `{ "ok": true }` (no DB call). `GET /readyz` (auth) -> DB ping.
+`GET /admin/status` -> `{ "sources": [source_health rows], "jobs": [latest ingestion_run per job], "coverage": { "instruments": 2231, "tracked": 612, "with_prices": 598, "with_fundamentals": 410, "with_shareholding": 401 }, "db": { "size_mb": 210, "tables": [ {name, mb, rows} ], "warn_level": "ok|70|85|95|limit" }, "holiday_list_missing_years": [2026], "version": "git sha", "storage_policy": {...}` . `GET /healthz` -> `{ "ok": true }` (no DB call). `GET /readyz` (auth) -> DB ping.
 
 ## 16. Rate limits and security headers
 - Per-IP login: 10/min. Authenticated general: 120/min. Refresh endpoints: as above. Return `X-RateLimit-*` headers (optional).

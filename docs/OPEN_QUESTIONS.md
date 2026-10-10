@@ -3,11 +3,9 @@
 Claude Code: add questions here instead of guessing. The owner answers; move answered items to "Decisions" with the date.
 
 ## Open
-| # | Question | Interim assumption | Blocks |
-|---|---|---|---|
-| OQ-5 | In manual price mode, are the owner's uploaded prices **raw** (unadjusted for splits/bonuses) or already **adjusted**? (Replaces `BROKER_PRICES_ADJUSTED`, spike S4.) The importer cannot tell. | Assume **raw**: `adj_close` = close x factor of confirmed actions; the owner confirms detected splits. Wrong if the source file is already adjusted (double adjustment). | D03 (adjustment/detection), B06a template wording, owner's data source |
-| OQ-6 | Which dates are market holidays in manual mode? `config/market_holidays.json` is owner/Claude maintained (`01` 8); broker-candle holiday detection no longer exists. Expected-trading-date logic needs the file for each year. | Weekends + holiday file; admin warning if the year is missing (SYS-10 wording to be adjusted: no auto-detection). | D03, SYS-10, T00 skeleton |
-| OQ-7 | Numbering: the spec rows INS-14 and PRC-21 imply categories INS and PRC with earlier IDs, but only these rows exist. Confirmed as given by the owner; lower IDs in those categories are intentionally unused. | Keep as is. | docs/07 |
+(none)
+
+<!-- open-question table template: | # | Question | Interim assumption | Blocks | -->
 
 ## Decisions
 | Date | Decision | Reason | Spec files updated |
@@ -25,6 +23,10 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | 2026-10-10 | D-H (closes OQ-3) ML universe: all tracked stocks with >= 750 valid bars and no unconfirmed actions; no training basket; `TRAINING_BASKET_MAX` and `tracked_reason='training_basket'` removed; 20-stock minimum stays; forecasts remain deferred. | Simplification | docs/05 10.1, MASTER_PLAN 5, D07 |
 | 2026-10-10 | D-I Edge-case rows added: IMP-20..24, INS-14, PRC-21, ALR-18, SYS-12 (assigned to B06a, B06a, D03/B06a, D06/D03, F13a). | | docs/07 |
 | 2026-10-10 | D-J (Claude, for owner review) B06 split into B06a (instruments + prices importers, needed first because prices are the primary data path) and B06b (rest); F13 into F13a/F13b; D02 removed; B08 reduced to a status endpoint. | In manual mode no stock can show a chart until B06a/F13a exist; the original B06 sat behind B05 in wave 5 | tasks/README.md, B06, F13, D02, B08 |
+| 2026-10-10 | **D-J approved** B06 -> B06a + B06b; F13 -> F13a + F13b; D02 removed; B08 reduced to a status endpoint. Acceptance criteria and test IDs stay with the piece that satisfies them. | In manual mode prices/instruments importers are needed first | tasks/README.md, PROGRESS.md |
+| 2026-10-10 | **D-K (closes OQ-5) Raw vs adjusted prices.** Global `app_setting` `PRICES_ALREADY_ADJUSTED` (true|false) replaces `BROKER_PRICES_ADJUSTED`; unset until the owner chooses; prices wizard shows the required choice raw / already adjusted / I don't know; commit blocked (`PRICES_ADJUSTMENT_UNSET`) while unset; "I don't know" sets nothing and shows the Adjustment check (closes around a known ex-date; manual S4 in `docs/08`). Setting is per source; each bar stores `src_adjusted`; adjusted bars are never multiplied by action factors; a detected action inside already-adjusted data raises `ADJUSTMENT_CONFLICT` and a Data-tab warning; never adjusts twice. | Owner's source adjustment is unknown to the app | docs/01 3.7, 02, 03, 06, 08, D03, B06a, F13a |
+| 2026-10-10 | **D-L (closes OQ-6) Holidays.** `config/market_holidays.json` stays the reference file (2026 list empty, no invented dates); new import kind `holidays` (date, description, segment optional; replace-per-year; not undoable) writes `market_holiday`; seed loads the JSON only for years without rows. Missing year: weekends only, persistent warning on `/admin/status`, "holiday list missing" notice in the stock header chip, stale chip only after 4 calendar days without a bar; with holidays use the expected-trading-date rule. Holiday auto-detection removed. | Needed broker candles | docs/01 7.8 and 8, 02, 03, 04, 06, B06b, F13b |
+| 2026-10-10 | **D-M (closes OQ-7)** Gaps in ID numbering are intentional and IDs are never renumbered (note added at top of docs/07). | Stable references | docs/07 |
 | 2026-10-10 | D-2 Repo is public. Zero secrets in code (GitHub Actions secrets + host env vars only). Keep the monthly keep-alive workflow. Never commit `.env` or real data. | More free Actions minutes | MASTER_PLAN 9 |
 | 2026-10-10 | D-3 No keep-warm pings; accept ~1 min wake-up. UI "waking up the server" state handles it. | Preserves Render free hours | MASTER_PLAN 9 |
 | 2026-10-10 | D-4 Forecasts deferred; build everything else first. Owner decides the basket before D07; fewer than 20 symbols -> D07 ships `insufficient_universe` path only. | Prediction needs >= 20 tracked stocks | MASTER_PLAN 9 |

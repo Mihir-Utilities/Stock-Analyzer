@@ -7,7 +7,8 @@ A new session starts with: "Resume. Read CLAUDE.md, PROGRESS.md, OPEN_QUESTIONS.
 - CURRENT: T00 (not started) - waiting for owner's "begin T00"
 - LAST COMPLETED: kickoff (layout reorganised, git init, decisions recorded in docs/OPEN_QUESTIONS.md and MASTER_PLAN 9)
 - MODE: manual price mode (no broker). Each affected task file starts with an "Amendment: manual price mode" block that overrides the text below it (D02 removed; B08 reduced; B06 and F13 split a/b; B09/D03/D06/D07/D08 changed).
-- BLOCKED ON OWNER: nothing blocks T00. Open for later: OQ-5 are uploaded prices raw or adjusted (before D03), OQ-6 holiday file upkeep
+- COUNTS: 39 active task files; 42 tracked work items below (D05, B06, F13 each split in two; D02 REMOVED).
+- BLOCKED ON OWNER: nothing. OQ-1..OQ-7 all closed. Owner still has to: provide the 2026 holiday list (or import holidays.csv), and record the raw/adjusted answer in the manual S4 check.
 
 ## Per-task phases (tick each; a task is DONE only when all five are ticked)
 1 EXEC   = Prompt 2 (plan, tests first, implement, tick acceptance criteria)
@@ -22,7 +23,7 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 | Wave | Task | Status | Phase reached | Commit | Notes / owner action needed |
 |---|---|---|---|---|---|
 | 0 | T00 | TODO | | | |
-| 0 | T01 | TODO | | | manual mode: S1 recorded, S2-S5 skipped; owner needed for S9 (25 MB upload), S12-S14, S17 |
+| 0 | T01 | TODO | | | manual mode: S1 recorded, S2/S3/S5 skipped, S4 = manual adjustment check; owner needed for S4, S9 (25 MB upload), S12-S14, S17 |
 | 0 | T02 | TODO | | | parallel with T01 after T00 |
 | 1 | B01 | TODO | | | produces openapi.yaml; unlocks parallel FE/BE |
 | 1 | D01 | TODO | | | |
@@ -36,14 +37,14 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 | 1 | B08 (reduced) | TODO | | | status endpoint only; do with B02 |
 | 3 | B09 | TODO | | | depends on D01 only |
 | 3 | B04 | TODO | | | |
-| 3 | B06a | TODO | | | instruments + prices importers; needs B03, B09 |
+| 3 | B06a | TODO | | | instruments + prices importers, adjustment choice/check, trim/delete; needs B03, B09 |
 | 4 | D05a (indicators/returns) | TODO | | | |
 | 4 | F04 | TODO | | | |
 | 4 | F05 | TODO | | | |
 | 4 | F06 | TODO | | | |
 | 4 | F13a | TODO | | | instruments/prices wizard, Add stock, Storage tab; needs B06a |
 | 5 | B05 | TODO | | | |
-| 5 | B06b | TODO | | | rest of B06; needs B05, B06a |
+| 5 | B06b | TODO | | | rest of B06 incl. holidays importer; needs B05, B06a |
 | 5 | B07 | TODO | | | |
 | 5 | F07 | TODO | | | |
 | 5 | F08 | TODO | | | |
@@ -71,3 +72,4 @@ Frontend and backend tasks may run in separate git worktrees/sessions. Frontend 
 ## Session log (append newest at bottom)
 - 2026-10-10: Kickoff review done. Owner answered; decisions recorded; files moved to documented layout (from extracted zip, content verified identical); .gitignore added; first commit made. Awaiting "begin T00".
 - 2026-10-10: Owner decision D-2 and follow-ups (D-B..D-I) applied to specs (docs/01-08), tasks and MASTER_PLAN; B06/F13 split and D02 removal proposed by Claude (D-J) for owner review. Added edge-case rows IMP-20..24, INS-14, PRC-21, ALR-18, SYS-12. Awaiting "begin T00".
+- 2026-10-10: Owner approved split (D-J) and decided OQ-5/6/7 (D-K, D-L, D-M); applied to docs/01-08, tasks, config, .env.example. New rows IMP-25..27, ACT-11/12, SYS-13/14. Awaiting approval of the summary before T00.

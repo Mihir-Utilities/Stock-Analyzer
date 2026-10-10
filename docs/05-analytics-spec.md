@@ -82,7 +82,7 @@ Matching periods: "same quarter last year" = quarter with `period_end` within +/
 - `debt_equity = borrowings / equity` (latest annual); equity <= 0 -> null. `interest_coverage = ebit / interest` (interest 0 or missing -> null reason `no_interest`).
 - `cfo_to_pat = cfo / net_profit` (net_profit <= 0 -> null); `cfo_to_pat_avg = mean over up to 5 annual years` requires >= 3.
 - **TTM EPS** = sum of EPS over the latest 4 consecutive quarters (each `period_end` ~3 months apart +/-20 days; same basis and source). If unavailable use latest annual EPS and set `pe_basis='latest_annual'`; else null.
-- **Corporate-action adjustment for per-share values:** for EPS and book value per share with `period_end < ex_date <= today`, divide by the product of qty multipliers of those actions (the stored `close` may be raw or adjusted per `BROKER_PRICES_ADJUSTED`; use `adj_close` consistently and reported EPS is in then-current units, so apply only **confirmed** actions). Dividends unaffected.
+- **Corporate-action adjustment for per-share values:** for EPS and book value per share with `period_end < ex_date <= today`, divide by the product of qty multipliers of those actions (the stored `close` may be raw or adjusted per `PRICES_ALREADY_ADJUSTED` / `src_adjusted`; use `adj_close` consistently and reported EPS is in then-current units, so apply only **confirmed** actions). Dividends unaffected.
 - `pe = close / eps_ttm_adj`; eps <= 0 -> null reason `loss_making`.
 - `bvps = equity / shares_outstanding` (INR crore -> INR: multiply by 1e7); adjusted as above. `pb = close / bvps`; if inputs missing, fall back to `top_ratio.pb` labeled with its source.
 - `div_yield = sum(dividend per share with ex_date in last 365 days) / close * 100`.

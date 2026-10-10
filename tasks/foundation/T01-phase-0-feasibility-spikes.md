@@ -8,8 +8,8 @@
 
 ## Amendment: manual price mode (decisions D-1, D-2 and follow-ups, 2026-10-10)
 Source of truth: `docs/OPEN_QUESTIONS.md` Decisions; updated specs: `docs/01` 7.0/7.1, `docs/03` 3, 4, 14, `docs/04` 3.9-3.13. Where this block conflicts with the sections below, **this block wins**.
-- S1 is recorded as "manual price mode" (fill `docs/BROKER_DECISION.md` Decision accordingly; no comparison needed). **S2-S5 skipped** (`N/A (manual mode)`). S8 uses owner-imported price files. **S9 adds a 25 MB / 300,000-row upload through the Vercel `/api` rewrite**; record the largest size that passes and amend B06a/F13a (browser-split fallback) as specified in `docs/08`. S5 is replaced by loading reserved `NIFTY50`/`INDIAVIX` rows into `market_series`.
-- No broker login is ever needed.
+- S1 is recorded as "manual price mode" (fill `docs/BROKER_DECISION.md` Decision accordingly; no comparison needed). **S2, S3 and S5 skipped** (`N/A (manual mode)`); **S4 = manual adjustment check** (`docs/08`, steps 1-5; records `PRICES_ALREADY_ADJUSTED`). S8 uses owner-imported price files. **S9 adds a 25 MB / 300,000-row upload through the Vercel `/api` rewrite**; record the largest size that passes and amend B06a/F13a (browser-split fallback) as specified in `docs/08`. S5 is replaced by loading reserved `NIFTY50`/`INDIAVIX` rows into `market_series`.
+- No broker login is ever needed. BRK-14 is N/A.
 
 ## Read first
 - docs/08-phase0-spikes.md (all)
