@@ -1,0 +1,8 @@
+﻿.env
+.env.*
+!.env.example
+*.zip
+node_modules/
+__pycache__/
+.venv/
+

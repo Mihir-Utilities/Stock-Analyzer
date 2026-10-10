@@ -1,0 +1,4 @@
+{
+  "_comment": "Case-insensitive substrings; if an instrument's industry/sector (from the owner's instrument_meta import) contains any of these, company_type = 'financial'.",
+  "patterns": ["bank", "nbfc", "insurance", "housing finance", "asset management", "capital markets", "financial services", "microfinance", "broking", "finance"]
+}

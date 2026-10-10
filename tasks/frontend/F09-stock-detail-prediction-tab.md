@@ -1,0 +1,48 @@
+# F09 - Stock detail: Prediction tab
+
+| Field | Value |
+|---|---|
+| Track | frontend |
+| Depends on | F05, B14 |
+| Size | M (S < 0.5 day, M 0.5-1.5 days, L 1.5-4 days of focused work) |
+
+## Read first
+- docs/06-frontend-spec.md section 6.4 (Prediction)
+- docs/05-analytics-spec.md section 10
+- `CLAUDE.md` (rules), `docs/00-legal-and-safety.md` (Safe Edition guards)
+
+## Goal
+Present forecasts honestly with guardrail reasons, model card and live track record.
+
+## In scope
+- Experimental banner (non-dismissible), bucket text, fan chart, hidden-reason copy for each enum value
+- Trend/risk gauges; model card with calibration plot and AUC-by-fold; live track record chart; 'How to read this'
+- Component test proving no single price target is rendered
+
+## Out of scope (do not do in this task)
+- Nothing else; stay within the scope above.
+
+## Deliverables
+- `components/stock/prediction/*`, tests
+
+## Steps
+1. Implement all hidden-reason messages (including insufficient_universe and unconfirmed action)
+2. Implement hatched/dashed forecast styling in `--exp`
+
+## Acceptance criteria (all must be true)
+- [ ] ML-12 passes
+- [ ] Each hidden reason has plain-language copy
+- [ ] Numbers appear only in tooltip/model card
+
+## Required tests (from `docs/07-edge-cases-tests.md`)
+- `ML-12` (see `docs/07-edge-cases-tests.md`)
+- `ML-05` (see `docs/07-edge-cases-tests.md`)
+- `ML-06` (see `docs/07-edge-cases-tests.md`)
+
+## Definition of done
+- [ ] Behavior matches the cited spec sections exactly (note section numbers in the PR description).
+- [ ] Tests above exist, run in CI and pass; new edge cases discovered are added to `docs/07-edge-cases-tests.md`.
+- [ ] Loading/empty/partial/stale/error states implemented for any UI work.
+- [ ] No secrets or personal data in code, logs or fixtures; deny-list check passes.
+- [ ] `docs/RUNBOOK.md` updated for any new variable, job or failure mode.
+- [ ] Questions or spec conflicts recorded in `docs/OPEN_QUESTIONS.md` instead of guessed.

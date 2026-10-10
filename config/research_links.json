@@ -1,0 +1,11 @@
+{
+  "_comment": "Plain hyperlinks shown on the stock page. The app NEVER requests these URLs from the server or the browser (no iframes, no previews); the owner clicks them. {symbol} and {name} are URL-encoded before substitution. Links may change over time; update as needed.",
+  "links": [
+    { "label": "NSE quote page", "url": "https://www.nseindia.com/get-quotes/equity?symbol={symbol}" },
+    { "label": "BSE (search)", "url": "https://www.bseindia.com/" },
+    { "label": "TradingView chart", "url": "https://www.tradingview.com/symbols/NSE-{symbol}/" },
+    { "label": "Screener company page", "url": "https://www.screener.in/company/{symbol}/" },
+    { "label": "Search: latest results", "url": "https://www.google.com/search?q={name}+quarterly+results" },
+    { "label": "Search: investor relations", "url": "https://www.google.com/search?q={name}+investor+relations" }
+  ]
+}

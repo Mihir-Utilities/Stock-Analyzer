@@ -1,0 +1,4 @@
+{
+  "_comment": "Maintained by a human from the exchange's published trading-holiday circular each year. Format: { \"YYYY\": [ {\"date\": \"YYYY-MM-DD\", \"description\": \"...\"} ] }. If a year is missing the app falls back to weekends-only plus 'no candles returned' holiday detection and shows a warning on /admin/status.",
+  "2026": []
+}
