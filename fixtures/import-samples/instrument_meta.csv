@@ -1,0 +1,4 @@
+symbol,sector,industry,company_type,index_tags
+FAKEA,Industrials,Engineering,general,FAKE100
+FAKEB,Consumer,Packaged Foods,general,FAKE100
+FAKEC,Financials,Private Bank,financial,FAKE100|FAKEBANK

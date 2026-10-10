@@ -1,0 +1,26 @@
+Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date
+
+Open Ended Schemes(Children’s Fund - Childrens' Fund)
+
+Axis Mutual Fund
+
+135762;INF846K01WO1;-;Axis Children's Fund;Direct Plan;Growth Option;29.0745;09-Oct-2026
+135765;INF846K01WP8;-;Axis Children's Fund;Direct Plan;IDCW Option;26.7829;09-Oct-2026
+135759;INF846K01WJ1;-;Axis Children's Fund;Regular Plan;Growth Option;25.3048;09-Oct-2026
+135760;INF846K01WK9;-;Axis Children's Fund;Regular Plan;IDCW Option;23.3457;09-Oct-2026
+
+Open Ended Schemes(Debt Scheme - Liquid Fund)
+
+Bank of India Mutual Fund
+
+119368;-;INF761K01CL0;BANK OF INDIA LIQUID FUND;Direct Plan;Daily IDCW;1005.0000;11-Oct-2026
+119369;INF761K01785;-;BANK OF INDIA LIQUID FUND;Direct Plan;Growth;3288.6285;11-Oct-2026
+119370;-;INF761K01CM8;BANK OF INDIA LIQUID FUND;Direct Plan;Weekly IDCW;1006.1698;11-Oct-2026
+
+Open Ended Schemes(Debt Scheme - Corporate Bond Fund)
+
+ICICI Prudential Mutual Fund
+
+130947;INF109KA1I84;-;ICICI Prudential Corporate Bond Fund;;;14.9782;24-Apr-2020
+111988;INF109K01CR9;-;ICICI Prudential Corporate Bond Fund;;;10.1065;16-Sep-2022
+

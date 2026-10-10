@@ -1,0 +1,135 @@
+{
+ "_fixture_note": "Trimmed from 3390 rows to first 20 (newest) and last 10 (oldest) of the array as returned on 2026-10-10; array order preserved (newest first). Public NAV data via mfapi.in.",
+ "meta": {
+  "fund_house": "HDFC Mutual Fund",
+  "scheme_type": "Open Ended Schemes",
+  "scheme_category": "Equity Scheme - Flexi Cap Fund",
+  "scheme_code": 118954,
+  "scheme_name": "HDFC Flexi Cap Fund - Direct Plan - IDCW Option",
+  "isin_growth": "INF179K01VL5",
+  "isin_div_reinvestment": "INF179K01VM3"
+ },
+ "data": [
+  {
+   "date": "09-10-2026",
+   "nav": "87.03300"
+  },
+  {
+   "date": "08-10-2026",
+   "nav": "86.05400"
+  },
+  {
+   "date": "07-10-2026",
+   "nav": "87.67000"
+  },
+  {
+   "date": "06-10-2026",
+   "nav": "88.11300"
+  },
+  {
+   "date": "05-10-2026",
+   "nav": "87.12700"
+  },
+  {
+   "date": "01-10-2026",
+   "nav": "86.93600"
+  },
+  {
+   "date": "30-09-2026",
+   "nav": "87.70400"
+  },
+  {
+   "date": "29-09-2026",
+   "nav": "87.85100"
+  },
+  {
+   "date": "28-09-2026",
+   "nav": "88.18900"
+  },
+  {
+   "date": "25-09-2026",
+   "nav": "89.54400"
+  },
+  {
+   "date": "24-09-2026",
+   "nav": "89.29700"
+  },
+  {
+   "date": "23-09-2026",
+   "nav": "90.99300"
+  },
+  {
+   "date": "22-09-2026",
+   "nav": "90.69400"
+  },
+  {
+   "date": "21-09-2026",
+   "nav": "90.96400"
+  },
+  {
+   "date": "18-09-2026",
+   "nav": "90.68300"
+  },
+  {
+   "date": "17-09-2026",
+   "nav": "90.03500"
+  },
+  {
+   "date": "16-09-2026",
+   "nav": "89.63600"
+  },
+  {
+   "date": "15-09-2026",
+   "nav": "89.26700"
+  },
+  {
+   "date": "11-09-2026",
+   "nav": "90.64000"
+  },
+  {
+   "date": "10-09-2026",
+   "nav": "90.93900"
+  },
+  {
+   "date": "14-01-2013",
+   "nav": "46.38100"
+  },
+  {
+   "date": "11-01-2013",
+   "nav": "45.82600"
+  },
+  {
+   "date": "10-01-2013",
+   "nav": "45.95400"
+  },
+  {
+   "date": "09-01-2013",
+   "nav": "45.99000"
+  },
+  {
+   "date": "08-01-2013",
+   "nav": "46.08700"
+  },
+  {
+   "date": "07-01-2013",
+   "nav": "46.06300"
+  },
+  {
+   "date": "04-01-2013",
+   "nav": "46.18200"
+  },
+  {
+   "date": "03-01-2013",
+   "nav": "46.09500"
+  },
+  {
+   "date": "02-01-2013",
+   "nav": "46.00400"
+  },
+  {
+   "date": "01-01-2013",
+   "nav": "45.58500"
+  }
+ ],
+ "status": "SUCCESS"
+}

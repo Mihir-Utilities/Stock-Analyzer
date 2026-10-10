@@ -1,0 +1,135 @@
+{
+ "_fixture_note": "Trimmed from 2618 rows to first 20 (newest) and last 10 (oldest) of the array as returned on 2026-10-10; array order preserved (newest first). Public NAV data via mfapi.in.",
+ "meta": {
+  "fund_house": "ICICI Prudential Mutual Fund",
+  "scheme_type": "Open Ended Schemes",
+  "scheme_category": "Debt Scheme - Corporate Bond Fund",
+  "scheme_code": 111972,
+  "scheme_name": "ICICI Prudential Corporate Bond Fund Retail Growth",
+  "isin_growth": null,
+  "isin_div_reinvestment": null
+ },
+ "data": [
+  {
+   "date": "24-04-2020",
+   "nav": "22.78530"
+  },
+  {
+   "date": "23-04-2020",
+   "nav": "22.89440"
+  },
+  {
+   "date": "22-04-2020",
+   "nav": "22.81840"
+  },
+  {
+   "date": "21-04-2020",
+   "nav": "22.80910"
+  },
+  {
+   "date": "20-04-2020",
+   "nav": "22.78380"
+  },
+  {
+   "date": "17-04-2020",
+   "nav": "22.69410"
+  },
+  {
+   "date": "16-04-2020",
+   "nav": "22.60350"
+  },
+  {
+   "date": "15-04-2020",
+   "nav": "22.56450"
+  },
+  {
+   "date": "13-04-2020",
+   "nav": "22.53240"
+  },
+  {
+   "date": "09-04-2020",
+   "nav": "22.50790"
+  },
+  {
+   "date": "08-04-2020",
+   "nav": "22.50120"
+  },
+  {
+   "date": "07-04-2020",
+   "nav": "22.56110"
+  },
+  {
+   "date": "03-04-2020",
+   "nav": "22.63010"
+  },
+  {
+   "date": "31-03-2020",
+   "nav": "22.65160"
+  },
+  {
+   "date": "30-03-2020",
+   "nav": "22.60660"
+  },
+  {
+   "date": "27-03-2020",
+   "nav": "22.62670"
+  },
+  {
+   "date": "26-03-2020",
+   "nav": "22.22110"
+  },
+  {
+   "date": "24-03-2020",
+   "nav": "22.20560"
+  },
+  {
+   "date": "23-03-2020",
+   "nav": "22.20280"
+  },
+  {
+   "date": "20-03-2020",
+   "nav": "22.30040"
+  },
+  {
+   "date": "26-06-2009",
+   "nav": "10.00640"
+  },
+  {
+   "date": "25-06-2009",
+   "nav": "10.00580"
+  },
+  {
+   "date": "24-06-2009",
+   "nav": "10.00520"
+  },
+  {
+   "date": "23-06-2009",
+   "nav": "10.00470"
+  },
+  {
+   "date": "22-06-2009",
+   "nav": "10.00420"
+  },
+  {
+   "date": "19-06-2009",
+   "nav": "10.00350"
+  },
+  {
+   "date": "18-06-2009",
+   "nav": "10.00340"
+  },
+  {
+   "date": "17-06-2009",
+   "nav": "10.00320"
+  },
+  {
+   "date": "16-06-2009",
+   "nav": "10.00280"
+  },
+  {
+   "date": "15-06-2009",
+   "nav": "10.00220"
+  }
+ ],
+ "status": "SUCCESS"
+}

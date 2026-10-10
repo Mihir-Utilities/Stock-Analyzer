@@ -1,0 +1,25 @@
+{
+ "_fixture_note": "Rows around the only weekend-dated row in the full history",
+ "data": [
+  {
+   "date": "02-04-2024",
+   "nav": "83.13500"
+  },
+  {
+   "date": "01-04-2024",
+   "nav": "83.04100"
+  },
+  {
+   "date": "31-03-2024",
+   "nav": "82.32100"
+  },
+  {
+   "date": "28-03-2024",
+   "nav": "82.32000"
+  },
+  {
+   "date": "27-03-2024",
+   "nav": "81.70000"
+  }
+ ]
+}

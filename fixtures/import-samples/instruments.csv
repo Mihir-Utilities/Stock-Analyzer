@@ -1,0 +1,4 @@
+symbol,name,isin,series,kind,listing_date,face_value,previous_symbol,status
+FAKEA,Fake Alpha Limited,INFAKE000001,EQ,equity,2012-01-02,10.0,,active
+FAKEB,Fake Beta Industries Limited,INFAKE000002,EQ,equity,2012-01-02,2.0,,active
+FAKEC,Fake Gamma Bank Limited,INFAKE000003,EQ,equity,2012-01-02,1.0,,active

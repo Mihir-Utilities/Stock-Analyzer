@@ -1,0 +1,3 @@
+symbol,ex_date,type,ratio_num,ratio_den,amount_per_share,purpose_text
+FAKEA,2026-02-10,split,10,2,,Synthetic: face value 10 to 2
+FAKEB,2025-11-20,dividend,,,12.50,Synthetic: interim dividend
