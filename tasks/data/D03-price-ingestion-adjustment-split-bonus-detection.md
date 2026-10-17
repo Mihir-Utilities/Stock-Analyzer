@@ -30,7 +30,7 @@ Ingest daily candles with sanity rules, compute `adj_close` from confirmed actio
 - Detector with fraction list, thresholds and volume rule from the spec (configurable)
 - Prices import interplay (source labeling, upsert)
 - `PRICES_ALREADY_ADJUSTED` / `src_adjusted` handling
-- Soft one-day-drop flag (D-O, ACT-15); resolve OQ-15 (dismissal storage) before building it
+- Soft one-day-drop flag (D-O, ACT-15); dismissals in table `flag_dismissals(instrument_id, flag_type, trade_date, dismissed_at)`, unique on the first three columns (D-U): amend `docs/02-database.sql` and add migration `0011` in the same change; Dismiss inserts a row, Undo deletes it
 
 ## Out of scope (do not do in this task)
 - Alerts, analysis
