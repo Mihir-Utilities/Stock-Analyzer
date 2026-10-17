@@ -61,6 +61,9 @@ func (rt route) handler(d Deps) http.Handler {
 	case kindJobStockRefresh, kindJobMFRefresh, kindJobGet:
 		return jobHandler(d, rt.Kind)
 	default:
+		if h := alertsHandler(d, rt.Kind); h != nil { // B12 (alerts_handlers.go)
+			return h
+		}
 		return Adapt(func(http.ResponseWriter, *http.Request) error {
 			return NewError(http.StatusNotImplemented, CodeNotImplemented,
 				"Not implemented yet", nil)
@@ -148,15 +151,15 @@ var routes = []route{
 	{Method: mPost, Path: "/portfolio/adjustments"},
 
 	// Alerts and Telegram (section 13)
-	{Method: mPost, Path: "/alerts"},
-	{Method: mGet, Path: "/alerts"},
-	{Method: mGet, Path: "/alerts/events"},
-	{Method: mPatch, Path: "/alerts/{id}"},
-	{Method: mDelete, Path: "/alerts/{id}"},
-	{Method: mPost, Path: "/telegram/link-code"},
-	{Method: mDelete, Path: "/telegram/link"},
-	{Method: mPost, Path: "/telegram/test"},
-	{Method: mPost, Path: "/telegram/webhook", Public: true, NoCSRF: true},
+	{Method: mPost, Path: "/alerts", Kind: kindAlertCreate},
+	{Method: mGet, Path: "/alerts", Kind: kindAlertList},
+	{Method: mGet, Path: "/alerts/events", Kind: kindAlertEvents},
+	{Method: mPatch, Path: "/alerts/{id}", Kind: kindAlertPatch},
+	{Method: mDelete, Path: "/alerts/{id}", Kind: kindAlertDelete},
+	{Method: mPost, Path: "/telegram/link-code", Kind: kindTgLinkCode},
+	{Method: mDelete, Path: "/telegram/link", Kind: kindTgUnlink},
+	{Method: mPost, Path: "/telegram/test", Kind: kindTgTest},
+	{Method: mPost, Path: "/telegram/webhook", Public: true, NoCSRF: true, Body: WebhookBodyLimit, Kind: kindTgWebhook},
 
 	// Imports and owner-entered data (section 14)
 	{Method: mPost, Path: "/imports/{kind}/validate", Body: ImportBodyLimit},

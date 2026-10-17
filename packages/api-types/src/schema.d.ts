@@ -750,10 +750,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List alerts. (docs/03 section 13) */
+        /** List alerts, newest first. (docs/03 section 13) */
         get: operations["getAlerts"];
         put?: never;
-        /** Create an alert (params validated per kind; unknown keys rejected). (docs/03 section 13) */
+        /** Create an alert (params validated per kind; unknown keys rejected; 422 THRESHOLD_ALREADY_MET against the last imported bar; 409 CONFLICT beyond 200 active). (docs/03 section 13) */
         post: operations["postAlerts"];
         delete?: never;
         options?: never;
@@ -768,7 +768,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Alert history with delivery status. (docs/03 section 13) */
+        /** Alert history with delivery status, newest first. (docs/03 section 13) */
         get: operations["getAlertsEvents"];
         put?: never;
         post?: never;
@@ -788,11 +788,11 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete an alert. (docs/03 section 13) */
+        /** Delete an alert and its events. (docs/03 section 13) */
         delete: operations["deleteAlertsId"];
         options?: never;
         head?: never;
-        /** Pause/resume or change params. (docs/03 section 13) */
+        /** Pause/resume (status active|paused) and/or replace params. Fired and expired alerts are final (409). (docs/03 section 13) */
         patch: operations["patchAlertsId"];
         trace?: never;
     };
@@ -805,7 +805,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create a Telegram link code (valid 15 minutes, one use). (docs/03 section 13) */
+        /** Create a Telegram link code (8 characters, sha256 stored, valid 15 minutes, one use). Without TELEGRAM_BOT_USERNAME the bot fields are null and warning BOT_NOT_CONFIGURED is returned. (docs/03 section 13) */
         post: operations["postTelegramLinkcode"];
         delete?: never;
         options?: never;
@@ -839,7 +839,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Send a test message (1 per minute). (docs/03 section 13) */
+        /** Send a test message to the linked chat (1 per minute: 429 with Retry-After; 409 when not linked; 503 when the bot is not configured or Telegram fails). (docs/03 section 13) */
         post: operations["postTelegramTest"];
         delete?: never;
         options?: never;
@@ -856,7 +856,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Telegram webhook (public; authenticated by the X-Telegram-Bot-Api-Secret-Token header). (docs/03 section 13) */
+        /** Telegram webhook (public; authenticated by the X-Telegram-Bot-Api-Secret-Token header, constant-time compare; no CSRF header). Handles `/start <code>` in a private chat only; every other update is acknowledged and ignored. (docs/03 section 13, docs/01 section 6) */
         post: operations["postTelegramWebhook"];
         delete?: never;
         options?: never;
@@ -1294,6 +1294,100 @@ export interface components {
             cooldown_minutes?: number;
             /** Format: date */
             expires_on?: string;
+        };
+        /** @description At least one of status, params. Unknown keys are a 400. */
+        AlertPatch: {
+            /** @enum {string} */
+            status?: "active" | "paused";
+            params?: {
+                [key: string]: unknown;
+            };
+        };
+        AlertTarget: {
+            /** @enum {string} */
+            type: "stock" | "mf";
+            symbol?: string;
+            /** Format: int64 */
+            code?: number;
+            name?: string;
+        };
+        Alert: {
+            /** Format: int64 */
+            id: number;
+            target: components["schemas"]["AlertTarget"];
+            kind: string;
+            params: {
+                [key: string]: unknown;
+            };
+            /** @enum {string} */
+            status: "active" | "paused" | "fired" | "expired";
+            one_shot: boolean;
+            /** Format: int64 */
+            cooldown_minutes: number;
+            /** Format: date */
+            expires_on?: string | null;
+            /** Format: date-time */
+            last_fired_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        AlertEvent: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            alert_id: number;
+            kind: string;
+            target: components["schemas"]["AlertTarget"];
+            /** Format: date-time */
+            fired_at: string;
+            payload: {
+                [key: string]: unknown;
+            };
+            /** @enum {string} */
+            delivery_status: "pending" | "sent" | "failed" | "skipped_quiet_hours";
+            /** Format: int64 */
+            delivery_attempts: number;
+            /** Format: date-time */
+            delivered_at?: string | null;
+            last_error?: string | null;
+        };
+        LinkCode: {
+            /** @example A7K9-Q2XM */
+            code: string;
+            /** Format: date-time */
+            expires_at: string;
+            bot_username: string | null;
+            deep_link: string | null;
+        };
+        /** @description Success envelope with one alert. */
+        AlertEnvelope: {
+            data: components["schemas"]["Alert"];
+            meta?: components["schemas"]["Meta"];
+            warnings?: components["schemas"]["Warning"][];
+        };
+        /** @description Success envelope with a page of alerts. */
+        AlertPageEnvelope: {
+            data: {
+                items: components["schemas"]["Alert"][];
+                next_cursor: string | null;
+            };
+            meta?: components["schemas"]["Meta"];
+            warnings?: components["schemas"]["Warning"][];
+        };
+        /** @description Success envelope with a page of alert events. */
+        AlertEventPageEnvelope: {
+            data: {
+                items: components["schemas"]["AlertEvent"][];
+                next_cursor: string | null;
+            };
+            meta?: components["schemas"]["Meta"];
+            warnings?: components["schemas"]["Warning"][];
+        };
+        /** @description Success envelope with a Telegram link code. */
+        LinkCodeEnvelope: {
+            data: components["schemas"]["LinkCode"];
+            meta?: components["schemas"]["Meta"];
+            warnings?: components["schemas"]["Warning"][];
         };
         /** @description Either upload_id, or upload_ids with upload_group (large prices file split by the browser). */
         ImportCommit: {
@@ -3490,7 +3584,11 @@ export interface operations {
     getAlerts: {
         parameters: {
             query?: {
-                status?: string;
+                status?: "active" | "paused" | "fired" | "expired";
+                /** @description Page size (values above 200 are clamped). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor from next_cursor. */
+                cursor?: components["parameters"]["Cursor"];
             };
             header?: never;
             path?: never;
@@ -3498,19 +3596,18 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Page of alerts */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SuccessEnvelope"];
+                    "application/json": components["schemas"]["AlertPageEnvelope"];
                 };
             };
             401: components["responses"]["Unauthenticated"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3538,19 +3635,36 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Created alert */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SuccessEnvelope"];
+                    "application/json": components["schemas"]["AlertEnvelope"];
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            /** @description NOT_FOUND (unknown symbol or scheme) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description CONFLICT */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3565,7 +3679,10 @@ export interface operations {
     getAlertsEvents: {
         parameters: {
             query?: {
-                limit?: number;
+                /** @description Page size (values above 200 are clamped). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor from next_cursor. */
+                cursor?: components["parameters"]["Cursor"];
             };
             header?: never;
             path?: never;
@@ -3573,19 +3690,18 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Page of alert events */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SuccessEnvelope"];
+                    "application/json": components["schemas"]["AlertEventPageEnvelope"];
                 };
             };
             401: components["responses"]["Unauthenticated"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3605,14 +3721,14 @@ export interface operations {
                 "X-Requested-With": components["parameters"]["CsrfHeader"];
             };
             path: {
-                /** @description Numeric id. */
+                /** @description Alert id. */
                 id: number;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description data: {ok: true} */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3622,8 +3738,8 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3643,30 +3759,39 @@ export interface operations {
                 "X-Requested-With": components["parameters"]["CsrfHeader"];
             };
             path: {
-                /** @description Numeric id. */
+                /** @description Alert id. */
                 id: number;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["FreeObject"];
+                "application/json": components["schemas"]["AlertPatch"];
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Updated alert */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SuccessEnvelope"];
+                    "application/json": components["schemas"]["AlertEnvelope"];
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /** @description CONFLICT */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3690,18 +3815,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Link code */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SuccessEnvelope"];
+                    "application/json": components["schemas"]["LinkCodeEnvelope"];
                 };
             };
             401: components["responses"]["Unauthenticated"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3725,7 +3849,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description data: {ok: true} */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3736,7 +3860,6 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3760,7 +3883,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description data: {ok: true} */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3770,8 +3893,25 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            /** @description CONFLICT */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
+            /** @description SOURCE_DOWN */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3798,7 +3938,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description data: {ok: true} */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3807,9 +3947,24 @@ export interface operations {
                     "application/json": components["schemas"]["SuccessEnvelope"];
                 };
             };
-            422: components["responses"]["Unprocessable"];
-            429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
+            /** @description UNAUTHENTICATED (secret header missing or wrong; nothing stored) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description BAD_REQUEST (body above 64 KiB) */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             /** @description Error envelope */
             default: {
                 headers: {

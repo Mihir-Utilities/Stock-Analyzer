@@ -131,3 +131,17 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | B09-4 | Status code when an active job is returned | 200 with the job object (as `GET /jobs/{id}`), per docs/03 "return it (200)"; a concurrent loser of the insert race gets the same | `job_handlers.go` |
 | B09-5 | Unknown MF scheme code | 404 `NOT_FOUND` before any job is created (a job for a nonexistent scheme would only fail in the worker) | `job_handlers.go` |
 | B09-6 | Who calls `EnqueuePostImport` | B06 (prices commit, delete-prices, trim) and B07 (`action:<id>`, D03-A5) call `jobs.Service.EnqueuePostImport[Target]`; B09 only provides it and the `batch:<id>` / result contract | `internal/jobs` |
+
+## B12 choices where the spec is silent (Claude, 2026-10-17; owner may overrule, none blocks)
+| # | Question | Choice made in B12 | Where |
+|---|---|---|---|
+| B12-1 | Are `params` fields optional with defaults? (`direction`, `holder` have no default in docs/03 13) | Every listed field is required; no silent defaults. `level`, `pct`, `delta_pct`, `price`, `nav` are decimals, `fast`, `slow`, `days_before` integers | `internal/alerts/params.go` |
+| B12-2 | `THRESHOLD_ALREADY_MET` for kinds other than `price_*`? | Also `nav_above/below` (latest NAV), same rule; no check for the other kinds (wk52, rsi, ma_cross: they fire on crossings, not levels). Last bar means the last non-suspect bar, using `close`. No bar or NAV yet: accepted | `alerts/service.go` |
+| B12-3 | Can a fired or expired alert be re-armed or edited? | No: PATCH on it is 409 (create a new alert). PATCH only edits `status` (active/paused) and `params` | `alerts/service.go` |
+| B12-4 | PATCH params and evaluator memory | A params change sets `last_state = NULL` so the new threshold starts clean; D06 must treat NULL as "no bar evaluated yet" | `queries/alert.sql` |
+| B12-5 | `expires_on` in the past | 422 (today in IST is allowed) | `alerts/service.go` |
+| B12-6 | Alert list and history pagination (docs/03 13 shows only `status` and `limit`) | Same keyset `limit`/`cursor` and `{items,next_cursor}` as every list; newest first | `openapi.yaml` |
+| B12-7 | Reply to a bad `/start` code (docs/01 6 says "ignore every other chat", docs/07 ALR-12 says "polite failure") | A well-formed `/start <code>` from a private chat gets one fixed reply (no echo of the input) whether the code is accepted or not; every other message gets no reply. A stranger who knows the secret-authenticated bot can therefore only learn that the bot exists | `alerts/link.go` |
+| B12-8 | Test-message limit across instances | In-memory per process (one Render instance), consistent with the other limiters; resets on restart | `alerts/link.go` |
+| B12-9 | Several unexpired link codes | Allowed (each single use, 15 min); expired rows are purged a day after expiry when a new code is made | `alerts/link.go` |
+| B12-10 | `POST /telegram/test` when the bot is not configured or not linked | 503 `SOURCE_DOWN` (no token) / 409 `CONFLICT` (not linked); `link-code` still works without `TELEGRAM_BOT_USERNAME` (null bot fields plus warning) so nothing blocks on D-9 | `httpx/alerts_handlers.go` |

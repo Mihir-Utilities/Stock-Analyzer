@@ -56,7 +56,7 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 | 7 | B10 | TODO | | | |
 | 7 | F14 | TODO | | | |
 | 8 | B11 | TODO | | | |
-| 8 | B12 | TODO | | | owner: Telegram bot |
+| 8 | B12 | DONE (pending green CI) | | | owner: Telegram bot |
 | 8 | D06 | TODO | | | |
 | 8 | F11 | TODO | | | |
 | 8 | F12 | TODO | | | no Broker card |
@@ -85,3 +85,4 @@ Frontend and backend tasks may run in separate git worktrees/sessions. Frontend 
 - 2026-10-17: F01 merged: design tokens from docs/06a (tested against the doc), Tailwind v4, self-hosted Inter, app shell (sidebar, bottom tabs, footer disclaimer), API client (CSRF header, waking-server banner, 401 handling), auth gate middleware, CSP with per-request nonce, images.unoptimized (D-OQ8), Storybook, vitest, Playwright e2e. Open: OQ-16 contrast of spec colours (some light-theme pairs under 4.5:1), Lighthouse a11y score not run (owner, RUNBOOK 11), set API_BASE_URL on Vercel. Row ids renumbered: F01 SEC-14/15 are now SEC-21/22; RUNBOOK F01 section is 11.
 - 2026-10-17: D04 merged: mfapi and AMFI adapters (header-name AMFI parser, CRLF/LF, value dates kept), MF analytics (05 9.2-9.3), jobs sync_mf_schemes, ingest_mf_navs, mf_refresh. D04-A1: exact host api.mfapi.in added to config/allowed_hosts.json (docs/01 section 4 uses it); owner to confirm. Live smoke check outstanding: python -m worker run sync_mf_schemes --dry-run. RUNBOOK section 12.
 - 2026-10-17: B09 merged: POST /mf/schemes/{code}/refresh (cooldown, global limit, single active job), GET /jobs/{id}, POST /stocks/{symbol}/refresh -> 422 PRICE_MODE_MANUAL, signed worker-http caller via internal/egress (golden vector matches the Python signer), EnqueuePostImport helpers (B06/B07 must call them after commit). RUNBOOK section 13.
+- 2026-10-17: B12 merged: alerts CRUD (13 kinds validated, THRESHOLD_ALREADY_MET, 200-active limit), Telegram link codes (sha256 stored, 15 min, single use), webhook with constant-time secret check, Telegram client via internal/egress. RUNBOOK section 14. Owner creates the bot (D-9); until then BOT_NOT_CONFIGURED. D06 must treat alert.last_state NULL as no bar evaluated yet.

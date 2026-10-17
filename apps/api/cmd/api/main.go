@@ -53,7 +53,7 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 	defer pool.Close()
 
 	accounts := auth.New(pool, auth.Config{SessionDays: cfg.SessionDays, MaxFails: cfg.LoginMaxFails}, log)
-	// The only outbound client: allow-listed to the worker base URL (decision D-N).
+	// The only outbound client for the worker: allow-listed to the worker base URL (decision D-N).
 	eg, err := egress.New(egress.FromURL(cfg.WorkerBaseURL))
 	if err != nil {
 		return err
@@ -61,7 +61,11 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 	jobSvc := jobs.New(pool, &jobs.Worker{Base: cfg.WorkerBaseURL, Key: cfg.WorkerHMACKey, HC: eg},
 		jobs.Config{Cooldown: time.Duration(cfg.RefreshCooldownMin) * time.Minute, GlobalHour: cfg.RefreshGlobalPerHour}, log)
 	defer jobSvc.Wait()
-	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts, Jobs: jobSvc})
+	alertDeps, err := alertsDeps(cfg, pool, log)
+	if err != nil {
+		return err
+	}
+	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts, Jobs: jobSvc, Alerts: alertDeps})
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
 		Handler:           router,

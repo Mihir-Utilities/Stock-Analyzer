@@ -32,8 +32,8 @@ CRUD for alerts, Telegram link codes and the secure webhook receiver.
 2. Implement webhook handler and tests with fake Telegram payloads
 
 ## Acceptance criteria (all must be true)
-- [ ] ALR-01, ALR-11, ALR-12, ALR-13, ALR-15 pass
-- [ ] Webhook rejects wrong secret and stores nothing
+- [x] ALR-01, ALR-11, ALR-12, ALR-13, ALR-15 pass (apps/api/internal/httpx/alerts_integration_test.go: TestALR01ThresholdAlreadyMet, TestALR11WebhookSecretMismatch, TestALR12StartWithBadCode, TestALR13OtherChatMessagesIgnored, TestALR15ActiveAlertLimit; all green with Postgres 16)
+- [x] Webhook rejects wrong secret and stores nothing (TestALR11: 401, chat not linked, code not consumed, no message sent; SEC-60..62)
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `ALR-01` (see `docs/07-edge-cases-tests.md`)
@@ -43,9 +43,9 @@ CRUD for alerts, Telegram link codes and the secure webhook receiver.
 - `ALR-15` (see `docs/07-edge-cases-tests.md`)
 
 ## Definition of done
-- [ ] Behavior matches the cited spec sections exactly (note section numbers in the PR description).
-- [ ] Tests above exist, run in CI and pass; new edge cases discovered are added to `docs/07-edge-cases-tests.md`.
-- [ ] Loading/empty/partial/stale/error states implemented for any UI work.
-- [ ] No secrets or personal data in code, logs or fixtures; deny-list check passes.
-- [ ] `docs/RUNBOOK.md` updated for any new variable, job or failure mode.
-- [ ] Questions or spec conflicts recorded in `docs/OPEN_QUESTIONS.md` instead of guessed.
+- [x] Behavior matches the cited spec sections exactly (note section numbers in the PR description).
+- [x] Tests above exist, run in CI and pass; new edge cases discovered are added to `docs/07-edge-cases-tests.md`.
+- [x] Loading/empty (no UI in this task)/partial/stale/error states implemented for any UI work.
+- [x] No secrets or personal data in code, logs or fixtures; deny-list check passes.
+- [x] `docs/RUNBOOK.md` updated (section 11) for any new variable, job or failure mode.
+- [x] Questions or spec (B12-1..B12-10) conflicts recorded in `docs/OPEN_QUESTIONS.md` instead of guessed.
