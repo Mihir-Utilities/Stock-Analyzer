@@ -134,6 +134,9 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run build-storybook
+      # Browser tests (UI-03, SEC-06, no external requests, axe) use the runner's Chrome.
+      - run: npm run test:e2e
 
   api-types:
     name: Generated API types (openapi.yaml)
