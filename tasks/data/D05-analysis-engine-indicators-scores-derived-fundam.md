@@ -35,9 +35,13 @@ Compute everything analytical: indicators, returns/risk, scores, owner-data-deri
 3. Write the fixture-driven ratio tests (S16 data)
 
 ## Acceptance criteria (all must be true)
-- [ ] All FND-* and SHP-* analytics tests pass
-- [ ] Indicators within stated tolerance of reference after warm-up
-- [ ] Stocks without owner data produce null fundamentals with `no_data_entered`
+Split (tasks/README.md): **D05a** = indicators, returns/risk, analysis-tab series, `analysis_snapshot` (indicators), `compute_analysis` hook and CLI job, `screener_row` price metrics. **D05b** = derived fundamentals, scores, shareholding, fundamental screener keys, `docs/definitions.json` (waits for B05).
+
+- [ ] All FND-* and SHP-* analytics tests pass (D05b; not started)
+- [x] Indicators within stated tolerance of reference after warm-up (D05a): `tests/test_indicators.py` (EMA vs pandas `ewm` at 1e-6 after 3n bars, RSI vs a naive Wilder reference at 1e-12, hand-computed ATR/ADX/Stochastic/OBV/Bollinger/MACD values), `tests/test_returns.py` (returns, CAGR, vol, drawdown, beta, Sharpe-like, liquidity), `tests/test_analysis_snapshot.py`, `tests/test_analysis_db.py` (Postgres 16: idempotence, retention, stale snapshots, warnings, screener metrics, `post_import` wiring)
+- [ ] Stocks without owner data produce null fundamentals with `no_data_entered` (D05b; not started)
+
+D05a-specific evidence: edge-case rows IND-81..IND-92 and RET-81..RET-93 in `docs/07-edge-cases-tests.md`; assumptions D05a-A1..A8 in `docs/OPEN_QUESTIONS.md`; operations in `docs/RUNBOOK.md` section 11. Not done in D05a: `docs/definitions.json` generator (D05b, A8).
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `FND-01` (see `docs/07-edge-cases-tests.md`)

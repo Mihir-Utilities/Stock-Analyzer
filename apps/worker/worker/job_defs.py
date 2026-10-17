@@ -4,7 +4,7 @@ and the worker-http handler for ``post_import``. Imported by ``__main__`` and ``
 
 from __future__ import annotations
 
-from worker import actions_db, jobs
+from worker import actions_db, analysis_db, jobs
 from worker.db import create_pool
 from worker.post_import import (
     PgPostImportStore,
@@ -16,6 +16,7 @@ from worker.runner import JobContext, JobSpec
 
 DETECT_TIMEOUT_S = 10 * 60
 READJUST_TIMEOUT_S = 10 * 60
+COMPUTE_TIMEOUT_S = 10 * 60
 PROCESS_QUEUED_TIMEOUT_S = 20 * 60  # docs/04 3.13: the 20-minute workflow timeout
 
 
@@ -65,15 +66,40 @@ async def readjust_prices_job(ctx: JobContext) -> None:
 
 async def process_queued_jobs_job(ctx: JobContext) -> None:
     pool = await create_pool()
+    hooks = analysis_db.production_hooks(pool)
     try:
-        summaries = await process_queued_work(PgPostImportStore(pool), SymbolProcessor(pool), ctx)
+        summaries = await process_queued_work(
+            PgPostImportStore(pool), SymbolProcessor(pool, hooks=hooks), ctx, hooks=hooks
+        )
         ctx.extra["jobs"] = summaries
         # docs/04 3.13: `predict` runs here once models exist (Phase 7, deferred by D-4).
     finally:
         await pool.close()
 
 
+async def compute_analysis_job(ctx: JobContext) -> None:
+    """docs/04 3.7 from the CLI (D05a part): ``--symbols`` or every tracked stock."""
+    symbols = await _symbols(ctx)
+    pool = await create_pool()
+    try:
+
+        async def one(symbol: str) -> None:
+            if ctx.dry_run:
+                return
+            out = await analysis_db.compute_analysis(pool, symbol)
+            ctx.add_rows(1 if out["status"] == "ok" else 0)
+            if out["status"] != "ok":
+                ctx.extra.setdefault("skipped", {})[symbol] = out["status"]
+
+        await ctx.for_each(symbols, one)
+        if not ctx.dry_run and not ctx.timed_out:
+            await analysis_db.recompute_screener(pool, symbols)
+    finally:
+        await pool.close()
+
+
 def register_all() -> None:
+    jobs.register_cli_job(JobSpec("compute_analysis", COMPUTE_TIMEOUT_S, compute_analysis_job))
     jobs.register_cli_job(JobSpec("detect_actions", DETECT_TIMEOUT_S, detect_actions_job))
     jobs.register_cli_job(JobSpec("readjust_prices", READJUST_TIMEOUT_S, readjust_prices_job))
     jobs.register_cli_job(

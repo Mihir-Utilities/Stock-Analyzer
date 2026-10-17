@@ -216,14 +216,18 @@ async def _shared_pool() -> asyncpg.Pool:
 
 async def post_import_handler(job: HttpJob) -> HttpJobResult:
     """worker-http handler for kind ``post_import``: stops starting symbols at 3.5 minutes."""
+    from worker.analysis_db import production_hooks  # D05a; lazy to avoid an import cycle
+
     pool = await _shared_pool()
+    hooks = production_hooks(pool)
     deadline = time.monotonic() + STOP_AFTER_S
     return await run_post_import(
         PgPostImportStore(pool),
         job_id=job.job_id,
         target=job.target,
-        step=SymbolProcessor(pool),
+        step=SymbolProcessor(pool, hooks=hooks),
         should_stop=lambda: time.monotonic() >= deadline,
+        hooks=hooks,
     )
 
 
