@@ -145,3 +145,14 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | B12-8 | Test-message limit across instances | In-memory per process (one Render instance), consistent with the other limiters; resets on restart | `alerts/link.go` |
 | B12-9 | Several unexpired link codes | Allowed (each single use, 15 min); expired rows are purged a day after expiry when a new code is made | `alerts/link.go` |
 | B12-10 | `POST /telegram/test` when the bot is not configured or not linked | 503 `SOURCE_DOWN` (no token) / 409 `CONFLICT` (not linked); `link-code` still works without `TELEGRAM_BOT_USERNAME` (null bot fields plus warning) so nothing blocks on D-9 | `httpx/alerts_handlers.go` |
+
+## B03 choices where the spec is silent (Claude, 2026-10-17; owner may overrule, none blocks)
+| # | Question | Assumption used | Where |
+|---|---|---|---|
+| B03-1 | "Expected last trading date" (docs/03 section 3, SYS-13): at what time of day does today's bar become expected? | Today (IST) counts only from 18:00 IST on a trading day (same cutoff as docs/01 6.1 for final bars); before that the previous trading day is expected. | `internal/instruments/calendar.go` |
+| B03-2 | "True only after 4 calendar days without a new bar": is exactly 4 days stale? | No: stale when the last bar is more than 4 calendar days old (IST date difference > 4). | same |
+| B03-3 | `flags.limited_history` and `flags.series_warning` have no definition | `limited_history`: first bar more than 7 days after max(today - `PRICE_HISTORY_YEARS_TRACKED` years, listing date). `series_warning`: the series code when it is not `EQ` (no copy invented; UI words it). | `internal/instruments/service.go` |
+| B03-4 | Item shape of `GET /stocks` and which `*_as_of` sources fill `freshness` | Items carry the profile identity fields (no flags bitmask); `fundamentals_as_of` = date of `fundamental_meta.last_success`, `shareholding_as_of` = max `quarter_end`, `predictions_as_of` = max `as_of` of shown predictions. | docs/03 section 3 notes |
+| B03-5 | Index flag bits 64/128 need index names | Index names compared without spaces and case; 128 = member of NIFTY50, NIFTY NEXT 50 or NIFTY100 (Nifty 100 = Nifty 50 + Next 50). Only set when the owner imported `index_tags`. | `queries/instruments.sql` |
+| B03-6 | `GET /stocks` without `q` (docs/03 says "min 1 char" but openapi marks it optional) | Absent `q` lists alphabetically with the filters; a present but blank `q` is 422. | `internal/instruments/service.go` |
+| B03-7 | Task B03 lists API-06 (concurrent refresh clicks) and BRK-12 (refresh rejected `PRICE_MODE_MANUAL`), but `POST /stocks/{symbol}/refresh` belongs to B09 | B03 tests the profile side: concurrent opens never create a job and BRK-12's "no backfill in manual mode". The 422 `PRICE_MODE_MANUAL` endpoint tests stay with B09. The old criterion "enqueues exactly one backfill job" is superseded by the manual-mode amendment (zero jobs, tested). | B09 |

@@ -50,6 +50,9 @@ type Deps struct {
 	// Alerts serves /alerts/* and /telegram/* (B12); those routes answer 501 while Alerts.Svc is nil.
 	Alerts AlertsDeps
 
+	// Stocks serves GET /stocks, /stocks/index and /stocks/{symbol} (B03); nil keeps them 501 stubs.
+	Stocks StockService
+
 	// LoginLimiter (default 10/min per IP) guards POST /auth/login; GeneralLimiter (default
 	// 120/min) guards authenticated routes (docs/03 section 16).
 	LoginLimiter   *Limiter

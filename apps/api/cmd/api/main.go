@@ -20,6 +20,7 @@ import (
 	"github.com/india-analyzer/api/internal/config"
 	"github.com/india-analyzer/api/internal/egress"
 	"github.com/india-analyzer/api/internal/httpx"
+	"github.com/india-analyzer/api/internal/instruments"
 	"github.com/india-analyzer/api/internal/jobs"
 	"github.com/india-analyzer/api/internal/logx"
 )
@@ -65,7 +66,7 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts, Jobs: jobSvc, Alerts: alertDeps})
+	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts, Jobs: jobSvc, Alerts: alertDeps, Stocks: instruments.New(pool)})
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
 		Handler:           router,

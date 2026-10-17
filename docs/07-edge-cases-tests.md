@@ -273,6 +273,14 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | API-08 | Router and `openapi.yaml` drift (B01) | `openapi.yaml` validates; every documented operation is registered in the router and vice versa; every stub answers with a JSON envelope (501, or 422 `BROKER_DISABLED`) | I |
 | API-09 | Error mapping (B01) | Each code of docs/03 section 1 maps to its status; unknown route 404 and wrong method 405 use the envelope; a panic or a non-`AppError` becomes `INTERNAL` 500 without leaking the cause; a body above the limit gives 413 | U |
 | API-10 | Pagination helper (B01) | `limit` default 50, clamped to 200, non-integer or < 1 rejected; malformed or oversized cursor rejected; an empty page serialises as `{"items":[],"next_cursor":null}` | U |
+| API-20 | Symbols needing URL-encoding and case (B03) | `/stocks/M%26M`, `/stocks/m%26m`, `/stocks/BAJAJ-AUTO`, `/stocks/bajaj-auto` resolve; an instrument symbol wins over an alias of the same text | I |
+| API-21 | Search LIKE metacharacters and typos (B03) | `q=%`, `q=_` match nothing (prefix match is literal); a typo in a name still matches by trigram >= 0.3; ranking exact > symbol prefix > name prefix > trigram; `kind` defaults to equity and `status` to active, other values widen it; `q` present but blank, > 100 chars, bad `kind`/`status` are 422 with `details.fields` | I |
+| API-22 | Keyset pagination of a trigram-ranked search (B03) | The float similarity in the cursor round-trips exactly: paging with `limit=3` returns the same sequence as one unpaged call; no duplicates or gaps when a row is inserted between pages | I |
+| API-23 | `/stocks/index` caching (B03) | ETag is a hash of the items only; `If-None-Match` gives 304 with no body; the ETag changes when the list or a flag changes; `Cache-Control: private, max-age=3600`; 2,300 instruments < 150 kB gzip | I |
+| API-24 | Alias open has no side effects (B03) | A redirect response does not set `last_opened_at` or track the target stock | I |
+| API-25 | Opening a tracked stock (B03) | `tracked_reason` of an already tracked stock (watchlist, portfolio, imported) is never overwritten by `opened`; concurrent opens create no job and leave one consistent state | I |
+| API-26 | Profile without prices or with a young listing (B03) | `no_prices` plus hint `Import prices.csv for {symbol}`, `prices_as_of` null, never stale; `limited_history` only when the first bar is more than 7 days after max(today - PRICE_HISTORY_YEARS_TRACKED years, listing date); `series_warning` carries the series code when it is not EQ | I |
+| API-27 | Expected last trading date edge cases (B03, SYS-13 helper) | Before 18:00 IST the previous trading day is expected; weekends and holidays are skipped; the IST date (not the UTC date) decides; with holiday rows the bar must be >= the expected date; without them stale only when more than 4 calendar days old | U |
 
 ## UI/SYS
 | ID | Scenario | Required behavior | Test |

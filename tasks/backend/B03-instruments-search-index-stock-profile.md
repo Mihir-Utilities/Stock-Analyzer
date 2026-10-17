@@ -43,10 +43,10 @@ Serve the compact search index and the stock profile endpoint, including alias r
 4. Implement backfill enqueue with the unique-active-job index (no duplicates)
 
 ## Acceptance criteria (all must be true)
-- [ ] Index payload for 2,300 instruments < 150 kB gz and returns ETag
-- [ ] `M&M` and `BAJAJ-AUTO` resolve
-- [ ] Alias returns `redirect_symbol`
-- [ ] Profile of a never-opened stock enqueues exactly one backfill job
+- [x] Index payload for 2,300 instruments < 150 kB gz and returns ETag (`TestIndexPayloadUnder150kBGzipFor2300`: 136,606 B raw, 18,175 B gz; ETag + 304 in `TestIndexFlagsETagAndSize`)
+- [x] `M&M` and `BAJAJ-AUTO` resolve (`TestSymbolsWithSpecialCharactersResolve`, API-20)
+- [x] Alias returns `redirect_symbol` (`TestAliasReturnsRedirectSymbol`, API-02)
+- [x] Profile of a never-opened stock enqueues exactly one backfill job (superseded by the manual-mode amendment: enqueues **zero** jobs, tracks the stock; `TestOpenStockManualModeTracksAndEnqueuesNothing`, `TestConcurrentOpensAreIdempotent`, BRK-12/API-06)
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `API-01` (see `docs/07-edge-cases-tests.md`)
@@ -56,9 +56,10 @@ Serve the compact search index and the stock profile endpoint, including alias r
 - `API-03` (see `docs/07-edge-cases-tests.md`)
 
 ## Definition of done
-- [ ] Behavior matches the cited spec sections exactly (note section numbers in the PR description).
-- [ ] Tests above exist, run in CI and pass; new edge cases discovered are added to `docs/07-edge-cases-tests.md`.
-- [ ] Loading/empty/partial/stale/error states implemented for any UI work.
-- [ ] No secrets or personal data in code, logs or fixtures; deny-list check passes.
-- [ ] `docs/RUNBOOK.md` updated for any new variable, job or failure mode.
-- [ ] Questions or spec conflicts recorded in `docs/OPEN_QUESTIONS.md` instead of guessed.
+- [x] Behavior matches the cited spec sections exactly (note section numbers in the PR description).
+- [x] Tests above exist, run in CI and pass; new edge cases discovered are added to `docs/07-edge-cases-tests.md`.
+- [x] Loading/empty/partial/stale/error states implemented for any UI work.
+- [x] No secrets or personal data in code, logs or fixtures; deny-list check passes.
+- [x] `docs/RUNBOOK.md` updated for any new variable, job or failure mode.
+- [x] Questions or spec conflicts recorded in `docs/OPEN_QUESTIONS.md` instead of guessed.
+- [x] Amendment: empty state returns empty lists (`TestEmptyDatabaseListsAreEmpty`, API-05); SYS-13 (`TestPricesStaleness`, `TestProfileFreshnessRule`); BRK-07 (`no_prices` + hint); API-01, API-03 (`TestSearchKeysetPaginationStable`, `TestSearchTrigramPaginationFloatCursor`). UI work is out of scope here (F03/F04); the UI string is in docs/RUNBOOK section 11.

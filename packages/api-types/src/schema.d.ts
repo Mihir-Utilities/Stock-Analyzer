@@ -1827,9 +1827,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. Items are [id, symbol, name, flags]; flags bitmask 2 tracked, 4 suspended, 8 delisted, 16 non_equity, 32 financial, 64 in_nifty50, 128 in_nifty100 (bit 1 broker_ok is always 0 in manual price mode). */
             200: {
                 headers: {
+                    /** @description Hash of the items; send it back in If-None-Match. */
+                    ETag?: string;
+                    /** @description private, max-age=3600 */
+                    "Cache-Control"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -1851,6 +1855,13 @@ export interface operations {
                      */
                     "application/json": components["schemas"]["SuccessEnvelope"];
                 };
+            };
+            /** @description Not modified (If-None-Match matched the ETag); empty body. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             401: components["responses"]["Unauthenticated"];
             429: components["responses"]["RateLimited"];
@@ -1888,12 +1899,34 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data = {items:[{id,symbol,name,isin,series,sector,industry,company_type,status,instrument_kind,tracked}], next_cursor}; without q the list is alphabetical. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "items": [
+                     *           {
+                     *             "id": 123,
+                     *             "symbol": "TCS",
+                     *             "name": "Tata Consultancy Services Ltd",
+                     *             "isin": "INE467B01029",
+                     *             "series": "EQ",
+                     *             "sector": "IT",
+                     *             "industry": "IT Services",
+                     *             "company_type": "general",
+                     *             "status": "active",
+                     *             "instrument_kind": "equity",
+                     *             "tracked": true
+                     *           }
+                     *         ],
+                     *         "next_cursor": null
+                     *       }
+                     *     }
+                     */
                     "application/json": components["schemas"]["SuccessEnvelope"];
                 };
             };
@@ -1924,7 +1957,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. An alias answers data = {redirect_symbol} instead (HTTP 200). With no imported prices flags.no_prices is true and data.hint says to import prices.csv. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1975,6 +2008,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
