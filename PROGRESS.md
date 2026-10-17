@@ -38,7 +38,7 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 | 3 | B09 | DONE (pending green CI) | | | depends on D01 only |
 | 3 | B04 | TODO | | | |
 | 3 | B06a | TODO | | | instruments + prices importers, adjustment choice/check, trim/delete; needs B03, B09 |
-| 4 | D05a (indicators/returns) | TODO | | | |
+| 4 | D05a (indicators/returns) | DONE (CI pending) | | | |
 | 4 | F04 | TODO | | | |
 | 4 | F05 | TODO | | | |
 | 4 | F06 | TODO | | | |
