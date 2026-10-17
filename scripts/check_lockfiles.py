@@ -17,6 +17,9 @@ def check(root: Path) -> list[str]:
     web = root / "apps/web"
     if (web / "package.json").exists() and not (web / "package-lock.json").exists():
         problems.append("apps/web: package-lock.json is missing")
+    types_pkg = root / "packages/api-types"
+    if (types_pkg / "package.json").exists() and not (types_pkg / "package-lock.json").exists():
+        problems.append("packages/api-types: package-lock.json is missing")
     worker = root / "apps/worker"
     if (worker / "pyproject.toml").exists() and not (worker / "uv.lock").exists():
         problems.append("apps/worker: uv.lock is missing")

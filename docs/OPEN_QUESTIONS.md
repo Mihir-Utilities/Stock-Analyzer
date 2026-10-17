@@ -57,3 +57,14 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 3. Unverified `U` items (token expiry fallback 03:30 IST, partial-bar rule, candle limits, adjusted/raw, AMFI availability, mfapi `data` order) need a GO in `SPIKE_RESULTS.md` before building on them.
 4. Check where `backup_user_data` (04 section 3.11) stores backups: public repo means no data or secrets there. Review before D08.
 5. Vercel Hobby non-commercial terms and broker data-storage terms: owner reads them in S14.
+
+## B01 choices where the spec is silent (Claude, 2026-10-17; owner may overrule, none blocks)
+| # | Question | Choice made in B01 | Where |
+|---|---|---|---|
+| B01-1 | Error code for a wrong HTTP method (405) and an oversized body (413): docs/03 section 1 lists no such codes | Status 405 / 413 with code `BAD_REQUEST` (envelope kept, status matches the situation) | `internal/httpx` |
+| B01-2 | `limit` above 200: clamp or 422? | Clamp to 200; non-integer or < 1 is rejected (handlers answer 422 with `details.fields`) | `internal/pagination` |
+| B01-3 | `DELETE /screener/saved`: docs/03 section 9 names no key | `DELETE /screener/saved/{name}` (saved screens are keyed by name inside the `app_setting` list) | `openapi.yaml`, router |
+| B01-4 | `/healthz` is documented without the base path, the API lives under `/api/v1` | Served at both `/healthz` (hosting health check) and `/api/v1/healthz`; `/readyz` only under `/api/v1` | router |
+| B01-5 | Protected routes before B02 | Fail closed: default session checker returns 401 for everything protected; stubs are therefore only reachable once B02 plugs in the real checker (tests inject an allow-all checker) | `httpx.DenyAll` |
+| B01-6 | Generated Go server types (task scope) | Not generated: `oapi-codegen` output pulls in a runtime module with a large dependency tree for no benefit while every body is still a stub. Go handlers use hand-written types checked against `openapi.yaml` by `TestRoutesMatchOpenAPI`; TS types are generated (`packages/api-types`). Revisit when B03+ adds typed responses | `internal/httpx` |
+| B01-7 | CSRF header `X-Requested-With: fetch` (docs/03 section 1) | Documented in `openapi.yaml`; enforcement is part of B02 (auth/session security), not B01 | B02 |

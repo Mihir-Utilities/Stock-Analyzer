@@ -34,6 +34,14 @@ def test_missing_lockfiles_are_reported(tmp_path: Path) -> None:
     assert any("renovate" in p for p in problems)
 
 
+def test_api_types_package_needs_its_lockfile(tmp_path: Path) -> None:
+    touch(tmp_path, "packages/api-types/package.json")
+    touch(tmp_path, ".github/renovate.json", "{}")
+    assert any("packages/api-types" in p for p in locks.check(tmp_path))
+    touch(tmp_path, "packages/api-types/package-lock.json")
+    assert locks.check(tmp_path) == []
+
+
 def test_go_without_dependencies_needs_no_go_sum(tmp_path: Path) -> None:
     touch(tmp_path, "apps/api/go.mod", "module x\n\ngo 1.22\n")
     touch(tmp_path, ".github/renovate.json", "{}")

@@ -10,7 +10,7 @@ Usage:
   python scripts/license_scan.py            # scan, fail on violations, fail if notices are stale
   python scripts/license_scan.py --write    # scan, fail on violations, rewrite THIRD_PARTY_NOTICES.md
 
-Collectors read: apps/web/package-lock.json (npm); apps/worker/uv.lock (Python: the package list
+Collectors read: apps/web/package-lock.json and packages/api-types/package-lock.json (npm); apps/worker/uv.lock (Python: the package list
 comes from the lockfile so it is the same on every OS; licence text comes from the installed
 environment, with `uv sync --all-groups --all-extras`, or, for packages that only install on another
 platform such as colorama on Windows, from the row already committed in THIRD_PARTY_NOTICES.md);
@@ -338,6 +338,7 @@ def collect() -> list[Entry]:
     notices = NOTICES.read_text(encoding="utf-8") if NOTICES.exists() else ""
     return (
         npm_entries(ROOT / "apps/web/package-lock.json")
+        + npm_entries(ROOT / "packages/api-types/package-lock.json")
         + python_entries(ROOT / "apps/worker", notices)
         + go_entries(ROOT / "apps/api")
     )

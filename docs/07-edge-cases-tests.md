@@ -231,12 +231,18 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | SEC-10 | Rate limit | 429 + Retry-After | I |
 | SEC-11 | XSS in imported text/notes/symbol names | Escaped everywhere | E |
 | SEC-12 | Password policy | Min 12, differs | U |
+| SEC-13 | Security headers (B01) | HSTS, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin` and `Cache-Control: no-store` on every response (also 404/429/501); `/stocks/index` is not forced to `no-store` | I |
+| SEC-14 | Protected route reached before the session checker exists (B01) | The default checker denies everything: 401 `UNAUTHENTICATED` envelope; public routes (`/healthz`, login, Telegram webhook, broker callback) stay reachable | I |
 | API-01 | Unknown symbol | 404 | I |
 | API-02 | Alias symbol | `redirect_symbol` | I |
 | API-03 | Keyset pagination stability | Tested | I |
 | API-04 | `range=MAX` | <= 2,000 points; < 150 kB gz | I |
 | API-05 | Empty DB | `DATA_UNAVAILABLE`/empty, no 500 | I |
 | API-06 | Concurrent refresh clicks | Single job | I |
+| API-07 | Config fail-fast (B01) | Missing or invalid required variable (`DATABASE_URL`, `WORKER_HMAC_KEY` >= 32 chars, `WORKER_BASE_URL`, `BROKER_ENABLED=true`, bad tunable) stops start-up with all problems listed and never prints a value | U |
+| API-08 | Router and `openapi.yaml` drift (B01) | `openapi.yaml` validates; every documented operation is registered in the router and vice versa; every stub answers with a JSON envelope (501, or 422 `BROKER_DISABLED`) | I |
+| API-09 | Error mapping (B01) | Each code of docs/03 section 1 maps to its status; unknown route 404 and wrong method 405 use the envelope; a panic or a non-`AppError` becomes `INTERNAL` 500 without leaking the cause; a body above the limit gives 413 | U |
+| API-10 | Pagination helper (B01) | `limit` default 50, clamped to 200, non-integer or < 1 rejected; malformed or oversized cursor rejected; an empty page serialises as `{"items":[],"next_cursor":null}` | U |
 
 ## UI/SYS
 | ID | Scenario | Required behavior | Test |

@@ -40,11 +40,11 @@ Create the Go API foundation: config, logging, routing, error envelope, health, 
 5. Add log scrubber unit tests for cookie/token/password patterns
 
 ## Acceptance criteria (all must be true)
-- [ ] `/healthz` returns `{ok:true}` without touching the DB
-- [ ] Unknown route returns the error envelope
-- [ ] OpenAPI validates; TS types compile
-- [ ] Scrubber test passes (SEC-08)
-- [ ] An outbound request to any non-allowed host (including a redirect hop) fails before dialing; `golangci-lint` rejects a direct `http.Get`; test `SAF-13`
+- [x] `/healthz` returns `{ok:true}` without touching the DB (`TestHealthzDoesNotTouchDatabase`: pinger never called; live smoke run returned `{"ok":true}`)
+- [x] Unknown route returns the error envelope (`TestUnknownRouteAndMethodReturnEnvelope`, `TestNotFoundErrorShape` = API-01)
+- [x] OpenAPI validates; TS types compile (`TestOpenAPIValidates` with kin-openapi, `TestRoutesMatchOpenAPI`; `npm run generate` and `npm run typecheck` in `packages/api-types` clean; CI job `api-types`)
+- [x] Scrubber test passes (SEC-08) (`TestScrubberRedactsSecretPatterns` 13 cases, `TestLoggerEmitsScrubbedJSON`)
+- [x] An outbound request to any non-allowed host (including a redirect hop) fails before dialing; `golangci-lint` rejects a direct `http.Get`; test `SAF-13` (`TestDisallowedDestinationsRejectedBeforeDial` and `TestRedirectToOtherHostRejected` assert the other server saw 0 requests; `TestLintRejectsDirectHTTPUse` runs golangci-lint on probes using http.Get, http.Post, http.DefaultClient, an http.Client literal and http.DefaultTransport)
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `SEC-08` (see `docs/07-edge-cases-tests.md`)
@@ -54,9 +54,9 @@ Create the Go API foundation: config, logging, routing, error envelope, health, 
 - `SAF-13` (added in the T00 review, see `docs/07-edge-cases-tests.md`)
 
 ## Definition of done
-- [ ] Behavior matches the cited spec sections exactly (note section numbers in the PR description).
-- [ ] Tests above exist, run in CI and pass; new edge cases discovered are added to `docs/07-edge-cases-tests.md`.
-- [ ] Loading/empty/partial/stale/error states implemented for any UI work.
-- [ ] No secrets or personal data in code, logs or fixtures; deny-list check passes.
-- [ ] `docs/RUNBOOK.md` updated for any new variable, job or failure mode.
-- [ ] Questions or spec conflicts recorded in `docs/OPEN_QUESTIONS.md` instead of guessed.
+- [x] Behavior matches the cited spec sections exactly (docs/03 sections 1, 15, 16; choices in docs/OPEN_QUESTIONS.md B01-1..B01-7).
+- [x] Tests above exist, run in CI and pass; new edge cases discovered are added to `docs/07-edge-cases-tests.md` (SEC-13, SEC-14, API-07 to API-10; SEC-10 `TestLoginRateLimit`, SYS-01 `TestReadyzRetriesOnce`).
+- [x] Loading/empty/partial/stale/error states implemented for any UI work (no UI in this task).
+- [x] No secrets or personal data in code, logs or fixtures; deny-list check passes (`python scripts/deny_list_check.py` passed).
+- [x] `docs/RUNBOOK.md` updated for any new variable, job or failure mode (section 8).
+- [x] Questions or spec conflicts recorded in `docs/OPEN_QUESTIONS.md` instead of guessed (B01-1 to B01-7).
