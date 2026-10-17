@@ -42,7 +42,7 @@ async def _get(url: str, inner: Recorder | None = None) -> Recorder:
 
 def test_allow_list_file_matches_docs() -> None:
     hosts = json.loads((REPO / "config" / "allowed_hosts.json").read_text())["hosts"]
-    assert sorted(hosts) == ["api.telegram.org", "mfapi.in", "www.amfiindia.com"]
+    assert sorted(hosts) == ["api.mfapi.in", "api.telegram.org", "mfapi.in", "www.amfiindia.com"]
     assert egress.load_allowed_hosts() == frozenset(hosts)
 
 

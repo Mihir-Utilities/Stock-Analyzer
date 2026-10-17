@@ -26,6 +26,10 @@ MAX_REDIRECTS = 3
 
 NETWORK_ERRORS: tuple[type[Exception], ...] = (httpx.TransportError,)
 
+# Type aliases so adapters can annotate without importing httpx themselves (ruff banned-api).
+HttpClient = httpx.AsyncClient
+HttpResponse = httpx.Response
+
 _DEFAULT_FILE = Path(__file__).resolve().parents[3] / "config" / "allowed_hosts.json"
 
 
