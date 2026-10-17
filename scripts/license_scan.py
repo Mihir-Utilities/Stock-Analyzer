@@ -283,23 +283,43 @@ def go_entries(module_dir: Path) -> list[Entry]:
     return sorted(seen.values(), key=lambda e: (e.name, e.version))
 
 
+_LICENSE_NAMES = {
+    "license",
+    "license.md",
+    "license.txt",
+    "licence",
+    "licence.md",
+    "licence.txt",
+    "copying",
+    "copying.md",
+    "copying.txt",
+}
+
+
+def _license_files(directory: Path) -> list[Path]:
+    """Licence files in ``directory``, matched case-insensitively (some modules ship license.md;
+    Windows hides that difference, Linux CI does not)."""
+    if not directory.is_dir():
+        return []
+    files = [f for f in directory.iterdir() if f.is_file() and f.name.lower() in _LICENSE_NAMES]
+    return sorted(files, key=lambda f: (f.name.lower(), f.name))
+
+
 def _go_license(directory: Path) -> str:
-    for name in ("LICENSE", "LICENSE.md", "LICENSE.txt", "COPYING", "LICENCE"):
-        file = directory / name
-        if file.is_file():
-            text = file.read_text(encoding="utf-8", errors="replace")[:4000]
-            if _COPYLEFT.search(text):
-                return "GPL-family"
-            for needle, spdx in (
-                ("Apache License", "Apache-2.0"),
-                ("MIT License", "MIT"),
-                ("Permission is hereby granted, free of charge", "MIT"),
-                ("Mozilla Public License", "MPL-2.0"),
-                ("ISC License", "ISC"),
-                ("Redistribution and use in source and binary forms", "BSD-3-Clause"),
-            ):
-                if needle in text:
-                    return spdx
+    for file in _license_files(directory):
+        text = file.read_text(encoding="utf-8", errors="replace")[:4000]
+        if _COPYLEFT.search(text):
+            return "GPL-family"
+        for needle, spdx in (
+            ("Apache License", "Apache-2.0"),
+            ("MIT License", "MIT"),
+            ("Permission is hereby granted, free of charge", "MIT"),
+            ("Mozilla Public License", "MPL-2.0"),
+            ("ISC License", "ISC"),
+            ("Redistribution and use in source and binary forms", "BSD-3-Clause"),
+        ):
+            if needle in text:
+                return spdx
     return "UNKNOWN"
 
 

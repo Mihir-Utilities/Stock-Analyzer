@@ -171,3 +171,17 @@ def test_go_module_without_a_downloaded_dir_fails_closed(
     entries = ls.go_entries(tmp_path)
     assert [(e.name, e.license) for e in entries] == [("example.com/dep", "UNKNOWN")]
     assert [e.name for e in ls.violations(entries)] == ["example.com/dep"]
+
+
+def test_go_license_file_names_are_matched_case_insensitively(tmp_path: Path) -> None:
+    """SAF-12: github.com/josharian/intern ships `license.md`; Linux CI failed on it while Windows
+    (case-insensitive) passed."""
+    (tmp_path / "license.md").write_text(
+        "MIT License\n\nPermission is hereby granted, free of charge", encoding="utf-8"
+    )
+    assert ls._go_license(tmp_path) == "MIT"
+    other = tmp_path / "o"
+    other.mkdir()
+    (other / "Copying.TXT").write_text("GNU GENERAL PUBLIC LICENSE Version 3", encoding="utf-8")
+    assert ls.classify(ls._go_license(other)) == "copyleft"
+    assert ls._go_license(tmp_path / "missing") == "UNKNOWN"
