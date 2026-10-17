@@ -93,7 +93,7 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - **Symptoms:** `ADJUSTMENT_CONFLICT` (a detected action inside already-adjusted bars): the owner mixed raw and adjusted files; nothing was adjusted; check which file is raw. A stock whose `adj_close` looks wrong after confirming: run `readjust_prices --symbols X` and read `review_needed`. `post_import` stuck `running`: the row is a normal `refresh_job`; set it to `failed` by hand, the API can enqueue again.
 - **Local DB tests:** the worker integration tests apply every `db/migrations/*.sql` Up section to a clean schema in `TEST_DATABASE_URL` (the test database is wiped, never point it at real data).
 
-## 11. Analysis engine: indicators and returns (D05a)
+## 16. Analysis engine: indicators and returns (D05a)
 - **What runs:** `compute_analysis` (docs/04 3.7, price-derived half) is a `post_import` hook: per symbol, after re-adjust and detection, it builds `analysis_snapshot.indicators` from valid (non-suspect) `adj_close` bars; after the last symbol it rewrites the price metrics of `screener_row` for the batch. Fundamentals and scores (the `scores` column and the fundamental screener keys) arrive with D05b; until then `scores` is `{}`.
 - **By hand:** `python -m worker run compute_analysis [--symbols A,B] [--dry-run]` (default every tracked stock, 10-minute limit, per-symbol isolation) recomputes snapshots and the screener price metrics. Safe to repeat: one row per `(instrument, as_of)`.
 - **Inputs:** `price_daily` (owner imports), `market_series` code `NIFTY50` for beta/correlation (no benchmark -> beta null with reason `no_benchmark`), `app_setting.RISK_FREE_RATE` (fraction, default 0.065).
