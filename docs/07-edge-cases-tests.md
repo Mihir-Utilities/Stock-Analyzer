@@ -340,3 +340,31 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | API-35 | `POST /mf/schemes/{code}/refresh` input (B09) | Non-numeric, zero, negative or out-of-range code 422 with `details.fields`; unknown scheme 404; missing CSRF header 403 | I |
 | SEC-40 | Go signer golden vector (B09) | `jobs.Sign` for fixed key/ts/method/path/body equals the value produced by `worker.http.sign` (Python) | U |
 | SEC-41 | Worker signature checks as the Go caller meets them (B09) | A fake worker mirroring `worker/http.py` accepts the Go call (unix-second `X-Timestamp`, path `/run`), and rejects a timestamp 121 s old or ahead, a wrong signature, a tampered body and an exact replay | I |
+## IND/RET: indicators, returns and risk (D05a)
+| ID | Case | Expected | Type |
+|---|---|---|---|
+| IND-81 | EMA seed and warm-up (D05a) | Seeded with the SMA of the first n values; within 1e-6 of pandas `ewm(span=n, adjust=False)` after 3n bars; warm-up null | U |
+| IND-82 | RSI Wilder (D05a) | Matches a naive Wilder reference; all gains -> 100, flat -> 50, all losses -> 0; first value at bar 15 | U |
+| IND-83 | MACD (D05a) | Linear series gives exactly 7 after bar 26; signal valid after 34 bars; earlier positions null | U |
+| IND-84 | Bollinger (D05a) | Population std (ddof=0); zero-width band -> `bb_pos` null | U |
+| IND-85 | TR/ATR/ADX Wilder (D05a) | Hand-computed values for ATR(3) and ADX(2); flat market DX 0; ADX needs 2n bars | U |
+| IND-86 | Stochastic (D05a) | Hand values; HH == LL -> 50 | U |
+| IND-87 | OBV (D05a) | Sign of the close change times volume, starting at 0 | U |
+| IND-88 | Volume z-score (D05a) | Prior 20 bars exclude today; std 0 -> null | U |
+| IND-89 | 52-week range (D05a) | Uses H/L scaled by adj_close/close; null with < 252 rows; distance in percent | U |
+| IND-90 | Support/resistance (D05a) | Swing levels clustered within 1.5%, nearest first, max 3 per side; the last 5 bars never form a swing | U |
+| IND-91 | Golden/death cross (D05a) | Detected only inside the last 20 bars; null without SMA200 | U |
+| IND-92 | Under 60 valid bars / suspect rows (D05a) | No snapshot; suspect rows are excluded before anything else, nothing forward-filled | U |
+| RET-81 | Trading-row returns (D05a) | `C_t/C_{t-N}-1` as percent; N+1 rows needed else null `insufficient_history` | U |
+| RET-82 | Calendar returns (D05a) | Base = last bar on or before end minus offset (month-end clamped); first bar later -> null | U |
+| RET-83 | CAGR (D05a) | Only for windows over one year, `365.25/days` exponent; others `not_applicable` | U |
+| RET-84 | Volatility (D05a) | Sample std of log returns x sqrt(252) in percent, hand-computed value | U |
+| RET-85 | Max drawdown (D05a) | Own running maximum per window; whole window required | U |
+| RET-86 | Beta/correlation (D05a) | Inner join on dates; >= 120 aligned returns; reasons `no_benchmark` / `insufficient_overlap` / `n/m` | U |
+| RET-87 | Sharpe-like (D05a) | `(CAGR_3y - RISK_FREE_RATE)/vol_3y`; null without 3 years or with zero vol | U |
+| RET-88 | Liquidity (D05a) | `mean(close*volume)` over 60 rows in INR crore; null below 60 rows | U |
+| RET-89 | No NaN/Infinity (D05a) | Snapshot is strict-JSON safe; every null scalar has a reason in `null_reasons`; latest snapshot stays under 200 KB | U |
+| RET-90 | Snapshot lifecycle (D05a) | Idempotent per `as_of`, scores untouched, latest 30 kept, only newest holds series, stale snapshots removed after delete/trim | I |
+| RET-91 | Stock warnings (D05a) | `UNCONFIRMED_ACTION` / `ADJUSTMENT_CONFLICT` come from `actions_db.stock_warnings()` | I |
+| RET-92 | screener_row price metrics (D05a) | Only whitelisted price keys replaced; D05b keys kept; nulls omitted | I |
+| RET-93 | post_import wiring (D05a) | Analysis per symbol, screener after the last symbol, resumable, no duplicates | I |
