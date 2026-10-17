@@ -204,7 +204,8 @@ async def test_job_must_be_queued(make_queue) -> None:  # type: ignore[no-untype
     assert r1.json()["error"]["code"] == "JOB_NOT_QUEUED" and calls == []
 
 
-async def test_kind_must_be_allow_listed_and_handled(make_queue) -> None:  # type: ignore[no-untyped-def]
+async def test_kind_must_be_allow_listed_and_handled(make_queue, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.delitem(jobs.HTTP_HANDLERS, "mf_refresh", raising=False)  # D04 installs one
     q = make_queue({1: ("stock_refresh", "TCS", "queued"), 2: ("mf_refresh", "119551", "queued")})
     async with _client(q) as c:
         r1 = await _post(c, {"job_id": 1})

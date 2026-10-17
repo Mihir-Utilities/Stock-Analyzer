@@ -4,7 +4,7 @@ and the worker-http handler for ``post_import``. Imported by ``__main__`` and ``
 
 from __future__ import annotations
 
-from worker import actions_db, jobs
+from worker import actions_db, jobs, mf_jobs
 from worker.db import create_pool
 from worker.post_import import (
     PgPostImportStore,
@@ -80,6 +80,10 @@ def register_all() -> None:
         JobSpec("process_queued_jobs", PROCESS_QUEUED_TIMEOUT_S, process_queued_jobs_job)
     )
     jobs.register_http_handler("post_import", post_import_handler)
+    # D04: mutual fund jobs
+    jobs.register_cli_job(JobSpec("sync_mf_schemes", 20 * 60, mf_jobs.sync_mf_schemes_job))
+    jobs.register_cli_job(JobSpec("ingest_mf_navs", 30 * 60, mf_jobs.ingest_mf_navs_job))
+    jobs.register_http_handler("mf_refresh", mf_jobs.mf_refresh_handler)
 
 
 register_all()

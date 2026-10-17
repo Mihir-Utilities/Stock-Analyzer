@@ -163,6 +163,14 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | MF-18 | `sync_mf_schemes` on the full mfapi list (about 38k schemes, about 23.6k absent from AMFI) | Paginated with `limit=10000`; schemes absent from AMFI or with an old last NAV follow the MF-06 inactive rule; default search excludes inactive; run stays inside the 20-minute workflow timeout (S6) | I |
 | MF-19 | AMFI file layout drift | Columns read by header name; missing required header rejects the whole file and keeps old data; extra columns ignored; the 8-field layout and a hypothetical 6-field layout both parse (S7) | U |
 | MF-20 | AMFI scheme-type line vs AMC line | A no-`;` line is a scheme-type line only if it starts with `Open Ended Schemes`, `Close Ended Schemes` or `Interval Fund Schemes`, else it is an AMC line; blank lines may hold one space; no row is attached to a missing AMC or type (S7) | U |
+| MF-80 | Adapter calls `api.mfapi.in` and `www.amfiindia.com` | Both pass the egress allow-list; any other host is refused (D04-A1) | U |
+| MF-81 | mfapi list pagination | Pages of `limit=10000` until an empty page; codes repeated across pages are de-duplicated; bad items rejected and counted | U |
+| MF-82 | mfapi down for several tracked schemes | AMFI file downloaded once per run; a code missing from the file is an item error; run `partial` with `amfi_fallback` codes | I |
+| MF-83 | Incremental NAV fetch | `startDate = last_nav_date + 1`; no request when that date is after today; re-run never duplicates rows | I |
+| MF-84 | Weekly-NAV scheme | Volatility and Sharpe-like both null (`weekly_nav`); drawdown and returns still computed | U |
+| MF-85 | `sync_mf_schemes` status rule | Stale or absent-with-no-NAV schemes become `inactive`, fresh ones (also with a value date after the file date) `active`; a failed or invalid AMFI file never changes status | I |
+| MF-86 | Flat or short NAV series in `mf_return_cache` | No NaN/Inf anywhere; zero volatility is 0 with Sharpe null (`n/m`); under 1Y volatility null | U |
+| MF-87 | mfapi 404 for a tracked code | Item error (not an AMFI-fallback case); other schemes continue | I |
 
 ## PF: portfolio
 | ID | Scenario | Required behavior | Test |
