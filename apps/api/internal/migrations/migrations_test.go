@@ -203,7 +203,7 @@ func TestSYS07FailedMigrationRollsBack(t *testing.T) {
 		}
 	}
 	bad := "-- +goose Up\nCREATE TABLE sys07_partial (id int);\nINSERT INTO sys07_no_such_table VALUES (1);\n-- +goose Down\nDROP TABLE sys07_partial;\n"
-	if err := os.WriteFile(filepath.Join(tmp, "0011_sys07_bad.sql"), []byte(bad), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "0012_sys07_bad.sql"), []byte(bad), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -214,8 +214,8 @@ func TestSYS07FailedMigrationRollsBack(t *testing.T) {
 		t.Fatal("partial migration left sys07_partial behind: migrations must be transactional")
 	}
 	var version int
-	if err := db.QueryRow(`SELECT max(version_id) FROM goose_db_version WHERE is_applied`).Scan(&version); err != nil || version != 10 {
-		t.Fatalf("schema version = %d (%v), want 10 (the failed one is not recorded)", version, err)
+	if err := db.QueryRow(`SELECT max(version_id) FROM goose_db_version WHERE is_applied`).Scan(&version); err != nil || version != 11 {
+		t.Fatalf("schema version = %d (%v), want 11 (the failed one is not recorded)", version, err)
 	}
 	verifySchema(t, db) // earlier migrations stay intact
 }
@@ -340,6 +340,10 @@ func TestConstraintsRejectBadRows(t *testing.T) {
 		{"corporate_action duplicate (ACT-09)", `INSERT INTO corporate_action (instrument_id, ex_date, action_type, source) VALUES (` + instrumentSub + `, '2026-09-01', 'split', 'manual')`, uniqueViolat},
 		{"event_calendar type invalid", `INSERT INTO event_calendar (instrument_id, event_date, event_type) VALUES (` + instrumentSub + `, '2026-11-01', 'ipo')`, checkViolation},
 		{"shareholding source invalid", `INSERT INTO shareholding (instrument_id, quarter_end, source) VALUES (` + instrumentSub + `, '2026-09-30', 'derived')`, checkViolation},
+		{"flag_dismissals valid", `INSERT INTO flag_dismissals (instrument_id, flag_type, trade_date) VALUES (` + instrumentSub + `, 'large_one_day_drop', '2026-09-01')`, ""},
+		{"flag_dismissals duplicate key (D-U)", `INSERT INTO flag_dismissals (instrument_id, flag_type, trade_date) VALUES (` + instrumentSub + `, 'large_one_day_drop', '2026-09-01')`, uniqueViolat},
+		{"flag_dismissals other date ok", `INSERT INTO flag_dismissals (instrument_id, flag_type, trade_date) VALUES (` + instrumentSub + `, 'large_one_day_drop', '2026-09-02')`, ""},
+		{"flag_dismissals unknown instrument", `INSERT INTO flag_dismissals (instrument_id, flag_type, trade_date) VALUES (999999, 'large_one_day_drop', '2026-09-01')`, fkViolation},
 		// analysis / ML
 		{"model_run status invalid", `INSERT INTO model_run (model_name, train_start, train_end, n_rows, valid_metrics, baseline_metrics, guardrail_pass, status) VALUES ('dir_5d', '2021-01-01', '2026-01-01', 1, '{}', '{}', false, 'live')`, checkViolation},
 		{"model_run valid", `INSERT INTO model_run (model_name, train_start, train_end, n_rows, valid_metrics, baseline_metrics, guardrail_pass) VALUES ('dir_5d', '2021-01-01', '2026-01-01', 1, '{}', '{}', false)`, ""},
