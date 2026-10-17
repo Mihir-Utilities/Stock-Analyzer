@@ -45,6 +45,9 @@ type Deps struct {
 	Accounts AccountService
 	Timeout  time.Duration
 
+	// Alerts serves /alerts/* and /telegram/* (B12); those routes answer 501 while Alerts.Svc is nil.
+	Alerts AlertsDeps
+
 	// LoginLimiter (default 10/min per IP) guards POST /auth/login; GeneralLimiter (default
 	// 120/min) guards authenticated routes (docs/03 section 16).
 	LoginLimiter   *Limiter

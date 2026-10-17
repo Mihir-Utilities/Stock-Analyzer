@@ -204,6 +204,15 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ALR-16 | Webhook while API asleep | Link UI tolerates delay (S12) | M |
 | ALR-17 | `results_upcoming` relies on owner-entered calendar | No event -> no alert; UI hint to add events | U |
 | ALR-18 | Manual mode: event-driven evaluation after a prices import | `post_import` evaluates alerts for affected symbols (and 19:30 EOD run); dedupe key includes bar date so the same bar never fires twice; only bars newer than the alert's last evaluated bar can fire; no staleness block; message ends "as of the last price import ({bar date})"; creation-time THRESHOLD_ALREADY_MET uses the last imported bar and says so | I |
+| ALR-58 | Alert params per kind (B12) | Each of the 13 kinds has a schema from docs/03 section 13: required fields, inclusive ranges (`pct` 0.1-50, `fast` 5-100, `slow` 20-300 and > fast, `level` 1-99, `days_before` 1-14, `delta_pct` 0.1-20), enums, `price`/`nav` > 0; numeric strings, fractional integers, unknown keys and a missing required key are 422 with `details.fields[].field = params.<key>` | U |
+| ALR-59 | Kind/target mismatch (B12) | `nav_*` need a `mf` target, every other kind a `stock` target; unknown symbol or scheme is 404; symbol match is case-insensitive and resolves `symbol_alias` | I |
+| ALR-60 | Link code shape (B12) | 8 characters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, shown `XXXX-XXXX`; input is case-insensitive and ignores dashes and spaces; anything else is not a code | U |
+| ALR-61 | NAV threshold already met (B12) | `nav_above/below` already true at the latest imported NAV: 422 `THRESHOLD_ALREADY_MET` naming the NAV date; with no NAV yet the alert is accepted | I |
+| ALR-62 | Create validation and defaults (B12) | `one_shot` defaults true, `cooldown_minutes` 1440, `expires_on` today (IST) accepted and past dates 422; unknown body fields 400; a rejected request stores nothing | I |
+| ALR-63 | Alert CRUD and history (B12) | List is newest first with keyset cursor and `status` filter; PATCH pauses/resumes and replaces params (clears `last_state`); fired/expired alerts are 409; DELETE twice is 404; `/alerts/events` shows delivery status and attempts; an empty history is `[]` | I |
+| ALR-64 | Link code storage (B12) | Only the sha256 is stored (no plaintext), `expires_at` = now + 15 min, expired rows are purged a day after expiry; without `TELEGRAM_BOT_USERNAME` the bot fields are null with warning `BOT_NOT_CONFIGURED` | I |
+| ALR-65 | Unlink and test message (B12) | Test message needs a linked chat (409 otherwise), is sent HTML-escaped, a second one within 60 s is 429 with `Retry-After`, a send failure is 503 without the cause, no bot configured is 503; unlink clears the chat id | I |
+| ALR-66 | Alert routes without a service (B12) | While no alerts service is wired the routes answer 501 `NOT_IMPLEMENTED`, never a panic | I |
 
 ## ML: predictions
 | ID | Scenario | Required behavior | Test |
@@ -243,6 +252,9 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | SEC-17 | Change password with wrong current or policy failure (B02) | 422 with one `details.fields[]` entry (`current` or `new`); hash unchanged; sessions untouched | I |
 | SEC-18 | Telegram webhook and CSRF (B02) | `POST /telegram/webhook` needs no `X-Requested-With` (it authenticates with its own secret header in B12); every other non-GET without it is 403, before login is evaluated (no failure counted) | I |
 | SEC-19 | Log hygiene of auth (B02) | Passwords and session tokens never appear in log output, responses or the `session` table (only sha256) | I |
+| SEC-60 | Webhook secret comparison (B12) | Constant-time compare over sha256 of both values; the exact secret only; a configured-empty secret never matches (fail closed, even for an empty header) | U |
+| SEC-61 | Telegram client never leaks the token (B12) | API errors and transport errors (the URL contains the token) are scrubbed; the client can reach `api.telegram.org` only (egress allow-list) | U |
+| SEC-62 | No secrets in responses or logs (B12) | The webhook secret and the bot token appear in no response body and no log line, including rejected webhook calls (logged as "secret header rejected" without the value) | I |
 | API-01 | Unknown symbol | 404 | I |
 | API-02 | Alias symbol | `redirect_symbol` | I |
 | API-03 | Keyset pagination stability | Tested | I |

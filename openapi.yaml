@@ -2006,7 +2006,7 @@ paths:
       operationId: "postAlerts"
       tags:
         - "alerts"
-      summary: "Create an alert (params validated per kind; unknown keys rejected). (docs/03 section 13)"
+      summary: "Create an alert (params validated per kind; unknown keys rejected; 422 THRESHOLD_ALREADY_MET against the last imported bar; 409 CONFLICT beyond 200 active). (docs/03 section 13)"
       parameters:
         - "$ref": "#/components/parameters/CsrfHeader"
       requestBody:
@@ -2017,19 +2017,29 @@ paths:
               "$ref": "#/components/schemas/AlertCreate"
       responses:
         "201":
-          description: "Success (stub: 501 until implemented)"
+          description: "Created alert"
           content:
             "application/json":
               schema:
-                "$ref": "#/components/schemas/SuccessEnvelope"
+                "$ref": "#/components/schemas/AlertEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          description: "NOT_FOUND (unknown symbol or scheme)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: "CONFLICT"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
         "422":
           "$ref": "#/components/responses/Unprocessable"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
         default:
           description: "Error envelope"
           content:
@@ -2040,28 +2050,33 @@ paths:
       operationId: "getAlerts"
       tags:
         - "alerts"
-      summary: "List alerts. (docs/03 section 13)"
+      summary: "List alerts, newest first. (docs/03 section 13)"
       parameters:
         - name: "status"
           in: "query"
           required: false
           schema:
             type: "string"
+            enum:
+              - "active"
+              - "paused"
+              - "fired"
+              - "expired"
+        - "$ref": "#/components/parameters/Limit"
+        - "$ref": "#/components/parameters/Cursor"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Page of alerts"
           content:
             "application/json":
               schema:
-                "$ref": "#/components/schemas/SuccessEnvelope"
+                "$ref": "#/components/schemas/AlertPageEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
         "422":
           "$ref": "#/components/responses/Unprocessable"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
         default:
           description: "Error envelope"
           content:
@@ -2073,29 +2088,23 @@ paths:
       operationId: "getAlertsEvents"
       tags:
         - "alerts"
-      summary: "Alert history with delivery status. (docs/03 section 13)"
+      summary: "Alert history with delivery status, newest first. (docs/03 section 13)"
       parameters:
-        - name: "limit"
-          in: "query"
-          required: false
-          schema:
-            type: "integer"
-            format: "int64"
+        - "$ref": "#/components/parameters/Limit"
+        - "$ref": "#/components/parameters/Cursor"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Page of alert events"
           content:
             "application/json":
               schema:
-                "$ref": "#/components/schemas/SuccessEnvelope"
+                "$ref": "#/components/schemas/AlertEventPageEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
         "422":
           "$ref": "#/components/responses/Unprocessable"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
         default:
           description: "Error envelope"
           content:
@@ -2107,12 +2116,12 @@ paths:
       operationId: "patchAlertsId"
       tags:
         - "alerts"
-      summary: "Pause/resume or change params. (docs/03 section 13)"
+      summary: "Pause/resume (status active|paused) and/or replace params. Fired and expired alerts are final (409). (docs/03 section 13)"
       parameters:
         - name: "id"
           in: "path"
           required: true
-          description: "Numeric id."
+          description: "Alert id."
           schema:
             type: "integer"
             format: "int64"
@@ -2122,22 +2131,28 @@ paths:
         content:
           "application/json":
             schema:
-              "$ref": "#/components/schemas/FreeObject"
+              "$ref": "#/components/schemas/AlertPatch"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Updated alert"
           content:
             "application/json":
               schema:
-                "$ref": "#/components/schemas/SuccessEnvelope"
+                "$ref": "#/components/schemas/AlertEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "409":
+          description: "CONFLICT"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
         "422":
           "$ref": "#/components/responses/Unprocessable"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
         default:
           description: "Error envelope"
           content:
@@ -2148,29 +2163,29 @@ paths:
       operationId: "deleteAlertsId"
       tags:
         - "alerts"
-      summary: "Delete an alert. (docs/03 section 13)"
+      summary: "Delete an alert and its events. (docs/03 section 13)"
       parameters:
         - name: "id"
           in: "path"
           required: true
-          description: "Numeric id."
+          description: "Alert id."
           schema:
             type: "integer"
             format: "int64"
         - "$ref": "#/components/parameters/CsrfHeader"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "data: {ok: true}"
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
         default:
           description: "Error envelope"
           content:
@@ -2182,22 +2197,20 @@ paths:
       operationId: "postTelegramLinkcode"
       tags:
         - "alerts"
-      summary: "Create a Telegram link code (valid 15 minutes, one use). (docs/03 section 13)"
+      summary: "Create a Telegram link code (8 characters, sha256 stored, valid 15 minutes, one use). Without TELEGRAM_BOT_USERNAME the bot fields are null and warning BOT_NOT_CONFIGURED is returned. (docs/03 section 13)"
       parameters:
         - "$ref": "#/components/parameters/CsrfHeader"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Link code"
           content:
             "application/json":
               schema:
-                "$ref": "#/components/schemas/SuccessEnvelope"
+                "$ref": "#/components/schemas/LinkCodeEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
         default:
           description: "Error envelope"
           content:
@@ -2214,7 +2227,7 @@ paths:
         - "$ref": "#/components/parameters/CsrfHeader"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "data: {ok: true}"
           content:
             "application/json":
               schema:
@@ -2223,8 +2236,6 @@ paths:
           "$ref": "#/components/responses/Unauthenticated"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
         default:
           description: "Error envelope"
           content:
@@ -2236,22 +2247,32 @@ paths:
       operationId: "postTelegramTest"
       tags:
         - "alerts"
-      summary: "Send a test message (1 per minute). (docs/03 section 13)"
+      summary: "Send a test message to the linked chat (1 per minute: 429 with Retry-After; 409 when not linked; 503 when the bot is not configured or Telegram fails). (docs/03 section 13)"
       parameters:
         - "$ref": "#/components/parameters/CsrfHeader"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "data: {ok: true}"
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "409":
+          description: "CONFLICT"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
+        "503":
+          description: "SOURCE_DOWN"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
         default:
           description: "Error envelope"
           content:
@@ -2263,7 +2284,7 @@ paths:
       operationId: "postTelegramWebhook"
       tags:
         - "alerts"
-      summary: "Telegram webhook (public; authenticated by the X-Telegram-Bot-Api-Secret-Token header). (docs/03 section 13)"
+      summary: "Telegram webhook (public; authenticated by the X-Telegram-Bot-Api-Secret-Token header, constant-time compare; no CSRF header). Handles `/start <code>` in a private chat only; every other update is acknowledged and ignored. (docs/03 section 13, docs/01 section 6)"
       security: []
       parameters:
         - name: "X-Telegram-Bot-Api-Secret-Token"
@@ -2279,17 +2300,23 @@ paths:
               "$ref": "#/components/schemas/FreeObject"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "data: {ok: true}"
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
-        "422":
-          "$ref": "#/components/responses/Unprocessable"
-        "429":
-          "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
+        "401":
+          description: "UNAUTHENTICATED (secret header missing or wrong; nothing stored)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+        "413":
+          description: "BAD_REQUEST (body above 64 KiB)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
         default:
           description: "Error envelope"
           content:
@@ -3303,6 +3330,223 @@ components:
       required:
         - "target"
         - "kind"
+    AlertPatch:
+      type: "object"
+      properties:
+        status:
+          type: "string"
+          enum:
+            - "active"
+            - "paused"
+        params:
+          type: "object"
+          additionalProperties: true
+      description: "At least one of status, params. Unknown keys are a 400."
+    AlertTarget:
+      type: "object"
+      properties:
+        type:
+          type: "string"
+          enum:
+            - "stock"
+            - "mf"
+        symbol:
+          type: "string"
+        code:
+          type: "integer"
+          format: "int64"
+        name:
+          type: "string"
+      required:
+        - "type"
+    Alert:
+      type: "object"
+      properties:
+        id:
+          type: "integer"
+          format: "int64"
+        target:
+          "$ref": "#/components/schemas/AlertTarget"
+        kind:
+          type: "string"
+        params:
+          type: "object"
+          additionalProperties: true
+        status:
+          type: "string"
+          enum:
+            - "active"
+            - "paused"
+            - "fired"
+            - "expired"
+        one_shot:
+          type: "boolean"
+        cooldown_minutes:
+          type: "integer"
+          format: "int64"
+        expires_on:
+          type: "string"
+          format: "date"
+          nullable: true
+        last_fired_at:
+          type: "string"
+          format: "date-time"
+          nullable: true
+        created_at:
+          type: "string"
+          format: "date-time"
+      required:
+        - "id"
+        - "target"
+        - "kind"
+        - "params"
+        - "status"
+        - "one_shot"
+        - "cooldown_minutes"
+        - "created_at"
+    AlertEvent:
+      type: "object"
+      properties:
+        id:
+          type: "integer"
+          format: "int64"
+        alert_id:
+          type: "integer"
+          format: "int64"
+        kind:
+          type: "string"
+        target:
+          "$ref": "#/components/schemas/AlertTarget"
+        fired_at:
+          type: "string"
+          format: "date-time"
+        payload:
+          type: "object"
+          additionalProperties: true
+        delivery_status:
+          type: "string"
+          enum:
+            - "pending"
+            - "sent"
+            - "failed"
+            - "skipped_quiet_hours"
+        delivery_attempts:
+          type: "integer"
+          format: "int64"
+        delivered_at:
+          type: "string"
+          format: "date-time"
+          nullable: true
+        last_error:
+          type: "string"
+          nullable: true
+      required:
+        - "id"
+        - "alert_id"
+        - "kind"
+        - "target"
+        - "fired_at"
+        - "payload"
+        - "delivery_status"
+        - "delivery_attempts"
+    LinkCode:
+      type: "object"
+      properties:
+        code:
+          type: "string"
+          example: "A7K9-Q2XM"
+        expires_at:
+          type: "string"
+          format: "date-time"
+        bot_username:
+          type: "string"
+          nullable: true
+        deep_link:
+          type: "string"
+          nullable: true
+      required:
+        - "code"
+        - "expires_at"
+        - "bot_username"
+        - "deep_link"
+    AlertEnvelope:
+      type: "object"
+      properties:
+        data:
+          "$ref": "#/components/schemas/Alert"
+        meta:
+          "$ref": "#/components/schemas/Meta"
+        warnings:
+          type: "array"
+          items:
+            "$ref": "#/components/schemas/Warning"
+      required:
+        - "data"
+      description: "Success envelope with one alert."
+    AlertPageEnvelope:
+      type: "object"
+      properties:
+        data:
+          type: "object"
+          properties:
+            items:
+              type: "array"
+              items:
+                "$ref": "#/components/schemas/Alert"
+            next_cursor:
+              type: "string"
+              nullable: true
+          required:
+            - "items"
+            - "next_cursor"
+        meta:
+          "$ref": "#/components/schemas/Meta"
+        warnings:
+          type: "array"
+          items:
+            "$ref": "#/components/schemas/Warning"
+      required:
+        - "data"
+      description: "Success envelope with a page of alerts."
+    AlertEventPageEnvelope:
+      type: "object"
+      properties:
+        data:
+          type: "object"
+          properties:
+            items:
+              type: "array"
+              items:
+                "$ref": "#/components/schemas/AlertEvent"
+            next_cursor:
+              type: "string"
+              nullable: true
+          required:
+            - "items"
+            - "next_cursor"
+        meta:
+          "$ref": "#/components/schemas/Meta"
+        warnings:
+          type: "array"
+          items:
+            "$ref": "#/components/schemas/Warning"
+      required:
+        - "data"
+      description: "Success envelope with a page of alert events."
+    LinkCodeEnvelope:
+      type: "object"
+      properties:
+        data:
+          "$ref": "#/components/schemas/LinkCode"
+        meta:
+          "$ref": "#/components/schemas/Meta"
+        warnings:
+          type: "array"
+          items:
+            "$ref": "#/components/schemas/Warning"
+      required:
+        - "data"
+      description: "Success envelope with a Telegram link code."
     ImportCommit:
       type: "object"
       properties:

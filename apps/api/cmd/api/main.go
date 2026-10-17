@@ -51,7 +51,11 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 	defer pool.Close()
 
 	accounts := auth.New(pool, auth.Config{SessionDays: cfg.SessionDays, MaxFails: cfg.LoginMaxFails}, log)
-	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts})
+	alertDeps, err := alertsDeps(cfg, pool, log)
+	if err != nil {
+		return err
+	}
+	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts, Alerts: alertDeps})
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
 		Handler:           router,
