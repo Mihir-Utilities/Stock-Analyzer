@@ -38,9 +38,9 @@ Let the UI queue on-demand price refresh/backfill jobs executed by the worker-ht
 3. Write concurrent-click test
 
 ## Acceptance criteria (all must be true)
-- [ ] API-06 passes (one job for concurrent clicks)
-- [ ] 429 includes `retry_after_seconds`
-- [ ] Signature verified by a test worker
+- [x] API-06 passes (one job for concurrent clicks) - `TestConcurrentRefreshSingleJob`: 25 parallel clicks, 1 row, 1 worker call
+- [x] 429 includes `retry_after_seconds` - `TestCooldown429`, `TestGlobalHourlyLimit429` (also `Retry-After` header)
+- [x] Signature verified by a test worker - fake worker mirroring `worker/http.py` (`TestWorkerHMACReplayAndSkew`) and Python golden vector (`TestSignMatchesWorkerGoldenVector`)
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `API-06` (see `docs/07-edge-cases-tests.md`)
@@ -48,9 +48,9 @@ Let the UI queue on-demand price refresh/backfill jobs executed by the worker-ht
 - `SEC-07` (see `docs/07-edge-cases-tests.md`)
 
 ## Definition of done
-- [ ] Behavior matches the cited spec sections exactly (note section numbers in the PR description).
-- [ ] Tests above exist, run in CI and pass; new edge cases discovered are added to `docs/07-edge-cases-tests.md`.
-- [ ] Loading/empty/partial/stale/error states implemented for any UI work.
-- [ ] No secrets or personal data in code, logs or fixtures; deny-list check passes.
-- [ ] `docs/RUNBOOK.md` updated for any new variable, job or failure mode.
-- [ ] Questions or spec conflicts recorded in `docs/OPEN_QUESTIONS.md` instead of guessed.
+- [x] Behavior matches the cited spec sections exactly (note section numbers in the PR description).
+- [x] Tests above exist, run in CI and pass; new edge cases discovered are added to `docs/07-edge-cases-tests.md`.
+- [x] Loading/empty/partial/stale/error states implemented for any UI work. (no UI work in this task)
+- [x] No secrets or personal data in code, logs or fixtures; deny-list check passes.
+- [x] `docs/RUNBOOK.md` updated for any new variable, job or failure mode.
+- [x] Questions or spec conflicts recorded in `docs/OPEN_QUESTIONS.md` instead of guessed.

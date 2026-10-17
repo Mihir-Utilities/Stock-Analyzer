@@ -18,7 +18,9 @@ import (
 
 	"github.com/india-analyzer/api/internal/auth"
 	"github.com/india-analyzer/api/internal/config"
+	"github.com/india-analyzer/api/internal/egress"
 	"github.com/india-analyzer/api/internal/httpx"
+	"github.com/india-analyzer/api/internal/jobs"
 	"github.com/india-analyzer/api/internal/logx"
 )
 
@@ -51,7 +53,15 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 	defer pool.Close()
 
 	accounts := auth.New(pool, auth.Config{SessionDays: cfg.SessionDays, MaxFails: cfg.LoginMaxFails}, log)
-	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts})
+	// The only outbound client: allow-listed to the worker base URL (decision D-N).
+	eg, err := egress.New(egress.FromURL(cfg.WorkerBaseURL))
+	if err != nil {
+		return err
+	}
+	jobSvc := jobs.New(pool, &jobs.Worker{Base: cfg.WorkerBaseURL, Key: cfg.WorkerHMACKey, HC: eg},
+		jobs.Config{Cooldown: time.Duration(cfg.RefreshCooldownMin) * time.Minute, GlobalHour: cfg.RefreshGlobalPerHour}, log)
+	defer jobSvc.Wait()
+	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts, Jobs: jobSvc})
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
 		Handler:           router,

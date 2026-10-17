@@ -14,6 +14,9 @@ const (
 	kindAuthLogoutAll
 	kindAuthMe
 	kindAuthChangePassword
+	kindJobStockRefresh // POST /stocks/{symbol}/refresh: 422 PRICE_MODE_MANUAL (B09)
+	kindJobMFRefresh    // POST /mf/schemes/{code}/refresh (B09)
+	kindJobGet          // GET /jobs/{id} (B09)
 )
 
 type limitKind int
@@ -55,6 +58,8 @@ func (rt route) handler(d Deps) http.Handler {
 		})
 	case kindAuthLogin, kindAuthLogout, kindAuthLogoutAll, kindAuthMe, kindAuthChangePassword:
 		return authHandler(d, rt.Kind)
+	case kindJobStockRefresh, kindJobMFRefresh, kindJobGet:
+		return jobHandler(d, rt.Kind)
 	default:
 		return Adapt(func(http.ResponseWriter, *http.Request) error {
 			return NewError(http.StatusNotImplemented, CodeNotImplemented,
@@ -104,9 +109,9 @@ var routes = []route{
 	{Method: mGet, Path: "/stocks/{symbol}/prediction"},
 
 	// Jobs (section 7)
-	{Method: mPost, Path: "/stocks/{symbol}/refresh"},
-	{Method: mGet, Path: "/jobs/{id}"},
-	{Method: mPost, Path: "/mf/schemes/{code}/refresh"},
+	{Method: mPost, Path: "/stocks/{symbol}/refresh", Kind: kindJobStockRefresh},
+	{Method: mGet, Path: "/jobs/{id}", Kind: kindJobGet},
+	{Method: mPost, Path: "/mf/schemes/{code}/refresh", Kind: kindJobMFRefresh},
 
 	// Market and compare (section 8)
 	{Method: mGet, Path: "/market/overview"},

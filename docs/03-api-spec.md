@@ -154,7 +154,7 @@ What `stock_refresh` does (broker mode, inactive): latest quote + last 10 days o
 What `stock_backfill` does: full daily-candle history up to `LAZY_BACKFILL_MAX_YEARS` from the broker, then detection; sets `is_tracked=true, tracked_reason='opened'`. In manual price mode both kinds are rejected with `422 PRICE_MODE_MANUAL` (use prices import).
 
 ### POST `/mf/schemes/{code}/refresh`
-Same pattern, kind `mf_refresh`.
+Same pattern, kind `mf_refresh`. Unknown scheme code: `404 NOT_FOUND`; non-numeric or non-positive code: `422` with `details.fields`. Cooldown and global-limit 429s carry `details.retry_after_seconds` (the global one: seconds until the oldest counted request leaves the one-hour window).
 
 ## 8. Market and compare
 

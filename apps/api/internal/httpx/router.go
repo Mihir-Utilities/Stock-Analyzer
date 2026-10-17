@@ -44,6 +44,8 @@ type Deps struct {
 	// when nil, /auth/* answer 501 and (with Auth nil) every protected route stays 401.
 	Accounts AccountService
 	Timeout  time.Duration
+	// Jobs serves the refresh-job routes (B09); nil keeps them at 501.
+	Jobs JobService
 
 	// LoginLimiter (default 10/min per IP) guards POST /auth/login; GeneralLimiter (default
 	// 120/min) guards authenticated routes (docs/03 section 16).
