@@ -89,6 +89,20 @@ jobs:
     defaults:
       run:
         working-directory: apps/worker
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: analyzer
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: analyzer_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U analyzer" --health-interval 5s --health-timeout 5s
+          --health-retries 10
+    env:
+      # Throwaway CI database; D01 integration tests (ingestion_run lock, source_health) read this.
+      TEST_DATABASE_URL: postgres://analyzer:ci-only-password@localhost:5432/analyzer_test?sslmode=disable
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5

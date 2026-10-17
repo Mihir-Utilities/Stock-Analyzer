@@ -1,0 +1,4 @@
+{
+  "_comment": "Runtime egress allow-list (decision D-N, docs/00 section 1.1). Exact host names, https only, port 443. The worker HTTP client refuses every other host on every request and redirect hop. Adding a host needs an owner decision in docs/OPEN_QUESTIONS.md.",
+  "hosts": ["mfapi.in", "www.amfiindia.com", "api.telegram.org"]
+}

@@ -57,3 +57,11 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 3. Unverified `U` items (token expiry fallback 03:30 IST, partial-bar rule, candle limits, adjusted/raw, AMFI availability, mfapi `data` order) need a GO in `SPIKE_RESULTS.md` before building on them.
 4. Check where `backup_user_data` (04 section 3.11) stores backups: public repo means no data or secrets there. Review before D08.
 5. Vercel Hobby non-commercial terms and broker data-storage terms: owner reads them in S14.
+
+## D01 assumptions (Claude, for owner review; none blocks work)
+| # | Assumption | Why |
+|---|---|---|
+| D01-A1 | `source_health` has no columns for the breaker's trip level or success count, so the open duration is derived from `consecutive_failures` (5 -> 30 min, 6 -> 2 h, 7+ -> 12 h) and the 3 probe successes are counted in process memory (a new process needs 3 fresh successes). No schema change. | docs/01 section 1 rule 5 names the durations but the DDL (docs/02) has no place for them |
+| D01-A2 | Backoff `min(60, 2^n + random(0,1))` uses n = 1 for the first retry (2-3 s, then 4-5 s, then 8-9 s). | docs/01 rule 3 does not say whether the attempt counts from 0 |
+| D01-A3 | worker-http: `X-Timestamp` is unix seconds; `POST /run` returns 202 and runs in the background; identical signatures are single-use inside the window. B01 (the Go caller) must sign the same way. | docs/04 section 4 did not fix the timestamp format or sync/async behaviour (now written there) |
+| D01-A4 | Run status: timeout or `mark_partial` -> `partial`; an exception escaping the job -> `failed`; item failures alone keep `ok` (counts in `items_failed`, first 50 errors in `details`). The "failed twice in a row / > 20% failed" owner notification (rule 7) is added with the Telegram task (D06). | docs/04 rules 3, 4 and 7 |

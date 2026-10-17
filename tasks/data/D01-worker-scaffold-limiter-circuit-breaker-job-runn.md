@@ -35,10 +35,10 @@ Build the shared worker foundation: CLI, HTTP service, locks, throttling, circui
 3. Test limiter spacing and breaker transitions with a fake clock
 
 ## Acceptance criteria (all must be true)
-- [ ] SYS-05 and SEC-07 tests pass
-- [ ] Breaker opens after 5 failures and recovers after 3 successes
-- [ ] Runner marks `partial` on timeout
-- [ ] A request to any host outside the allow-list (including via redirect, a host read from an environment variable, or an IP literal) raises before any socket is opened; test `SAF-13`
+- [x] SYS-05 and SEC-07 tests pass (`test_runner.py::test_sys05_*`, `test_db_integration.py::test_sys05_*` on Postgres 16, `test_http.py::test_sec07_*`)
+- [x] Breaker opens after 5 failures and recovers after 3 successes (`test_limiter_retry_breaker.py::test_breaker_opens_after_five_failures`, `test_breaker_half_open_then_closes_after_three_successes`, DB-backed `test_breaker_persists_in_source_health`)
+- [x] Runner marks `partial` on timeout (`test_runner.py::test_timeout_marks_partial_after_finishing_current_item`)
+- [x] A request to any host outside the allow-list (including via redirect, a host read from an environment variable, or an IP literal) raises before any socket is opened; test `SAF-13` (`test_egress.py`: 16 URL variants, env-var host, redirect hops, real transport never reaches a socket, lint-ban tests)
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `SYS-05` (see `docs/07-edge-cases-tests.md`)
@@ -49,9 +49,9 @@ Build the shared worker foundation: CLI, HTTP service, locks, throttling, circui
 - `SAF-13` (added in the T00 review, see `docs/07-edge-cases-tests.md`)
 
 ## Definition of done
-- [ ] Behavior matches the cited spec sections exactly (note section numbers in the PR description).
-- [ ] Tests above exist, run in CI and pass; new edge cases discovered are added to `docs/07-edge-cases-tests.md`.
-- [ ] Loading/empty/partial/stale/error states implemented for any UI work.
-- [ ] No secrets or personal data in code, logs or fixtures; deny-list check passes.
-- [ ] `docs/RUNBOOK.md` updated for any new variable, job or failure mode.
-- [ ] Questions or spec conflicts recorded in `docs/OPEN_QUESTIONS.md` instead of guessed.
+- [x] Behavior matches the cited spec sections exactly (note section numbers in the PR description).
+- [x] Tests above exist, run in CI and pass; new edge cases discovered are added to `docs/07-edge-cases-tests.md`.
+- [x] Loading/empty/partial/stale/error states implemented for any UI work.
+- [x] No secrets or personal data in code, logs or fixtures; deny-list check passes.
+- [x] `docs/RUNBOOK.md` updated for any new variable, job or failure mode.
+- [x] Questions or spec conflicts recorded in `docs/OPEN_QUESTIONS.md` instead of guessed.
