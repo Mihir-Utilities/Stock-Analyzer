@@ -1017,7 +1017,7 @@ paths:
       operationId: "postStocksSymbolRefresh"
       tags:
         - "jobs"
-      summary: "Refresh job (broker mode only; 422 PRICE_MODE_MANUAL in manual price mode). (docs/03 section 7)"
+      summary: "Always 422 PRICE_MODE_MANUAL in manual price mode (no job is created; the broker mode is inactive). (docs/03 section 7)"
       parameters:
         - name: "symbol"
           in: "path"
@@ -1027,8 +1027,14 @@ paths:
             type: "string"
         - "$ref": "#/components/parameters/CsrfHeader"
       responses:
+        "200":
+          description: "An active job already exists (the job object, as GET /jobs/{id})"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
         "202":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success"
           content:
             "application/json":
               schema:
@@ -1037,6 +1043,8 @@ paths:
           "$ref": "#/components/responses/Unauthenticated"
         "429":
           "$ref": "#/components/responses/RateLimited"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
         "501":
           "$ref": "#/components/responses/NotImplemented"
         default:
@@ -1050,7 +1058,7 @@ paths:
       operationId: "getJobsId"
       tags:
         - "jobs"
-      summary: "Job status (poll every 3 s up to 3 minutes). (docs/03 section 7)"
+      summary: "Job status: id, kind, target, status, requested_at, started_at, finished_at, error, result (poll every 3 s up to 3 minutes). 404 for an unknown id. (docs/03 section 7)"
       parameters:
         - name: "id"
           in: "path"
@@ -1061,7 +1069,7 @@ paths:
             format: "int64"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success"
           content:
             "application/json":
               schema:
@@ -1070,6 +1078,10 @@ paths:
           "$ref": "#/components/responses/Unauthenticated"
         "429":
           "$ref": "#/components/responses/RateLimited"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
         "501":
           "$ref": "#/components/responses/NotImplemented"
         default:
@@ -1083,7 +1095,7 @@ paths:
       operationId: "postMfSchemesCodeRefresh"
       tags:
         - "jobs"
-      summary: "mf_refresh job. (docs/03 section 7)"
+      summary: "mf_refresh job. 202 {job_id, status, expected_wait_seconds} for a new job; 200 with the job when one is already active; 429 with details.retry_after_seconds (cooldown or global limit); 404 unknown scheme. (docs/03 section 7)"
       parameters:
         - name: "code"
           in: "path"
@@ -1094,8 +1106,14 @@ paths:
             format: "int64"
         - "$ref": "#/components/parameters/CsrfHeader"
       responses:
+        "200":
+          description: "An active job already exists (the job object, as GET /jobs/{id})"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
         "202":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success"
           content:
             "application/json":
               schema:
@@ -1104,6 +1122,10 @@ paths:
           "$ref": "#/components/responses/Unauthenticated"
         "429":
           "$ref": "#/components/responses/RateLimited"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
         "501":
           "$ref": "#/components/responses/NotImplemented"
         default:

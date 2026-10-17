@@ -121,3 +121,13 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 - **D04-A7 Incremental window:** `startDate = last_nav_date + 1`, `endDate = today (IST)`; the call is skipped when the start is after today. A mfapi NAV with a value date after today is picked up by a later run.
 - **D04-A8** The `mf_refresh` worker-http handler (target = scheme code) was added because the allow-listed kind otherwise answers 501; it reuses the ingest code for one scheme.
 - **D04-A9** `AMFI_MIN_INTERVAL_SEC` is not a setting (one download per run); the limiter floor is 1 s.
+
+## B09 choices where the spec is silent (Claude, 2026-10-17; owner may overrule, none blocks)
+| # | Question | Choice made in B09 | Where |
+|---|---|---|---|
+| B09-1 | docs/03 section 7 names no endpoint for `stock_backfill` | No route is added. `Service.Enqueue` rejects `stock_backfill` (and `stock_refresh`) with `ErrPriceModeManual`; `POST /stocks/{symbol}/refresh` answers `422 PRICE_MODE_MANUAL` without looking the symbol up | `internal/jobs`, `internal/httpx/job_handlers.go` |
+| B09-2 | Which jobs count toward `REFRESH_GLOBAL_PER_HOUR`, and what is "last finished" for the cooldown | Global: `stock_refresh`, `stock_backfill` and `mf_refresh` rows requested in the last hour (`post_import` is event-driven and exempt). Cooldown: the latest `finished_at` of any status for the same (kind, target) | `queries/refresh_job.sql` |
+| B09-3 | `retry_after_seconds` for the global limit | Seconds until the oldest counted request leaves the one-hour window, rounded up, at least 1 | `internal/jobs` |
+| B09-4 | Status code when an active job is returned | 200 with the job object (as `GET /jobs/{id}`), per docs/03 "return it (200)"; a concurrent loser of the insert race gets the same | `job_handlers.go` |
+| B09-5 | Unknown MF scheme code | 404 `NOT_FOUND` before any job is created (a job for a nonexistent scheme would only fail in the worker) | `job_handlers.go` |
+| B09-6 | Who calls `EnqueuePostImport` | B06 (prices commit, delete-prices, trim) and B07 (`action:<id>`, D03-A5) call `jobs.Service.EnqueuePostImport[Target]`; B09 only provides it and the `batch:<id>` / result contract | `internal/jobs` |

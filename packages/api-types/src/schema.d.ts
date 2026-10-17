@@ -389,7 +389,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Refresh job (broker mode only; 422 PRICE_MODE_MANUAL in manual price mode). (docs/03 section 7) */
+        /** Always 422 PRICE_MODE_MANUAL in manual price mode (no job is created; the broker mode is inactive). (docs/03 section 7) */
         post: operations["postStocksSymbolRefresh"];
         delete?: never;
         options?: never;
@@ -404,7 +404,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Job status (poll every 3 s up to 3 minutes). (docs/03 section 7) */
+        /** Job status: id, kind, target, status, requested_at, started_at, finished_at, error, result (poll every 3 s up to 3 minutes). 404 for an unknown id. (docs/03 section 7) */
         get: operations["getJobsId"];
         put?: never;
         post?: never;
@@ -423,7 +423,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** mf_refresh job. (docs/03 section 7) */
+        /** mf_refresh job. 202 {job_id, status, expected_wait_seconds} for a new job; 200 with the job when one is already active; 429 with details.retry_after_seconds (cooldown or global limit); 404 unknown scheme. (docs/03 section 7) */
         post: operations["postMfSchemesCodeRefresh"];
         delete?: never;
         options?: never;
@@ -2460,7 +2460,16 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description An active job already exists (the job object, as GET /jobs/{id}) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
+            /** @description Success */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -2470,6 +2479,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
@@ -2495,7 +2505,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2505,6 +2515,8 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
@@ -2533,7 +2545,16 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description An active job already exists (the job object, as GET /jobs/{id}) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
+            /** @description Success */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -2543,6 +2564,8 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
