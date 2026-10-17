@@ -28,7 +28,7 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 | 1 | B01 | DONE (pending green CI) | | | produces openapi.yaml; unlocks parallel FE/BE |
 | 1 | D01 | DONE (pending green CI) | | | |
 | 1 | F01 | TODO | | | |
-| 1 | B02 | TODO | | | |
+| 1 | B02 | DONE (pending green CI) | | | |
 | 1 | F02 | TODO | | | |
 | 2 | B03 | TODO | | | |
 | 2 | F03 | TODO | | | |
@@ -80,3 +80,4 @@ Frontend and backend tasks may run in separate git worktrees/sessions. Frontend 
 - 2026-10-10: T02 merged (c87b100): goose migrations 0001-0010, seed command (argon2id, idempotent), sqlc queries, migration/constraint/seed tests (API-05, SYS-07, SYS-15..18). Licence scan Go collector now lists only built modules (go list -deps -test, fixed GOOS/GOARCH). Verified locally with testcontainers; go test -race only runs in CI (no gcc locally).
 - 2026-10-17: D01 merged (345fbbd): worker scaffold, egress allow-list (config/allowed_hosts.json, SAF-13), limiter, retry, breaker, runner, scrubber logs, worker-http with HMAC. Assumptions D01-A1..A4 in docs/OPEN_QUESTIONS.md for owner review. B09 must sign/poll per docs/04 section 4. Deny-list now skips .claude/worktrees/.
 - 2026-10-17: B01 merged: cmd/api skeleton, fail-fast config, scrubbing JSON logs, envelope and error mapping, rate limits, 77 route stubs (501), openapi.yaml and packages/api-types with a CI staleness check, internal/egress with forbidigo/depguard lint (SAF-13). Choices B01-1..B01-7 in docs/OPEN_QUESTIONS.md for owner review. Next: F01 (needs B01), then B02, F02, B03...
+- 2026-10-17: B02 merged (26d90fc): argon2id login, hashed sliding sessions, lockout, CSRF header, change-password, logout-all; real session checker replaces DenyAll. Choices B02-1..B02-7 in docs/OPEN_QUESTIONS.md for owner review. Row id SEC-13 was duplicated (B01 headers vs D01 replay); D01's replay row is now SEC-20.
