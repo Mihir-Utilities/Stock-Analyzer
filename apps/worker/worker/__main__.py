@@ -7,9 +7,11 @@ import asyncio
 import json
 import sys
 
-from worker import jobs
+from worker import job_defs, jobs
 from worker.logs import configure_logging
 from worker.runner import RunResult, RunStore, run_job
+
+job_defs.register_all()  # idempotent; keeps the import used
 
 
 def _parser() -> argparse.ArgumentParser:

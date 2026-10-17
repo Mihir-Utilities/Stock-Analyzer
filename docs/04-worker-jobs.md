@@ -101,7 +101,7 @@ Export `watchlist_item`, `portfolio_txn`, `portfolio_adjustment`, `alert`, `app_
 
 ### 3.12 `post_import` (event-driven; manual mode)
 Triggered by the API (via worker-http) after a prices import commit, a delete-prices action or a trim. Input: the `import_batch` id in `refresh_job.target` (`batch:<id>`); the affected symbol list is derived from the batch (stored in `refresh_job.result.remaining` at enqueue).
-1. Process symbols **in order**; for each: `detect_actions` (3.2), then `compute_analysis` (3.7) for that symbol, then alert evaluation (3.9) for that symbol. Per-item isolation (rule 1.4).
+1. Process symbols **in order**; for each: re-adjust that stock's history (confirmed split/bonus only, `01` 3.7; idempotent), `detect_actions` (3.2), then `compute_analysis` (3.7) for that symbol, then alert evaluation (3.9) for that symbol. Per-item isolation (rule 1.4).
 2. **Resumable:** worker-http jobs have a 4-minute cap. Stop starting new symbols at **3.5 minutes**; write progress to `refresh_job.result` (`symbols_total`, `symbols_done`, `remaining`), set `status='partial'` and enqueue a continuation job for the remainder (same target, new row; the unique active-job index is satisfied because the partial row is no longer `queued/running`). `process_queued_jobs` (3.13) continues any job left `queued`/`partial` with remaining work.
 3. After the last symbol: recompute `screener_row` for the affected symbols and set `status='ok'`.
 4. Idempotent: re-running a symbol never duplicates actions, snapshots or alert events (dedupe by bar date).

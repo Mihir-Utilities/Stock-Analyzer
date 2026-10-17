@@ -24,7 +24,7 @@ from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, StrictInt, ValidationError
 
-from worker import jobs
+from worker import job_defs, jobs
 from worker.logs import scrub
 
 log = logging.getLogger("worker.http")
@@ -203,4 +203,5 @@ def create_app(
     return app
 
 
+job_defs.register_all()  # D03: post_import handler (idempotent)
 app = create_app()

@@ -45,9 +45,9 @@ Ingest daily candles with sanity rules, compute `adj_close` from confirmed actio
 4. Telegram note for new detections (once per action)
 
 ## Acceptance criteria (all must be true)
-- [ ] BRK-08..BRK-11, BRK-13, BRK-19, BRK-20 and ACT-01, ACT-02, ACT-07 pass
-- [ ] Re-adjust job leaves portfolio and indicators consistent after confirmation
-- [ ] Detector false-positive rate meets S8 criteria
+- [x] Manual-mode scope (amendment block): BRK-18, BRK-19, ACT-01, ACT-02, ACT-07, ACT-11, ACT-12, ACT-13, ACT-14, ACT-15, SYS-09, SYS-12 pass (`apps/worker/tests/test_actions_detector.py`, `test_actions_db.py`, `test_post_import.py`; `uv run pytest` 209 passed with Postgres 16). BRK-08..BRK-11, BRK-13, BRK-20 are N/A in manual mode (BRK-08/09 moved to B06a); ACT-03 re-adjustment part, ACT-05 multipliers and ACT-08 covered, portfolio-lot side of ACT-03/ACT-06 belongs to B11/B07
+- [x] Re-adjust job: single set-based UPDATE per stock, idempotent, never touches `src_adjusted=true` bars (`test_act03_readjust_applies_confirmed_split_in_one_pass_and_is_idempotent`, `test_act12_mixed_src_adjusted_bars_never_adjusted_twice`); `post_import` re-adjusts before analysis. Portfolio lots are adjusted by the API from the same confirmed actions (B11); indicators are recomputed by the D05 hook, not built here
+- [ ] Detector false-positive rate meets S8 criteria: NOT VERIFIED. S8 real-data run is BLOCKED-OWNER (needs >= 30 owner stocks with >= 10 known events). Mechanics pass on synthetic data; thresholds are configurable `DetectorConfig` defaults
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `BRK-08` (see `docs/07-edge-cases-tests.md`)
