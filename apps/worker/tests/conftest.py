@@ -203,6 +203,33 @@ async def pg_pool() -> AsyncIterator[asyncpg.Pool]:
         await pool.close()
 
 
+def _all_migrations_ddl() -> list[str]:
+    out: list[str] = []
+    for path in sorted((REPO / "db" / "migrations").glob("*.sql")):
+        text = path.read_text(encoding="utf-8")
+        out.append(text.split("-- +goose Up", 1)[1].split("-- +goose Down", 1)[0])
+    return out
+
+
+@pytest.fixture
+async def pg_full() -> AsyncIterator[asyncpg.Pool]:
+    """Throwaway Postgres 16 with every migration of db/migrations applied to a clean schema."""
+    dsn = os.environ.get("TEST_DATABASE_URL")
+    if not dsn:
+        if os.environ.get("CI"):
+            pytest.fail("TEST_DATABASE_URL must be set in CI")
+        pytest.skip("TEST_DATABASE_URL not set (see docs/RUNBOOK.md section 3b)")
+    pool = await asyncpg.create_pool(dsn, min_size=1, max_size=4, statement_cache_size=0)
+    async with pool.acquire() as conn:
+        await conn.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public")
+        for ddl in _all_migrations_ddl():
+            await conn.execute(ddl)
+    try:
+        yield pool
+    finally:
+        await pool.close()
+
+
 @pytest.fixture
 def health_store() -> MemoryHealthStore:
     return MemoryHealthStore()

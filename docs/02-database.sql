@@ -475,6 +475,16 @@ CREATE TABLE alert_event (
   UNIQUE (alert_id, dedupe_key)
 );
 
+-- Non-blocking notices the owner dismissed (D-U, docs/01 3.7 soft flag). Keyed to the bar date, not to a price row, so a
+-- prices re-import cannot orphan it. Dismiss inserts a row; Undo deletes it.
+CREATE TABLE flag_dismissals (
+  instrument_id integer NOT NULL REFERENCES instrument(id) ON DELETE CASCADE,
+  flag_type     text NOT NULL,                    -- 'large_one_day_drop' (D-O)
+  trade_date    date NOT NULL,
+  dismissed_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (instrument_id, flag_type, trade_date)
+);
+
 -- Foreign keys to import_batch added after all tables exist (keeps ordering simple)
 ALTER TABLE fundamental_value ADD CONSTRAINT fundamental_value_batch_fk FOREIGN KEY (import_batch_id) REFERENCES import_batch(id) ON DELETE SET NULL;
 ALTER TABLE shareholding      ADD CONSTRAINT shareholding_batch_fk      FOREIGN KEY (import_batch_id) REFERENCES import_batch(id) ON DELETE SET NULL;

@@ -63,6 +63,11 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ACT-13 | Reverse split / consolidation (price ratio above 1.35, e.g. 1:10 gives about x10) | Not matched by the detector (fractions are all below 1); the bar fails the 50% day-change sanity rule and is `suspect`; no action is created; owner enters it manually (S8) | U |
 | ACT-14 | Detector reachability | Fractions 2/3, 3/4, 4/5, 5/6 can never pass the `abs(C_t/C_{t-1} - 1) > 0.35` trigger (a 1:2 bonus, ratio 0.667, is not detected, consistent with ACT-07); a unit test pins this so a threshold change is deliberate (S8; see OQ-13) | U |
 | ACT-15 | One-day drop of 20% or more that is not matched by the 0.35 trigger (for example a 1:2 bonus, ratio 0.667, or a real crash) | Soft notice "split/bonus or real move?" with Dismiss / Add corporate action; no `detected` action, no `UNCONFIRMED_ACTION`, ML not hidden; a drop under 20% raises nothing (D-O) | U |
+| ACT-16 | Fewer than 20 bars before a candidate day (D03, assumption D03-A1) | No detection: the volume rule needs a full prior-20-bar average (a zero average is never a spike); the soft flag (ACT-15) still applies | U |
+| ACT-17 | The ex-date already has a split/bonus row (owner-entered, detected or rejected) (D03) | The detector adds no second candidate; a rejected date is never re-detected (ACT-04); the soft flag is not shown for that date | I |
+| ACT-18 | Ratio 2/3 and the trigger (D03, pins ACT-14) | Exactly 0.667 is not detected; only the sliver r in [0.6467, 0.65) of the 2/3 tolerance band passes the 0.35 trigger and is matched as 2/3 | U |
+| ACT-19 | Soft-flag dismissal lifecycle (D-U, D03) | Dismiss inserts one `flag_dismissals` row (repeat is a no-op); Undo deletes it; per bar date (a later drop still shows); survives a prices re-import; the flag disappears once an action exists on that date | I |
+| ACT-20 | Confirmed `rights`/`buyback`/`merger`/`demerger` or an untyped `split_or_bonus` (D03) | `adj_close` is never changed; the stock is listed in `review_needed` of the re-adjust result | I |
 
 ## IMP: imports and manual entry
 | ID | Scenario | Required behavior | Test |
@@ -286,3 +291,5 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | SYS-20 | Stale `running` row (D01) | A running row older than 2x the job timeout is marked `failed` (`stale_run`) by the next run; a fresher row is respected and the new run is `skipped` | I |
 | SYS-21 | Runner timeout and isolation (D01) | After the deadline no new item starts, the current item finishes, status `partial` with `timed_out`, `items_remaining`; one failing item never fails the run; only the first 50 errors are stored, scrubbed | U |
 | SYS-22 | worker-http concurrency and kinds (D01) | A second `POST /run` while a job runs answers 409 `BUSY` and leaves its row `queued`; kinds outside `post_import`/`mf_refresh` answer 422; unknown job 404; hard cap 4 min marks the job `failed` (`hard_timeout`) | I |
+| SYS-23 | One symbol of a `post_import` batch fails (D03) | Recorded in `result.failed` (first 50), the rest still run and finish, status `ok`; a missing or malformed `result.remaining` fails the job cleanly | I |
+| SYS-24 | `process_queued_jobs` selection (D03) | Picks `queued` rows older than 15 minutes and `partial` rows with remaining work and no successor; ignores younger `queued` rows; stops at the job deadline and re-enqueues the rest | I |

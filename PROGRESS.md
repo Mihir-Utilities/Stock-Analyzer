@@ -24,16 +24,16 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 |---|---|---|---|---|---|
 | 0 | T00 | DONE | 1 EXEC, 4 COMMIT | f55371c | T00 review done and fixes applied (deny-list, licence scan, .gitignore, CI hardening); GitHub run green on 16fa978. First run (921a1ba) failed: platform-dependent notices. OQ-8 closed as D-OQ8; egress allow-list D-N added to D01/B01 |
 | 0 | T01 | IN-PROGRESS (owner spikes pending) | | | manual mode: S1 recorded, S2/S3/S5 skipped, S4 = manual adjustment check; owner needed for S4, S9 (25 MB upload), S12-S14, S17 |
-| 0 | T02 | DONE (pending green CI) | | | parallel with T01 after T00 |
-| 1 | B01 | DONE (pending green CI) | | | produces openapi.yaml; unlocks parallel FE/BE |
-| 1 | D01 | DONE (pending green CI) | | | |
+| 0 | T02 | DONE | | | parallel with T01 after T00 |
+| 1 | B01 | DONE | | | produces openapi.yaml; unlocks parallel FE/BE |
+| 1 | D01 | DONE | | | |
 | 1 | F01 | TODO | | | |
 | 1 | B02 | DONE (pending green CI) | | | |
 | 1 | F02 | TODO | | | |
 | 2 | B03 | TODO | | | |
 | 2 | F03 | TODO | | | |
 | 2 | D02 | REMOVED | | | manual price mode (D-1, D-2); stub file kept |
-| 3 | D03 | TODO | | | |
+| 3 | D03 | DONE except S8 real-data criterion (pending green CI) | | | |
 | 1 | B08 (reduced) | TODO | | | status endpoint only; do with B02 |
 | 3 | B09 | TODO | | | depends on D01 only |
 | 3 | B04 | TODO | | | |
@@ -81,3 +81,4 @@ Frontend and backend tasks may run in separate git worktrees/sessions. Frontend 
 - 2026-10-17: D01 merged (345fbbd): worker scaffold, egress allow-list (config/allowed_hosts.json, SAF-13), limiter, retry, breaker, runner, scrubber logs, worker-http with HMAC. Assumptions D01-A1..A4 in docs/OPEN_QUESTIONS.md for owner review. B09 must sign/poll per docs/04 section 4. Deny-list now skips .claude/worktrees/.
 - 2026-10-17: B01 merged: cmd/api skeleton, fail-fast config, scrubbing JSON logs, envelope and error mapping, rate limits, 77 route stubs (501), openapi.yaml and packages/api-types with a CI staleness check, internal/egress with forbidigo/depguard lint (SAF-13). Choices B01-1..B01-7 in docs/OPEN_QUESTIONS.md for owner review. Next: F01 (needs B01), then B02, F02, B03...
 - 2026-10-17: B02 merged (26d90fc): argon2id login, hashed sliding sessions, lockout, CSRF header, change-password, logout-all; real session checker replaces DenyAll. Choices B02-1..B02-7 in docs/OPEN_QUESTIONS.md for owner review. Row id SEC-13 was duplicated (B01 headers vs D01 replay); D01's replay row is now SEC-20.
+- 2026-10-17: D03 merged: flag_dismissals migration 0011 (D-U), split/bonus detector (docs/01 3.7, D-T volume rule), soft one-day-drop flag (D-O), D-K adjustment (only src_adjusted=false bars), post_import and process_queued_jobs (resumable at 3.5 min). Assumptions D03-A1..A9 in docs/OPEN_QUESTIONS.md for owner review. NOT met: detector false-positive criterion on real data (S8) needs the owner's price files for 30+ stocks with 10+ known events. D05/D06 plug in via post_import HOOKS. B07 must enqueue post_import with target action:<id> after Confirm (D03-A5). RUNBOOK sections renumbered: 9 = authentication (B02), 10 = prices/detection (D03).
