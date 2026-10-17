@@ -4,11 +4,41 @@ Rule: ONE task per session. Each session does: Execute -> Review -> Fix -> Commi
 A new session starts with: "Resume. Read CLAUDE.md, PROGRESS.md, OPEN_QUESTIONS.md; continue at CURRENT."
 
 ## Pointer
-- CURRENT: T00, phases 1 EXEC and 4 COMMIT done (commit f55371c). NEXT: phase 2 REVIEW (Prompt 3, ideally in a fresh session), then 3 FIX, then 5 LOGGED. Do not start T01/T02 before T00 is DONE.
-- LAST COMPLETED: kickoff (layout reorganised, git init, decisions recorded in docs/OPEN_QUESTIONS.md and MASTER_PLAN 9)
-- MODE: manual price mode (no broker). Each affected task file starts with an "Amendment: manual price mode" block that overrides the text below it (D02 removed; B08 reduced; B06 and F13 split a/b; B09/D03/D06/D07/D08 changed).
-- COUNTS: 39 active task files; 42 tracked work items below (D05, B06, F13 each split in two; D02 REMOVED).
-- BLOCKED ON OWNER: nothing. OQ-1..OQ-7 all closed. Owner still has to: provide the 2026 holiday list (or import holidays.csv), and record the raw/adjusted answer in the manual S4 check.
+- LAST UPDATED: 2026-10-17 (end of day). `main` = 5449fe9, GitHub CI green on every job (guards, api, worker, web, api-types).
+- CURRENT: no task in progress. The backend/worker foundation is built; the design-system and screens work (F02+) and the product APIs (B04..B07) are next. **D05b is deliberately NOT started (owner instruction 2026-10-17: "don't start 5b").**
+- MODE: manual price mode (no broker). Each affected task file starts with an "Amendment: manual price mode" block that overrides the text below it.
+- WHAT "DONE" MEANS TODAY: tasks marked DONE below completed phases 1 EXEC and 4 COMMIT (merged, CI green). **None except T00 has had phase 2 REVIEW (Prompt 3) or 3 FIX yet.** Recommended: run Prompt 3 on a batch (B01+B02 security first, then D01, D03, B09, B12) before building more on top.
+- HOW WORK WAS RUN: each task by a separate agent in its own git worktree, merged by the coordinator one at a time (resolve shared docs, renumber RUNBOOK sections and docs/07 row ids, regenerate THIRD_PARTY_NOTICES.md and packages/api-types, run guards and tests against a real Postgres 16, push, confirm CI). Reusable lessons are at the end of this file.
+- COUNTS: 39 active task files; 42 tracked work items (D05, B06, F13 each split in two; D02 REMOVED).
+
+### Next tasks that are unblocked (pick any; they touch different areas)
+- B04 prices/indicators read APIs (needs B03 + D05a; must expand the columnar `series` into `[[date,value]]` pairs, D05a-A6)
+- B05 fundamentals/ownership/events read APIs (needs B03)
+- B10 mutual-fund APIs (needs B02 + D04)
+- B08 reduced to `GET /broker/status` (needs B02; tiny)
+- F02 design-system components + ChartFrame (needs F01; must add a second encoding so chart colour is never the only signal, OQ-16)
+- B06a prices/instruments importers (needs B03 + B09; must call `EnqueuePostImport` after commit)
+- Held by owner: D05b.
+
+### BLOCKED ON OWNER (nothing blocks coding; these block closing tasks)
+1. T01 owner spikes: S4 adjusted-vs-raw check (needs your price files), S8 real-data detector tuning (30+ stocks, 10+ known events), S9 hosting (Render/Neon/Vercel; rescoped to about 40k rows plus Vercel's current body limit, D-S), S12 Telegram after idle, S14 read the terms (docs/TERMS_NOTES.md), S16 real ratio comparison, S17 effort timing (after F13b). Checklists: docs/SPIKE_RESULTS.md.
+2. GitHub: enable branch protection on `main` and add the required checks guards, api, worker, web and "Generated API types (openapi.yaml)" (RUNBOOK 5a).
+3. Vercel: set `API_BASE_URL` for the build (changing it needs a redeploy); run Lighthouse mobile on `/` once and record the a11y score in docs/SPIKE_RESULTS.md (F01 criterion, RUNBOOK 11).
+4. Telegram (D-9, not blocking): create the bot in BotFather, set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` (+ optional username), run `setWebhook` with `secret_token` (RUNBOOK 14).
+5. Live smoke check nobody has run: `python -m worker run sync_mf_schemes --dry-run` (D04; expect amfi_rows above 10,000 and about 38,000 mfapi schemes).
+6. Data: provide the 2026 holiday list (or import holidays.csv) and the raw/adjusted answer in the S4 check; set `INITIAL_PASSWORD_HASH` and run the seed before any login works (RUNBOOK 2a).
+7. Same `WORKER_HMAC_KEY` on API and worker; host clocks within 120 s.
+
+### Owner decisions pending (interim assumptions in force; none blocks work). Details in docs/OPEN_QUESTIONS.md
+- OQ-16 light-theme contrast of the spec hex colours (some text pairs under 4.5:1; chart colours under 3:1): approve the proposed fix or keep the spec values.
+- D04-A1 (`api.mfapi.in` added to the egress allow-list: confirm), D04-A2..A9.
+- D01-A1..A4, B01-1..B01-7, B02-1..B02-7, B03-1..B03-7, B09-1..B09-6, B12-1..B12-10, D03-A1..A9, D05a-A1..A8, F01-1..F01-5.
+
+### Housekeeping notes
+- `.gitignore` has an UNCOMMITTED stray line 59 (`claude --resume ...`, pasted by accident). Remove it or leave it; it is the only uncommitted change.
+- Old agent worktrees are still under `.claude/worktrees/` (gitignored, safe to delete with `git worktree remove -f -f <path>`). The deny-list skips `.claude/worktrees/`.
+- npm in the repo's `apps/web/node_modules` was locked by another process on Windows (likely the editor's TypeScript server); web checks were run in a clean `git checkout-index` export instead.
+- The temporary Docker Postgres used for tests was removed. To run the DB tests locally start `postgres:16` (user analyzer, password ci-only-password, db analyzer_test) and set `TEST_DATABASE_URL` (RUNBOOK 3b).
 
 ## Per-task phases (tick each; a task is DONE only when all five are ticked)
 1 EXEC   = Prompt 2 (plan, tests first, implement, tick acceptance criteria)
@@ -22,23 +52,23 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 ## Task list (order from tasks/README.md waves)
 | Wave | Task | Status | Phase reached | Commit | Notes / owner action needed |
 |---|---|---|---|---|---|
-| 0 | T00 | DONE | 1 EXEC, 4 COMMIT | f55371c | T00 review done and fixes applied (deny-list, licence scan, .gitignore, CI hardening); GitHub run green on 16fa978. First run (921a1ba) failed: platform-dependent notices. OQ-8 closed as D-OQ8; egress allow-list D-N added to D01/B01 |
-| 0 | T01 | IN-PROGRESS (owner spikes pending) | | | manual mode: S1 recorded, S2/S3/S5 skipped, S4 = manual adjustment check; owner needed for S4, S9 (25 MB upload), S12-S14, S17 |
-| 0 | T02 | DONE | | | parallel with T01 after T00 |
-| 1 | B01 | DONE | | | produces openapi.yaml; unlocks parallel FE/BE |
-| 1 | D01 | DONE | | | |
-| 1 | F01 | DONE except Lighthouse run (owner, pending green CI) | | | |
-| 1 | B02 | DONE (pending green CI) | | | |
+| 0 | T00 | DONE (review done, fixes applied) | | f55371c + review fixes | all five phases; CI green |
+| 0 | T01 | IN-PROGRESS (automated spikes done; owner spikes pending) | | merged (docs, fixtures, spikes) | S1 manual mode, S2/S3/S5 N/A, S6 GO, S7 GO-WITH-CHANGES, S8/S10/S11/S13/S15/S16 on synthetic/local data; S4, S9, S12, S14, S17 and real-data S8/S16 are owner items (see Pointer) |
+| 0 | T02 | DONE (review pending) | | ad5f108 / merge c87b100 | migrations 0001-0011, seed, sqlc; CI green |
+| 1 | B01 | DONE (review pending) | | 088b627 / merge 43fd496 | 77 route stubs, openapi.yaml, api-types, egress; CI green |
+| 1 | D01 | DONE (review pending) | | 345fbbd | worker scaffold, egress allow-list, worker-http HMAC; CI green |
+| 1 | F01 | DONE (review pending); Lighthouse a11y run is an owner item | | 8a108c6 / merge db1e19c | OQ-16 contrast open; set API_BASE_URL on Vercel; CI green |
+| 1 | B02 | DONE (review pending) | | 26d90fc | auth, sessions, CSRF; CI green; owner must run the seed |
 | 1 | F02 | TODO | | | |
-| 2 | B03 | DONE (pending green CI) | | | |
+| 2 | B03 | DONE (review pending) | | 2d738f5 / merge 5b66efc | stock index/search/profile; CI green |
 | 2 | F03 | TODO | | | |
 | 2 | D02 | REMOVED | | | manual price mode (D-1, D-2); stub file kept |
-| 3 | D03 | DONE except S8 real-data criterion (pending green CI) | | | |
-| 1 | B08 (reduced) | TODO | | | status endpoint only; do with B02 |
-| 3 | B09 | DONE (pending green CI) | | | depends on D01 only |
+| 3 | D03 | DONE except S8 real-data criterion (review pending) | | 349fc5d / merge 3e89353 | detector, post_import, flag_dismissals 0011; needs owner price files for S8 |
+| 1 | B08 (reduced) | TODO | |  | status endpoint only; unblocked |
+| 3 | B09 | DONE (review pending) | | 2dcb811 / merge 53390e7 | job endpoints + signed worker caller; B06/B07 must call EnqueuePostImport after commit |
 | 3 | B04 | TODO | | | |
 | 3 | B06a | TODO | | | instruments + prices importers, adjustment choice/check, trim/delete; needs B03, B09 |
-| 4 | D05a (indicators/returns) | DONE (CI pending) | | | |
+| 4 | D05a (indicators/returns) | DONE (review pending) | | 345559f / merge 388284f | compute_analysis hook live; B04 must expand columnar series (D05a-A6) |
 | 4 | F04 | TODO | | | |
 | 4 | F05 | TODO | | | |
 | 4 | F06 | TODO | | | |
@@ -49,14 +79,14 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 | 5 | F07 | TODO | | | |
 | 5 | F08 | TODO | | | |
 | 5 | F13b | TODO | | | rest of F13; needs B06b |
-| 6 | D05b (fundamentals/scores) | TODO | | | |
+| 6 | D05b (fundamentals/scores) | TODO (HELD by owner: do not start) | |  | owner instruction 2026-10-17 |
 | 6 | B13 | TODO | | | |
 | 6 | F10 | TODO | | | |
-| 7 | D04 | DONE except live smoke check (owner, pending green CI) | | | |
+| 7 | D04 | DONE except live smoke check (review pending) | | 8d38fea / merge ae7ad5c | owner: confirm api.mfapi.in (D04-A1); run sync_mf_schemes --dry-run |
 | 7 | B10 | TODO | | | |
 | 7 | F14 | TODO | | | |
 | 8 | B11 | TODO | | | |
-| 8 | B12 | DONE (pending green CI) | | | owner: Telegram bot |
+| 8 | B12 | DONE (review pending) | | bc54d1d / merge 542b4f6 | owner: Telegram bot (D-9); D06 treats alert.last_state NULL as no bar evaluated |
 | 8 | D06 | TODO | | | |
 | 8 | F11 | TODO | | | |
 | 8 | F12 | TODO | | | no Broker card |
@@ -88,3 +118,11 @@ Frontend and backend tasks may run in separate git worktrees/sessions. Frontend 
 - 2026-10-17: B12 merged: alerts CRUD (13 kinds validated, THRESHOLD_ALREADY_MET, 200-active limit), Telegram link codes (sha256 stored, 15 min, single use), webhook with constant-time secret check, Telegram client via internal/egress. RUNBOOK section 14. Owner creates the bot (D-9); until then BOT_NOT_CONFIGURED. D06 must treat alert.last_state NULL as no bar evaluated yet.
 - 2026-10-17: B03 merged: GET /stocks/index (ETag, 304, gzip under 150 kB for 2,300 instruments), GET /stocks (exact, prefix, trigram ranking, keyset), GET /stocks/{symbol} (alias redirect, opens as tracked 'opened', price_mode manual, freshness block, limited_history). No jobs are enqueued on open. RUNBOOK section 15. Choices B03-1..B03-7 in docs/OPEN_QUESTIONS.md. Merge note: main.go wires jobs, alerts and stocks together; Deps has Jobs, Alerts and Stocks.
 - 2026-10-17: D05a merged: every indicator (docs/05 3) and return/risk formula (4) with known-answer tests, Analysis-tab series, snapshot builder, compute_analysis wired into post_import hooks, CLI job compute_analysis, price-only screener_row keys, numpy runtime dep (pandas dev only). Nulls carry reasons; never 0/NaN/Infinity. Assumptions D05a-A1..A8 in docs/OPEN_QUESTIONS.md: A1 percent numbers, A2 only the latest snapshot keeps series (30 kept), A6 series stored columnar so B04 must expand to [[date,value]] pairs. RUNBOOK section 16. D05b (fundamentals, scores, shareholding, definitions.json) next.
+- 2026-10-17 (end of day): tracker brought fully up to date. All merged work is green on GitHub CI (last verified run 39011019057 on 5449fe9). D05b held by owner. Review (Prompt 3) is pending for every task except T00.
+
+## Lessons for running parallel agents (keep)
+- CI runs on Linux with Go 1.22; local is Windows with a newer Go. Anything case- or OS-dependent passes locally and fails in CI (example: `license.md` vs `LICENSE.md`, fixed in license_scan.py). Reproduce with `docker run golang:1.22` and a `git archive` export before guessing.
+- Every merge of parallel branches conflicts in the same shared files: docs/RUNBOOK.md (renumber the sections), docs/07-edge-cases-tests.md (duplicate row ids: check with `grep -o "^| [A-Z]*-[0-9]* |" | sort | uniq -d`), docs/OPEN_QUESTIONS.md, THIRD_PARTY_NOTICES.md (regenerate with `python scripts/license_scan.py --write` after `go mod download`), packages/api-types (`npm run generate`), cmd/api/main.go and httpx/router.go (union of wiring), worker job_defs.py.
+- Migration files must stay contiguous (T02 test); parallel agents that need one use the next free number and the coordinator renumbers.
+- Windows: Python text-mode writes CRLF; git normalises on commit (.gitattributes eol=lf), but run `gofmt -w` after scripted edits. A running editor can lock `node_modules`: verify web in a clean export.
+- Merge one branch at a time, run guards plus the relevant suite against Postgres 16, then push and check CI before the next big merge.
