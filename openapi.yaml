@@ -288,7 +288,16 @@ paths:
       summary: "Compact list for client-side search (ETag, Cache-Control private max-age=3600). (docs/03 section 3)"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success. Items are [id, symbol, name, flags]; flags bitmask 2 tracked, 4 suspended, 8 delisted, 16 non_equity, 32 financial, 64 in_nifty50, 128 in_nifty100 (bit 1 broker_ok is always 0 in manual price mode)."
+          headers:
+            ETag:
+              description: "Hash of the items; send it back in If-None-Match."
+              schema:
+                type: "string"
+            Cache-Control:
+              description: "private, max-age=3600"
+              schema:
+                type: "string"
           content:
             "application/json":
               schema:
@@ -302,6 +311,8 @@ paths:
                       - "TCS"
                       - "Tata Consultancy Services Ltd"
                       - 3
+        "304":
+          description: "Not modified (If-None-Match matched the ETag); empty body."
         "401":
           "$ref": "#/components/responses/Unauthenticated"
         "429":
@@ -353,11 +364,26 @@ paths:
         - "$ref": "#/components/parameters/Cursor"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success. data = {items:[{id,symbol,name,isin,series,sector,industry,company_type,status,instrument_kind,tracked}], next_cursor}; without q the list is alphabetical."
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
+              example:
+                data:
+                  items:
+                    - id: 123
+                      symbol: "TCS"
+                      name: "Tata Consultancy Services Ltd"
+                      isin: "INE467B01029"
+                      series: "EQ"
+                      sector: "IT"
+                      industry: "IT Services"
+                      company_type: "general"
+                      status: "active"
+                      instrument_kind: "equity"
+                      tracked: true
+                  next_cursor: null
         "401":
           "$ref": "#/components/responses/Unauthenticated"
         "422":
@@ -387,7 +413,7 @@ paths:
             type: "string"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success. An alias answers data = {redirect_symbol} instead (HTTP 200). With no imported prices flags.no_prices is true and data.hint says to import prices.csv."
           content:
             "application/json":
               schema:
@@ -428,6 +454,8 @@ paths:
                 warnings: []
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         "429":
           "$ref": "#/components/responses/RateLimited"
         "501":

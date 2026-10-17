@@ -105,6 +105,13 @@ type EventCalendar struct {
 	Source       string
 }
 
+type FlagDismissal struct {
+	InstrumentID int32
+	FlagType     string
+	TradeDate    pgtype.Date
+	DismissedAt  pgtype.Timestamptz
+}
+
 type FundamentalMetum struct {
 	InstrumentID int32
 	BasisUsed    pgtype.Text

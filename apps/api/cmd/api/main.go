@@ -19,6 +19,7 @@ import (
 	"github.com/india-analyzer/api/internal/auth"
 	"github.com/india-analyzer/api/internal/config"
 	"github.com/india-analyzer/api/internal/httpx"
+	"github.com/india-analyzer/api/internal/instruments"
 	"github.com/india-analyzer/api/internal/logx"
 )
 
@@ -51,7 +52,7 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 	defer pool.Close()
 
 	accounts := auth.New(pool, auth.Config{SessionDays: cfg.SessionDays, MaxFails: cfg.LoginMaxFails}, log)
-	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts})
+	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts, Stocks: instruments.New(pool)})
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
 		Handler:           router,

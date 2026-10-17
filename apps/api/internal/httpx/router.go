@@ -44,6 +44,8 @@ type Deps struct {
 	// when nil, /auth/* answer 501 and (with Auth nil) every protected route stays 401.
 	Accounts AccountService
 	Timeout  time.Duration
+	// Stocks serves GET /stocks, /stocks/index and /stocks/{symbol} (B03); nil keeps them 501 stubs.
+	Stocks StockService
 
 	// LoginLimiter (default 10/min per IP) guards POST /auth/login; GeneralLimiter (default
 	// 120/min) guards authenticated routes (docs/03 section 16).
