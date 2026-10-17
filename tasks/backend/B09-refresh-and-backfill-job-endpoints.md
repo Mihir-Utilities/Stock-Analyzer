@@ -24,6 +24,7 @@ Let the UI queue on-demand price refresh/backfill jobs executed by the worker-ht
 - POST refresh/backfill endpoints, GET jobs, cooldown and global limits, unique-active-job dedupe
 - HMAC-signed fire-and-forget call to worker-http; row stays `queued` if the call fails
 - `PRICE_MODE_MANUAL` and `broker_session_missing` handling
+- The Go caller of worker-http signs and polls exactly as written in `docs/04` section 4 (D01-A3): `X-Timestamp` in unix seconds, `POST /run` returns 202 and runs in the background, a signature is single-use inside the 120 s window; the call goes through `internal/egress` (D-N)
 
 ## Out of scope (do not do in this task)
 - Executing the job (worker D02/D03)

@@ -103,6 +103,8 @@ SKIP_DIRS = {
     ".ruff_cache",
     ".pytest_cache",
 }
+# Path prefixes never scanned: local agent worktrees (gitignored full copies of the repo).
+SKIP_PREFIXES = (".claude/worktrees/",)
 # Files never scanned (extensions of Markdown prose and of binary assets).
 SKIP_SUFFIXES = {
     ".md",
@@ -156,7 +158,8 @@ def _iter_files(root: Path) -> Iterator[Path]:
             continue
         if not path.is_file():
             continue
-        if "/".join(rel_parts) in EXEMPT or path.suffix.lower() in SKIP_SUFFIXES:
+        rel = "/".join(rel_parts)
+        if rel in EXEMPT or rel.startswith(SKIP_PREFIXES) or path.suffix.lower() in SKIP_SUFFIXES:
             continue
         yield path
 

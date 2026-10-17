@@ -26,7 +26,7 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 | 0 | T01 | IN-PROGRESS (owner spikes pending) | | | manual mode: S1 recorded, S2/S3/S5 skipped, S4 = manual adjustment check; owner needed for S4, S9 (25 MB upload), S12-S14, S17 |
 | 0 | T02 | DONE (pending green CI) | | | parallel with T01 after T00 |
 | 1 | B01 | TODO | | | produces openapi.yaml; unlocks parallel FE/BE |
-| 1 | D01 | TODO | | | |
+| 1 | D01 | DONE (pending green CI) | | | |
 | 1 | F01 | TODO | | | |
 | 1 | B02 | TODO | | | |
 | 1 | F02 | TODO | | | |
@@ -78,3 +78,4 @@ Frontend and backend tasks may run in separate git worktrees/sessions. Frontend 
 - 2026-10-10: GitHub CI green on 16fa978 (run 38034743068); T00 acceptance box ticked. Owner still to enable branch protection (RUNBOOK 5a). Next: T01/T02.
 - 2026-10-10: T01 automated spikes done (merged): S1 manual mode, S2/S3/S5 N/A, S6 GO, S7 GO-WITH-CHANGES, S8/S10/S11/S13/S15/S16 done on synthetic/local data; S4, S9, S12, S14, S17 and the real-data parts of S8/S10/S16 are BLOCKED-OWNER (checklists in docs/SPIKE_RESULTS.md). New open questions OQ-9..OQ-14. T01 is not DONE until the owner finishes those.
 - 2026-10-10: T02 merged (c87b100): goose migrations 0001-0010, seed command (argon2id, idempotent), sqlc queries, migration/constraint/seed tests (API-05, SYS-07, SYS-15..18). Licence scan Go collector now lists only built modules (go list -deps -test, fixed GOOS/GOARCH). Verified locally with testcontainers; go test -race only runs in CI (no gcc locally).
+- 2026-10-17: D01 merged (345fbbd): worker scaffold, egress allow-list (config/allowed_hosts.json, SAF-13), limiter, retry, breaker, runner, scrubber logs, worker-http with HMAC. Assumptions D01-A1..A4 in docs/OPEN_QUESTIONS.md for owner review. B09 must sign/poll per docs/04 section 4. Deny-list now skips .claude/worktrees/.
