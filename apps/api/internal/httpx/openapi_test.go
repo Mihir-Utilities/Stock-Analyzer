@@ -78,6 +78,7 @@ func TestEveryOperationAnswersWithEnvelope(t *testing.T) {
 		for method := range item.Operations() {
 			target := BasePath + param.ReplaceAllString(path, "1")
 			req := httptest.NewRequest(method, target, strings.NewReader("{}"))
+			req.Header.Set(CSRFHeader, CSRFValue)
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
 			switch rec.Code {

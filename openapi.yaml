@@ -130,11 +130,24 @@ paths:
               "$ref": "#/components/schemas/LoginRequest"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Logged in; `Set-Cookie: session=...; HttpOnly; Secure; SameSite=Lax; Path=/`. data: {authenticated, expires_at}."
+          headers:
+            "Set-Cookie":
+              description: "The session cookie (random 32-byte token; only its sha256 is stored)."
+              schema:
+                type: "string"
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          description: "UNAUTHENTICATED: wrong password or temporarily locked (identical message \"Invalid credentials or temporarily locked\"; 300-800 ms delay)."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
         "422":
           "$ref": "#/components/responses/Unprocessable"
         "429":
@@ -157,13 +170,15 @@ paths:
         - "$ref": "#/components/parameters/CsrfHeader"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success"
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
         "429":
           "$ref": "#/components/responses/RateLimited"
         "501":
@@ -184,13 +199,15 @@ paths:
         - "$ref": "#/components/parameters/CsrfHeader"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success"
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
         "429":
           "$ref": "#/components/responses/RateLimited"
         "501":
@@ -209,7 +226,7 @@ paths:
       summary: "Current session: authenticated, telegram_linked, prefs. (docs/03 section 2)"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "data: {authenticated: true, telegram_linked: bool, prefs: display_prefs object}"
           content:
             "application/json":
               schema:
@@ -242,13 +259,15 @@ paths:
               "$ref": "#/components/schemas/ChangePasswordRequest"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success"
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "403":
+          "$ref": "#/components/responses/Forbidden"
         "422":
           "$ref": "#/components/responses/Unprocessable"
         "429":
@@ -3391,6 +3410,12 @@ components:
   responses:
     BadRequest:
       description: "BAD_REQUEST"
+      content:
+        "application/json":
+          schema:
+            "$ref": "#/components/schemas/ErrorEnvelope"
+    Forbidden:
+      description: "FORBIDDEN (non-GET request without `X-Requested-With: fetch`)"
       content:
         "application/json":
           schema:

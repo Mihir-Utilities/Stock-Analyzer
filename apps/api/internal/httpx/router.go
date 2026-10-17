@@ -23,6 +23,12 @@ type SessionChecker interface {
 	Check(r *http.Request) error
 }
 
+// ContextChecker is an optional extension of SessionChecker: it also returns a context carrying
+// the authenticated session (the cookie checker uses it so handlers know the current session).
+type ContextChecker interface {
+	CheckContext(r *http.Request) (context.Context, error)
+}
+
 // DenyAll rejects every request with UNAUTHENTICATED.
 type DenyAll struct{}
 
@@ -31,10 +37,13 @@ func (DenyAll) Check(*http.Request) error { return ErrUnauthenticated("Authentic
 
 // Deps are the collaborators of the router.
 type Deps struct {
-	Log     zerolog.Logger
-	Pinger  Pinger
-	Auth    SessionChecker
-	Timeout time.Duration
+	Log    zerolog.Logger
+	Pinger Pinger
+	Auth   SessionChecker
+	// Accounts serves /auth/*. When set and Auth is nil, Auth becomes the cookie checker over it;
+	// when nil, /auth/* answer 501 and (with Auth nil) every protected route stays 401.
+	Accounts AccountService
+	Timeout  time.Duration
 
 	// LoginLimiter (default 10/min per IP) guards POST /auth/login; GeneralLimiter (default
 	// 120/min) guards authenticated routes (docs/03 section 16).
@@ -49,7 +58,11 @@ type Deps struct {
 
 func (d *Deps) defaults() {
 	if d.Auth == nil {
-		d.Auth = DenyAll{}
+		if d.Accounts != nil {
+			d.Auth = CookieChecker{Svc: d.Accounts}
+		} else {
+			d.Auth = DenyAll{}
+		}
 	}
 	if d.Timeout <= 0 {
 		d.Timeout = DefaultTimeout
@@ -92,6 +105,9 @@ func NewRouter(d Deps) chi.Router {
 		for _, rt := range routes {
 			h := rt.handler(d)
 			mws := []func(http.Handler) http.Handler{MaxBody(rt.bodyLimit())}
+			if !rt.NoCSRF {
+				mws = append(mws, RequireCSRFHeader)
+			}
 			if rt.Limit == limitLogin {
 				mws = append(mws, login)
 			}
@@ -107,6 +123,15 @@ func NewRouter(d Deps) chi.Router {
 func requireAuth(c SessionChecker) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if cc, ok := c.(ContextChecker); ok {
+				ctx, err := cc.CheckContext(r)
+				if err != nil {
+					WriteError(w, r, err)
+					return
+				}
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
 			if err := c.Check(r); err != nil {
 				WriteError(w, r, err)
 				return

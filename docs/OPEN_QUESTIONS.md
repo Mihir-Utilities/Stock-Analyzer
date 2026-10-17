@@ -76,3 +76,14 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | B01-5 | Protected routes before B02 | Fail closed: default session checker returns 401 for everything protected; stubs are therefore only reachable once B02 plugs in the real checker (tests inject an allow-all checker) | `httpx.DenyAll` |
 | B01-6 | Generated Go server types (task scope) | Not generated: `oapi-codegen` output pulls in a runtime module with a large dependency tree for no benefit while every body is still a stub. Go handlers use hand-written types checked against `openapi.yaml` by `TestRoutesMatchOpenAPI`; TS types are generated (`packages/api-types`). Revisit when B03+ adds typed responses | `internal/httpx` |
 | B01-7 | CSRF header `X-Requested-With: fetch` (docs/03 section 1) | Documented in `openapi.yaml`; enforcement is part of B02 (auth/session security), not B01 | B02 |
+
+## B02 choices where the spec is silent (Claude, 2026-10-17; owner may overrule)
+| # | Question | Choice made in B02 | Where |
+|---|---|---|---|
+| B02-1 | docs/03 section 2 says "after LOGIN_MAX_FAILS set `locked_until = now + 15 min * 2^(lockouts)`" but `app_user` has no lockout counter | No migration: the lockout number is `failed_logins / LOGIN_MAX_FAILS`; `failed_logins` is reset only by a success (so lock 1 = 15 min, lock 2 = 30 min, ... cap 24 h). Exponent read as `2^(n-1)` so the first lock is 15 min as written in the same sentence | `internal/auth` |
+| B02-2 | Do attempts during a lock count? | No: they are refused (same 401, same delay) without incrementing, so an attacker cannot extend the lock | `internal/auth` |
+| B02-3 | Wrong `current` password in change-password | 422 on field `current`; not counted as a login failure (a session is required, general 120/min limit applies) | `internal/httpx/auth_handlers.go` |
+| B02-4 | Maximum length of a new password | 200 characters, equal to the login limit, so an accepted password can always log in | `internal/auth/policy.go` |
+| B02-5 | CSRF exemptions | Only `POST /telegram/webhook` (own secret header, B12). `/broker/callback` is GET. Header must equal `fetch` exactly | `internal/httpx/routes.go` |
+| B02-6 | `Secure` cookie on plain-http local development | Always set (browsers accept Secure cookies on `localhost`); tests call the handler directly | `internal/httpx/auth_handlers.go` |
+| B02-7 | Success bodies of the auth endpoints (spec only describes `me`) | login `{authenticated, expires_at}`; logout, logout-all, change-password `{ok:true}` | `docs/03` section 2 |

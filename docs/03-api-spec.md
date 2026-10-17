@@ -38,6 +38,14 @@ Codes: `BAD_REQUEST` 400, `UNAUTHENTICATED` 401, `FORBIDDEN` 403, `NOT_FOUND` 40
 
 Session sliding: update `last_seen_at` and extend `expires_at` at most once per hour.
 
+Implementation notes (B02):
+- Success body: `{"data":{"authenticated":true,"expires_at":"<RFC 3339>"}}`; logout and logout-all answer `{"data":{"ok":true}}` and clear the cookie; change-password answers `{"data":{"ok":true}}`. `prefs` in `/auth/me` is `app_user.display_prefs`.
+- Lockout: every `LOGIN_MAX_FAILS`-th consecutive failure (`failed_logins` is not reset by a lockout, only by a success) starts lock number `failed_logins / LOGIN_MAX_FAILS`, lasting 15 min x 2^(n-1), capped at 24 h. Attempts made while locked are refused with the same 401 and do not count. The 300-800 ms delay applies to every failed attempt, locked or not; the body never says which.
+- Login body: `password` must be 1..200 characters (else 422); malformed JSON or unknown fields are 400.
+- Change password: `new` is 12..200 characters (the upper bound equals the login limit so the password can always be used) and must differ from `current`; a wrong `current` is a 422 on field `current` and does not count as a failed login. Policy errors are 422 with `details.fields[]`.
+- CSRF: a non-GET request without `X-Requested-With: fetch` is `403 FORBIDDEN`, checked before authentication and rate limiting. `POST /telegram/webhook` is exempt (secret header, B12).
+- Redirects: the login page may pass `next`; the server never redirects. The frontend uses the same-origin helper `auth.SafeNext` rules (relative path starting with a single `/`, no backslash, no control characters), otherwise `/`.
+
 ## 3. Stocks: search and profile
 
 ### GET `/stocks/index`

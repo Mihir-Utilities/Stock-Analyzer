@@ -1353,6 +1353,15 @@ export interface components {
                 "application/json": components["schemas"]["ErrorEnvelope"];
             };
         };
+        /** @description FORBIDDEN (non-GET request without `X-Requested-With: fetch`) */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
         /** @description UNAUTHENTICATED (no valid session cookie) */
         Unauthenticated: {
             headers: {
@@ -1535,15 +1544,27 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Logged in; `Set-Cookie: session=...; HttpOnly; Secure; SameSite=Lax; Path=/`. data: {authenticated, expires_at}. */
             200: {
                 headers: {
+                    /** @description The session cookie (random 32-byte token; only its sha256 is stored). */
+                    "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["SuccessEnvelope"];
                 };
             };
+            /** @description UNAUTHENTICATED: wrong password or temporarily locked (identical message "Invalid credentials or temporarily locked"; 300-800 ms delay). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
@@ -1570,7 +1591,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1580,6 +1601,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
@@ -1605,7 +1627,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1615,6 +1637,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
@@ -1637,7 +1660,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description data: {authenticated: true, telegram_linked: bool, prefs: display_prefs object} */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1676,7 +1699,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1686,6 +1709,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];

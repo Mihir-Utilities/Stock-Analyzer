@@ -44,6 +44,9 @@ func testDeps(buf *bytes.Buffer) Deps {
 
 func do(h http.Handler, method, target, body string, hdr map[string]string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	if method != http.MethodGet {
+		req.Header.Set(CSRFHeader, CSRFValue) // tests that exercise the CSRF guard override it via hdr
+	}
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}

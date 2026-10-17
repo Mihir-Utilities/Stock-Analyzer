@@ -233,6 +233,11 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | SEC-12 | Password policy | Min 12, differs | U |
 | SEC-13 | Security headers (B01) | HSTS, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin` and `Cache-Control: no-store` on every response (also 404/429/501); `/stocks/index` is not forced to `no-store` | I |
 | SEC-14 | Protected route reached before the session checker exists (B01) | The default checker denies everything: 401 `UNAUTHENTICATED` envelope; public routes (`/healthz`, login, Telegram webhook, broker callback) stay reachable | I |
+| SEC-15 | Session sliding expiry (B02) | `last_seen_at` and `expires_at` move at most once per hour; an expired or revoked cookie is 401 | I |
+| SEC-16 | Lockout bookkeeping (B02) | Attempts made while locked do not increment `failed_logins` and do not extend the lock; the correct password during a lock is refused with the identical response; a success resets the counter; lock = 15 min x 2^(lockouts-1), cap 24 h | I |
+| SEC-17 | Change password with wrong current or policy failure (B02) | 422 with one `details.fields[]` entry (`current` or `new`); hash unchanged; sessions untouched | I |
+| SEC-18 | Telegram webhook and CSRF (B02) | `POST /telegram/webhook` needs no `X-Requested-With` (it authenticates with its own secret header in B12); every other non-GET without it is 403, before login is evaluated (no failure counted) | I |
+| SEC-19 | Log hygiene of auth (B02) | Passwords and session tokens never appear in log output, responses or the `session` table (only sha256) | I |
 | API-01 | Unknown symbol | 404 | I |
 | API-02 | Alias symbol | `redirect_symbol` | I |
 | API-03 | Keyset pagination stability | Tested | I |

@@ -7,6 +7,8 @@ package dbq
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getAppUser = `-- name: GetAppUser :one
@@ -16,6 +18,28 @@ FROM app_user WHERE id = 1
 
 func (q *Queries) GetAppUser(ctx context.Context) (AppUser, error) {
 	row := q.db.QueryRow(ctx, getAppUser)
+	var i AppUser
+	err := row.Scan(
+		&i.ID,
+		&i.PasswordHash,
+		&i.TelegramChatID,
+		&i.QuietHours,
+		&i.DisplayPrefs,
+		&i.FailedLogins,
+		&i.LockedUntil,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getAppUserForUpdate = `-- name: GetAppUserForUpdate :one
+SELECT id, password_hash, telegram_chat_id, quiet_hours, display_prefs, failed_logins, locked_until, created_at
+FROM app_user WHERE id = 1 FOR UPDATE
+`
+
+// Serialises concurrent failed logins on the single owner row.
+func (q *Queries) GetAppUserForUpdate(ctx context.Context) (AppUser, error) {
+	row := q.db.QueryRow(ctx, getAppUserForUpdate)
 	var i AppUser
 	err := row.Scan(
 		&i.ID,
@@ -42,4 +66,36 @@ func (q *Queries) InsertAppUser(ctx context.Context, passwordHash string) (int64
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const resetLoginFailures = `-- name: ResetLoginFailures :exec
+UPDATE app_user SET failed_logins = 0, locked_until = NULL WHERE id = 1
+`
+
+func (q *Queries) ResetLoginFailures(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, resetLoginFailures)
+	return err
+}
+
+const setLoginFailure = `-- name: SetLoginFailure :exec
+UPDATE app_user SET failed_logins = $1, locked_until = $2 WHERE id = 1
+`
+
+type SetLoginFailureParams struct {
+	FailedLogins int32
+	LockedUntil  pgtype.Timestamptz
+}
+
+func (q *Queries) SetLoginFailure(ctx context.Context, arg SetLoginFailureParams) error {
+	_, err := q.db.Exec(ctx, setLoginFailure, arg.FailedLogins, arg.LockedUntil)
+	return err
+}
+
+const updatePasswordHash = `-- name: UpdatePasswordHash :exec
+UPDATE app_user SET password_hash = $1 WHERE id = 1
+`
+
+func (q *Queries) UpdatePasswordHash(ctx context.Context, passwordHash string) error {
+	_, err := q.db.Exec(ctx, updatePasswordHash, passwordHash)
+	return err
 }

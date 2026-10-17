@@ -16,6 +16,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/india-analyzer/api/internal/auth"
 	"github.com/india-analyzer/api/internal/config"
 	"github.com/india-analyzer/api/internal/httpx"
 	"github.com/india-analyzer/api/internal/logx"
@@ -49,7 +50,8 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 	}
 	defer pool.Close()
 
-	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool})
+	accounts := auth.New(pool, auth.Config{SessionDays: cfg.SessionDays, MaxFails: cfg.LoginMaxFails}, log)
+	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts})
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
 		Handler:           router,

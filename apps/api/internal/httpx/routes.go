@@ -9,6 +9,11 @@ const (
 	kindHealthz                           // GET /healthz
 	kindReadyz                            // GET /readyz
 	kindBrokerDisabled                    // 422 BROKER_DISABLED (manual price mode, D-1)
+	kindAuthLogin                         // POST /auth/login
+	kindAuthLogout
+	kindAuthLogoutAll
+	kindAuthMe
+	kindAuthChangePassword
 )
 
 type limitKind int
@@ -26,6 +31,7 @@ type route struct {
 	Public bool // reachable without a session (docs/03 section 1)
 	Limit  limitKind
 	Body   int64 // 0 = DefaultBodyLimit
+	NoCSRF bool  // authenticated by its own secret (Telegram webhook), so no CSRF header is required
 	Kind   handlerKind
 }
 
@@ -47,6 +53,8 @@ func (rt route) handler(d Deps) http.Handler {
 			return NewError(http.StatusUnprocessableEntity, "BROKER_DISABLED",
 				"Broker connection is disabled in manual price mode", nil)
 		})
+	case kindAuthLogin, kindAuthLogout, kindAuthLogoutAll, kindAuthMe, kindAuthChangePassword:
+		return authHandler(d, rt.Kind)
 	default:
 		return Adapt(func(http.ResponseWriter, *http.Request) error {
 			return NewError(http.StatusNotImplemented, CodeNotImplemented,
@@ -72,11 +80,11 @@ var routes = []route{
 	{Method: mGet, Path: "/admin/status"},
 
 	// Auth (section 2)
-	{Method: mPost, Path: "/auth/login", Public: true, Limit: limitLogin},
-	{Method: mPost, Path: "/auth/logout"},
-	{Method: mPost, Path: "/auth/logout-all"},
-	{Method: mGet, Path: "/auth/me"},
-	{Method: mPost, Path: "/auth/change-password"},
+	{Method: mPost, Path: "/auth/login", Public: true, Limit: limitLogin, Kind: kindAuthLogin},
+	{Method: mPost, Path: "/auth/logout", Kind: kindAuthLogout},
+	{Method: mPost, Path: "/auth/logout-all", Kind: kindAuthLogoutAll},
+	{Method: mGet, Path: "/auth/me", Kind: kindAuthMe},
+	{Method: mPost, Path: "/auth/change-password", Kind: kindAuthChangePassword},
 
 	// Stocks (sections 3-6)
 	{Method: mGet, Path: "/stocks/index"},
@@ -143,7 +151,7 @@ var routes = []route{
 	{Method: mPost, Path: "/telegram/link-code"},
 	{Method: mDelete, Path: "/telegram/link"},
 	{Method: mPost, Path: "/telegram/test"},
-	{Method: mPost, Path: "/telegram/webhook", Public: true},
+	{Method: mPost, Path: "/telegram/webhook", Public: true, NoCSRF: true},
 
 	// Imports and owner-entered data (section 14)
 	{Method: mPost, Path: "/imports/{kind}/validate", Body: ImportBodyLimit},

@@ -39,9 +39,9 @@ Implement the single-user password login with lockout, hashed sessions and CSRF 
 4. Write integration tests for every SEC-* row listed
 
 ## Acceptance criteria (all must be true)
-- [ ] All SEC-01, 02, 03, 09, 10, 12 tests pass
-- [ ] Cookie flags: httpOnly, Secure, SameSite=Lax
-- [ ] Changing the password revokes other sessions
+- [x] All SEC-01, 02, 03, 09, 10, 12 tests pass (apps/api: `TestLoginLockoutAndDelay`, `TestSessionCookieHashedTokenAndRevocation`, `TestCSRFHeader`, `TestUnauthenticatedAccess`, `TestLoginRateLimitWithRealService`, `TestCheckNewPassword`/`TestChangePasswordPolicy`; SEC-06 `TestSafeNext`; `go test ./... -count=1` green)
+- [x] Cookie flags: httpOnly, Secure, SameSite=Lax (asserted in `TestSessionCookieHashedTokenAndRevocation`)
+- [x] Changing the password revokes other sessions (same test; current session survives)
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `SEC-01` (see `docs/07-edge-cases-tests.md`)
