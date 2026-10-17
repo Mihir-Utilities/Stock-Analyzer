@@ -281,3 +281,14 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | SYS-20 | Stale `running` row (D01) | A running row older than 2x the job timeout is marked `failed` (`stale_run`) by the next run; a fresher row is respected and the new run is `skipped` | I |
 | SYS-21 | Runner timeout and isolation (D01) | After the deadline no new item starts, the current item finishes, status `partial` with `timed_out`, `items_remaining`; one failing item never fails the run; only the first 50 errors are stored, scrubbed | U |
 | SYS-22 | worker-http concurrency and kinds (D01) | A second `POST /run` while a job runs answers 409 `BUSY` and leaves its row `queued`; kinds outside `post_import`/`mf_refresh` answer 422; unknown job 404; hard cap 4 min marks the job `failed` (`hard_timeout`) | I |
+
+## F01 additions (app shell, tokens, security headers)
+| ID | Scenario | Required behavior | Test |
+|---|---|---|---|
+| SEC-14 | `next` encoded or smuggled: `/%2F%2Fevil.com`, `/%5Cevil.com`, `/\tevil.com`, `/%0d%0a//evil.com`, `//evil.com`, `https://...`, `javascript:`, over 2,048 chars, malformed `%` escape, `/login` loop | All collapse to `/`; login URL carries only a validated path (F01) | U, E |
+| SEC-15 | CSP nonce | Each response carries a different nonce; no inline script runs without it; no CSP violation in the console on shell and login (F01) | E |
+| UI-11 | Tokens equal the design doc | Every colour in docs/06a 3.1 and the categorical palette equals `tokens.ts`; CSS variables and the ECharts theme are generated from it; no hex literal elsewhere in `src` (F01) | U |
+| UI-12 | Known contrast deviations (OQ-16) | The list of semantic text pairs under 4.5:1 and chart colours under 3:1 equals the documented list exactly; primary and secondary text pass 4.5:1 on every surface in both themes (F01) | U |
+| UI-13 | Shell at 320, 375, 768, 1024, 1440 px | No horizontal scroll; bottom tabs below 1024 px with 44 px targets, sidebar from 1024 px (F01) | E |
+| UI-14 | No external request at runtime | Every network request on shell, login and 404 pages is same-origin; fonts are self-hosted (F01) | E |
+| UI-15 | 401 on any API call | Query caches cleared and browser sent to `/login?next=<validated path>`; the login call itself is exempt; never loops on `/login` (F01) | U |

@@ -59,3 +59,8 @@ Thumbs.db
 
 # Local agent worktrees (copies of the repo; never commit)
 .claude/worktrees/
+
+# Playwright output
+test-results/
+playwright-report/
+storybook-static/

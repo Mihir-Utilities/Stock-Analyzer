@@ -6,7 +6,8 @@ Design language, tokens and components: `06a-design-system.md`. Every screen imp
 - Next.js App Router, TypeScript strict, Tailwind, shadcn/ui, TanStack Query (retry 2, backoff), ECharts (core build, lazy), zod types generated from OpenAPI, `Intl` for formatting, `decimal.js` for portfolio money.
 - `next.config.js` rewrites `/api/:path*` to the Go API so cookies are first-party; no CORS.
 - Auth gate in `middleware.ts`: no `session` cookie -> `/login`; any API 401 clears caches and redirects.
-- CSP: `default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'`. No third-party scripts, fonts or iframes.
+- CSP: `default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'nonce-<per-request>'; connect-src 'self'` plus `font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`. No third-party scripts, fonts or iframes. (F01 amendment: Next.js emits inline bootstrap scripts, so `script-src 'self'` alone blocks hydration; `middleware.ts` adds a fresh nonce per request, which keeps every external or unnamed inline script blocked. The pre-paint theme script is the same-origin file `/theme-init.js`.)
+- Other headers on every response: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, `Strict-Transport-Security`, `Cross-Origin-Opener-Policy: same-origin`. Images are not optimised (`images.unoptimized`, D-OQ8).
 - Cold API: every request timeout 70 s; after 3 s show "Waking up the server. This can take up to a minute on the free plan." with elapsed seconds.
 - `staleTime`: stock profile 60 s; prices 5 min; analysis 10 min; fundamentals/shareholding 6 h; MF 30 min; stock index 1 h.
 - PWA: manifest + icons; service worker caches only the app shell.

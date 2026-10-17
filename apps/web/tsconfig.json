@@ -16,6 +16,11 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@analyzer/api-types": ["../../packages/api-types/src/index.d.ts"]
+    },
     "plugins": [{ "name": "next" }]
   },
   "include": [
