@@ -19,6 +19,7 @@ Serve peer tables, stock comparison and the whitelisted screener over precompute
 - Peers per the algorithm (requires owner sector/industry; otherwise `DATA_UNAVAILABLE reason=no_sector_data`)
 - Compare endpoint (2-5 symbols, rebase, metrics, best)
 - Screener query with metric whitelist, parameterised SQL over `screener_row.metrics`, coverage and `excluded_for_missing`, saved screens in `app_setting`, presets
+- Screener and compare responses carry a per-stock **last updated** date (latest owner-entered fundamentals/shareholding) and a stale flag (D-R); no value shown without it
 
 ## Out of scope (do not do in this task)
 - Computing `screener_row` (worker D05)

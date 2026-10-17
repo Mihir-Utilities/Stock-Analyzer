@@ -17,6 +17,7 @@ Build stock browse, comparison and the screener with scatter/histogram insights.
 - Browse table with filters and sparklines; Compare with rebased chart, metrics table, radar, correlation heatmap
 - Screener builder, presets, results table with data bars, scatter of any two metrics, histogram with thresholds, saved screens, watchlist multi-select, CSV export
 - Notices about owner-data coverage
+- Screener and compare views show the per-stock **last updated** stamp and highlight stale data (D-R)
 
 ## Out of scope (do not do in this task)
 - Nothing else; stay within the scope above.

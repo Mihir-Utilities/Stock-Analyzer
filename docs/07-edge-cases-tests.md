@@ -62,6 +62,7 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ACT-12 | Mixed `src_adjusted` bars for one stock; owner confirms an action | `adj_close` factors applied only to `src_adjusted=false` bars; `src_adjusted=true` bars keep `adj_close = close`; never adjusted twice | U |
 | ACT-13 | Reverse split / consolidation (price ratio above 1.35, e.g. 1:10 gives about x10) | Not matched by the detector (fractions are all below 1); the bar fails the 50% day-change sanity rule and is `suspect`; no action is created; owner enters it manually (S8) | U |
 | ACT-14 | Detector reachability | Fractions 2/3, 3/4, 4/5, 5/6 can never pass the `abs(C_t/C_{t-1} - 1) > 0.35` trigger (a 1:2 bonus, ratio 0.667, is not detected, consistent with ACT-07); a unit test pins this so a threshold change is deliberate (S8; see OQ-13) | U |
+| ACT-15 | One-day drop of 20% or more that is not matched by the 0.35 trigger (for example a 1:2 bonus, ratio 0.667, or a real crash) | Soft notice "split/bonus or real move?" with Dismiss / Add corporate action; no `detected` action, no `UNCONFIRMED_ACTION`, ML not hidden; a drop under 20% raises nothing (D-O) | U |
 
 ## IMP: imports and manual entry
 | ID | Scenario | Required behavior | Test |

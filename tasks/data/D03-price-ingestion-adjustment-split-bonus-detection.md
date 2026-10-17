@@ -30,6 +30,7 @@ Ingest daily candles with sanity rules, compute `adj_close` from confirmed actio
 - Detector with fraction list, thresholds and volume rule from the spec (configurable)
 - Prices import interplay (source labeling, upsert)
 - `PRICES_ALREADY_ADJUSTED` / `src_adjusted` handling
+- Soft one-day-drop flag (D-O, ACT-15); resolve OQ-15 (dismissal storage) before building it
 
 ## Out of scope (do not do in this task)
 - Alerts, analysis
