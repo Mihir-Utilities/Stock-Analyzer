@@ -65,3 +65,14 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | D01-A2 | Backoff `min(60, 2^n + random(0,1))` uses n = 1 for the first retry (2-3 s, then 4-5 s, then 8-9 s). | docs/01 rule 3 does not say whether the attempt counts from 0 |
 | D01-A3 | worker-http: `X-Timestamp` is unix seconds; `POST /run` returns 202 and runs in the background; identical signatures are single-use inside the window. B01 (the Go caller) must sign the same way. | docs/04 section 4 did not fix the timestamp format or sync/async behaviour (now written there) |
 | D01-A4 | Run status: timeout or `mark_partial` -> `partial`; an exception escaping the job -> `failed`; item failures alone keep `ok` (counts in `items_failed`, first 50 errors in `details`). The "failed twice in a row / > 20% failed" owner notification (rule 7) is added with the Telegram task (D06). | docs/04 rules 3, 4 and 7 |
+
+## B01 choices where the spec is silent (Claude, 2026-10-17; owner may overrule, none blocks)
+| # | Question | Choice made in B01 | Where |
+|---|---|---|---|
+| B01-1 | Error code for a wrong HTTP method (405) and an oversized body (413): docs/03 section 1 lists no such codes | Status 405 / 413 with code `BAD_REQUEST` (envelope kept, status matches the situation) | `internal/httpx` |
+| B01-2 | `limit` above 200: clamp or 422? | Clamp to 200; non-integer or < 1 is rejected (handlers answer 422 with `details.fields`) | `internal/pagination` |
+| B01-3 | `DELETE /screener/saved`: docs/03 section 9 names no key | `DELETE /screener/saved/{name}` (saved screens are keyed by name inside the `app_setting` list) | `openapi.yaml`, router |
+| B01-4 | `/healthz` is documented without the base path, the API lives under `/api/v1` | Served at both `/healthz` (hosting health check) and `/api/v1/healthz`; `/readyz` only under `/api/v1` | router |
+| B01-5 | Protected routes before B02 | Fail closed: default session checker returns 401 for everything protected; stubs are therefore only reachable once B02 plugs in the real checker (tests inject an allow-all checker) | `httpx.DenyAll` |
+| B01-6 | Generated Go server types (task scope) | Not generated: `oapi-codegen` output pulls in a runtime module with a large dependency tree for no benefit while every body is still a stub. Go handlers use hand-written types checked against `openapi.yaml` by `TestRoutesMatchOpenAPI`; TS types are generated (`packages/api-types`). Revisit when B03+ adds typed responses | `internal/httpx` |
+| B01-7 | CSRF header `X-Requested-With: fetch` (docs/03 section 1) | Documented in `openapi.yaml`; enforcement is part of B02 (auth/session security), not B01 | B02 |

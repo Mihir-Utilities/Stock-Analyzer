@@ -18,10 +18,10 @@ Claude Code must generate `openapi.yaml` from this file first, then implement ha
 ```json
 { "error": { "code": "NOT_FOUND", "message": "Instrument not found", "details": { "symbol": "XYZ" } } }
 ```
-Codes: `BAD_REQUEST` 400, `UNAUTHENTICATED` 401, `FORBIDDEN` 403, `NOT_FOUND` 404, `CONFLICT` 409, `UNPROCESSABLE` 422 (validation, with `details.fields[]`), `RATE_LIMITED` 429 (with `Retry-After`), `DATA_UNAVAILABLE` 404 (valid target, no data yet; details: `reason`), `SOURCE_DOWN` 503, `INTERNAL` 500.
+Codes: `BAD_REQUEST` 400, `UNAUTHENTICATED` 401, `FORBIDDEN` 403, `NOT_FOUND` 404, `CONFLICT` 409, `UNPROCESSABLE` 422 (validation, with `details.fields[]`), `RATE_LIMITED` 429 (with `Retry-After`), `DATA_UNAVAILABLE` 404 (valid target, no data yet; details: `reason`), `SOURCE_DOWN` 503, `INTERNAL` 500. A wrong method (405) and an oversized body (413) use `BAD_REQUEST`; routes not yet built return 501 `NOT_IMPLEMENTED`.
 - Auth: cookie `session` (httpOnly, Secure, SameSite=Lax, path `/`). All routes need it except `GET /healthz`, `POST /auth/login`, `POST /telegram/webhook`.
 - CSRF: all non-GET requests must include header `X-Requested-With: fetch` (browsers cannot add it cross-site without CORS preflight; we send no CORS headers).
-- Pagination: cursor-based `?limit=&cursor=`; `limit` default 50, max 200; response `{"items":[...],"next_cursor":null|string}`.
+- Pagination: cursor-based `?limit=&cursor=`; `limit` default 50, max 200 (larger values are clamped to 200; non-integer or < 1 is a 422); response `{"items":[...],"next_cursor":null|string}`.
 - Symbol path parameter: URL-encoded exact exchange symbol (`M%26M`, `BAJAJ-AUTO`); matching is case-insensitive; resolved through `instrument.symbol` then `symbol_alias.old_symbol` (alias -> 301-style response `{"redirect_symbol": "NEW"}` with HTTP 200 and `data.redirect_symbol`).
 - Validation failures return 422 with `details.fields: [{"field":"qty","message":"must be > 0"}]`.
 - Idempotency: `POST /portfolio/txns` accepts optional header `Idempotency-Key` (UUID) stored 24 h.
@@ -171,7 +171,7 @@ List from `market_holiday` (trading) plus `"year_loaded": true|false`. When no r
 - **Whitelisted metrics** (numeric unless noted; stored in `screener_row.metrics`): `market_cap_cr`, `price`, `pe`, `pb`, `ev_ebitda`, `div_yield`, `roe`, `roce`, `debt_equity`, `interest_coverage`, `op_margin`, `net_margin`, `rev_growth_1y`, `rev_growth_3y`, `rev_growth_5y`, `profit_growth_1y`, `profit_growth_3y`, `profit_growth_5y`, `cfo_to_pat`, `promoter_pct`, `promoter_pledged_pct`, `fii_pct`, `dii_pct`, `mf_pct`, `fii_change_qoq`, `mf_change_qoq`, `rsi14`, `dist_52w_high_pct`, `ret_1m`, `ret_6m`, `ret_1y`, `quality_score`, `trend_score`, `risk_score`; strings: `sector`, `industry`. Any other metric -> 422.
 - Result item: `{ "symbol","name","values": { requested metrics }, "coverage": 0.83 }`. Stocks missing a metric used in a filter are excluded; response `meta.excluded_for_missing: {"roe": 41}`.
 - Implementation: translate to parameterised SQL over `screener_row.metrics` using `(metrics->>'roe')::float8`; no string interpolation of user input; metric names come only from the whitelist map.
-- Saved screens: `GET/POST/DELETE /screener/saved` storing `{name, spec}` in `app_setting` key `saved_screens` (max 30).
+- Saved screens: `GET/POST /screener/saved` and `DELETE /screener/saved/{name}` storing `{name, spec}` in `app_setting` key `saved_screens` (max 30).
 - Presets (defined in code, editable later): Quality (`roe>15`, `debt_equity<0.5`, `profit_growth_3y>10`, `promoter_pledged_pct<5`), Value (`pe<15`, `pb<2`, `roe>12`), Growth (`rev_growth_3y>15`, `profit_growth_3y>15`), Momentum (`dist_52w_high_pct>-10`, `ret_6m>15`).
 
 ## 10. Mutual funds
@@ -261,7 +261,7 @@ The token is never returned by any endpoint and never logged.
 
 ## 15. Admin / ops
 
-`GET /admin/status` -> `{ "sources": [source_health rows], "jobs": [latest ingestion_run per job], "coverage": { "instruments": 2231, "tracked": 612, "with_prices": 598, "with_fundamentals": 410, "with_shareholding": 401 }, "db": { "size_mb": 210, "tables": [ {name, mb, rows} ], "warn_level": "ok|70|85|95|limit" }, "holiday_list_missing_years": [2026], "version": "git sha", "storage_policy": {...}` . `GET /healthz` -> `{ "ok": true }` (no DB call). `GET /readyz` (auth) -> DB ping.
+`GET /admin/status` -> `{ "sources": [source_health rows], "jobs": [latest ingestion_run per job], "coverage": { "instruments": 2231, "tracked": 612, "with_prices": 598, "with_fundamentals": 410, "with_shareholding": 401 }, "db": { "size_mb": 210, "tables": [ {name, mb, rows} ], "warn_level": "ok|70|85|95|limit" }, "holiday_list_missing_years": [2026], "version": "git sha", "storage_policy": {...}` . `GET /healthz` -> `{ "ok": true }` (no DB call; also served at the root path `/healthz` for the hosting health check). `GET /readyz` (auth) -> DB ping.
 
 ## 16. Rate limits and security headers
 - Per-IP login: 10/min. Authenticated general: 120/min. Refresh endpoints: as above. Return `X-RateLimit-*` headers (optional).

@@ -25,7 +25,7 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 | 0 | T00 | DONE | 1 EXEC, 4 COMMIT | f55371c | T00 review done and fixes applied (deny-list, licence scan, .gitignore, CI hardening); GitHub run green on 16fa978. First run (921a1ba) failed: platform-dependent notices. OQ-8 closed as D-OQ8; egress allow-list D-N added to D01/B01 |
 | 0 | T01 | IN-PROGRESS (owner spikes pending) | | | manual mode: S1 recorded, S2/S3/S5 skipped, S4 = manual adjustment check; owner needed for S4, S9 (25 MB upload), S12-S14, S17 |
 | 0 | T02 | DONE (pending green CI) | | | parallel with T01 after T00 |
-| 1 | B01 | TODO | | | produces openapi.yaml; unlocks parallel FE/BE |
+| 1 | B01 | DONE (pending green CI) | | | produces openapi.yaml; unlocks parallel FE/BE |
 | 1 | D01 | DONE (pending green CI) | | | |
 | 1 | F01 | TODO | | | |
 | 1 | B02 | TODO | | | |
@@ -79,3 +79,4 @@ Frontend and backend tasks may run in separate git worktrees/sessions. Frontend 
 - 2026-10-10: T01 automated spikes done (merged): S1 manual mode, S2/S3/S5 N/A, S6 GO, S7 GO-WITH-CHANGES, S8/S10/S11/S13/S15/S16 done on synthetic/local data; S4, S9, S12, S14, S17 and the real-data parts of S8/S10/S16 are BLOCKED-OWNER (checklists in docs/SPIKE_RESULTS.md). New open questions OQ-9..OQ-14. T01 is not DONE until the owner finishes those.
 - 2026-10-10: T02 merged (c87b100): goose migrations 0001-0010, seed command (argon2id, idempotent), sqlc queries, migration/constraint/seed tests (API-05, SYS-07, SYS-15..18). Licence scan Go collector now lists only built modules (go list -deps -test, fixed GOOS/GOARCH). Verified locally with testcontainers; go test -race only runs in CI (no gcc locally).
 - 2026-10-17: D01 merged (345fbbd): worker scaffold, egress allow-list (config/allowed_hosts.json, SAF-13), limiter, retry, breaker, runner, scrubber logs, worker-http with HMAC. Assumptions D01-A1..A4 in docs/OPEN_QUESTIONS.md for owner review. B09 must sign/poll per docs/04 section 4. Deny-list now skips .claude/worktrees/.
+- 2026-10-17: B01 merged: cmd/api skeleton, fail-fast config, scrubbing JSON logs, envelope and error mapping, rate limits, 77 route stubs (501), openapi.yaml and packages/api-types with a CI staleness check, internal/egress with forbidigo/depguard lint (SAF-13). Choices B01-1..B01-7 in docs/OPEN_QUESTIONS.md for owner review. Next: F01 (needs B01), then B02, F02, B03...

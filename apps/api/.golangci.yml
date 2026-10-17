@@ -9,3 +9,37 @@ linters:
     - unused
     - gosec
     - bodyclose
+    - forbidigo
+    - depguard
+  settings:
+    forbidigo:
+      # D-N / SAF-13: the only outbound HTTP client is internal/egress (host allow-list, no
+      # redirects to other hosts). Everything below is forbidden outside that package.
+      forbid:
+        - pattern: '^http\.(Get|Head|Post|PostForm|DefaultClient|DefaultTransport|Client|Transport)$'
+          msg: use internal/egress (the only allowed outbound HTTP client, decision D-N)
+        - pattern: '^net\.(Dial|DialTimeout)$'
+          msg: raw outbound sockets are not allowed; use internal/egress
+    depguard:
+      rules:
+        no-other-http-clients:
+          list-mode: lax
+          files:
+            - $all
+            - "!**/internal/egress/**"
+          deny:
+            - pkg: github.com/go-resty/resty
+              desc: use internal/egress (decision D-N)
+            - pkg: github.com/valyala/fasthttp
+              desc: use internal/egress (decision D-N)
+            - pkg: github.com/imroc/req
+              desc: use internal/egress (decision D-N)
+            - pkg: github.com/hashicorp/go-retryablehttp
+              desc: use internal/egress (decision D-N)
+            - pkg: github.com/parnurzeal/gorequest
+              desc: use internal/egress (decision D-N)
+  exclusions:
+    rules:
+      - path: internal/egress/
+        linters:
+          - forbidigo

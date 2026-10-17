@@ -1,0 +1,3439 @@
+openapi: "3.0.3"
+info:
+  title: "India Stock & MF Analyzer API (Safe Edition)"
+  version: "0.1.0"
+  description: "Contract of docs/03-api-spec.md. All endpoints are stubs returning 501 NOT_IMPLEMENTED in the error envelope until their owning task lands (B01). Success responses use the envelope {data, meta, warnings}; errors use {error:{code,message,details}} with the HTTP status of the code. GET /healthz and GET /readyz are also served at the root path (/healthz) for the hosting health check. Non-GET requests must send `X-Requested-With: fetch` (CSRF, enforced from B02), except the Telegram webhook which uses its secret header. Private single-user app: no public pages, no CORS."
+servers:
+  - url: "/api/v1"
+tags:
+  - name: "ops"
+    description: "Health and admin (section 15)"
+  - name: "auth"
+    description: "Auth (section 2)"
+  - name: "stocks"
+    description: "Stocks: search and profile (section 3)"
+  - name: "prices"
+    description: "Prices and indicators (section 4)"
+  - name: "owner-data"
+    description: "Fundamentals, ownership, events, peers, links (section 5)"
+  - name: "predictions"
+    description: "Prediction, experimental (section 6)"
+  - name: "jobs"
+    description: "Live refresh jobs (section 7)"
+  - name: "market"
+    description: "Market and compare (section 8)"
+  - name: "screener"
+    description: "Screener (section 9)"
+  - name: "mutual-funds"
+    description: "Mutual funds (section 10)"
+  - name: "watchlist"
+    description: "Watchlist (section 11)"
+  - name: "portfolio"
+    description: "Portfolio (section 12)"
+  - name: "alerts"
+    description: "Alerts and Telegram (section 13)"
+  - name: "imports"
+    description: "Imports and owner-entered data (section 14)"
+  - name: "broker"
+    description: "Broker connection (section 14a)"
+security:
+  - cookieAuth: []
+paths:
+  "/healthz":
+    get:
+      operationId: "getHealthz"
+      tags:
+        - "ops"
+      summary: "Liveness (no database call). Also served at the root path /healthz. (docs/03 section 15)"
+      security: []
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Health"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/readyz":
+    get:
+      operationId: "getReadyz"
+      tags:
+        - "ops"
+      summary: "Readiness: pings the database (one retry after a short backoff, SYS-01). (docs/03 section 15)"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/admin/status":
+    get:
+      operationId: "getAdminStatus"
+      tags:
+        - "ops"
+      summary: "Sources, jobs, coverage, database size and warn level, holiday coverage, version. (docs/03 section 15)"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/auth/login":
+    post:
+      operationId: "postAuthLogin"
+      tags:
+        - "auth"
+      summary: "Log in with the owner password (argon2id, lockout, 10/min per IP). (docs/03 section 2)"
+      security: []
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/auth/logout":
+    post:
+      operationId: "postAuthLogout"
+      tags:
+        - "auth"
+      summary: "Revoke the current session and clear the cookie. (docs/03 section 2)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/auth/logout-all":
+    post:
+      operationId: "postAuthLogoutall"
+      tags:
+        - "auth"
+      summary: "Revoke all sessions. (docs/03 section 2)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/auth/me":
+    get:
+      operationId: "getAuthMe"
+      tags:
+        - "auth"
+      summary: "Current session: authenticated, telegram_linked, prefs. (docs/03 section 2)"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/auth/change-password":
+    post:
+      operationId: "postAuthChangepassword"
+      tags:
+        - "auth"
+      summary: "Change password (min 12 chars, differs from current; revokes other sessions). (docs/03 section 2)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/stocks/index":
+    get:
+      operationId: "getStocksIndex"
+      tags:
+        - "stocks"
+      summary: "Compact list for client-side search (ETag, Cache-Control private max-age=3600). (docs/03 section 3)"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+              example:
+                data:
+                  generated_at: "2026-10-09T13:05:00Z"
+                  count: 1
+                  items:
+                    - - 1
+                      - "TCS"
+                      - "Tata Consultancy Services Ltd"
+                      - 3
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/stocks":
+    get:
+      operationId: "getStocks"
+      tags:
+        - "stocks"
+      summary: "Server search: exact symbol, symbol prefix, name prefix, trigram similarity (0.3). (docs/03 section 3)"
+      parameters:
+        - name: "q"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+          description: "Min 1 character."
+        - name: "index"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+        - name: "sector"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+        - name: "kind"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+          description: "Default equity."
+        - name: "status"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+          description: "Default active."
+        - "$ref": "#/components/parameters/Limit"
+        - "$ref": "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/stocks/{symbol}":
+    get:
+      operationId: "getStocksSymbol"
+      tags:
+        - "stocks"
+      summary: "Stock profile with quote, freshness and flags. Side effects: last_opened_at, tracked set. (docs/03 section 3)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive (M%26M, BAJAJ-AUTO); old symbols resolve through symbol_alias (data.redirect_symbol)."
+          schema:
+            type: "string"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+              example:
+                data:
+                  id: 123
+                  symbol: "TCS"
+                  name: "Tata Consultancy Services Ltd"
+                  isin: "INE467B01029"
+                  series: "EQ"
+                  sector: "IT"
+                  industry: "IT Services"
+                  company_type: "general"
+                  status: "active"
+                  instrument_kind: "equity"
+                  listing_date: "2004-08-25"
+                  broker_ok: null
+                  tracked: true
+                  price_mode: "manual"
+                  quote: null
+                  freshness:
+                    prices_stale: false
+                    holidays_missing: false
+                    prices_as_of: "2026-10-09"
+                    fundamentals_as_of: null
+                    shareholding_as_of: null
+                    predictions_as_of: null
+                  flags:
+                    no_prices: false
+                    limited_history: false
+                    series_warning: null
+                meta:
+                  as_of: "2026-10-09T13:05:00Z"
+                  source: "import"
+                  stale: false
+                  stale_age_hours: 0
+                warnings: []
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/stocks/{symbol}/prices":
+    get:
+      operationId: "getStocksSymbolPrices"
+      tags:
+        - "prices"
+      summary: "Price bars (max 2,000 points, LTTB / weekly candles). (docs/03 section 4)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive (M%26M, BAJAJ-AUTO); old symbols resolve through symbol_alias (data.redirect_symbol)."
+          schema:
+            type: "string"
+        - name: "range"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            enum:
+              - "1M"
+              - "3M"
+              - "6M"
+              - "1Y"
+              - "3Y"
+              - "5Y"
+              - "MAX"
+            default: "1Y"
+        - name: "adjusted"
+          in: "query"
+          required: false
+          schema:
+            type: "boolean"
+            default: true
+        - name: "downsample"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            default: "auto"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+    delete:
+      operationId: "deleteStocksSymbolPrices"
+      tags:
+        - "prices"
+      summary: "Delete imported prices between two dates (owner confirm required). (docs/03 section 4)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive (M%26M, BAJAJ-AUTO); old symbols resolve through symbol_alias (data.redirect_symbol)."
+          schema:
+            type: "string"
+        - name: "from"
+          in: "query"
+          required: true
+          schema:
+            type: "string"
+            format: "date"
+        - name: "to"
+          in: "query"
+          required: true
+          schema:
+            type: "string"
+            format: "date"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/ConfirmBody"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/stocks/{symbol}/prices/delete-preview":
+    post:
+      operationId: "postStocksSymbolPricesDeletepreview"
+      tags:
+        - "prices"
+      summary: "Row count for a prices delete. (docs/03 section 4)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive (M%26M, BAJAJ-AUTO); old symbols resolve through symbol_alias (data.redirect_symbol)."
+          schema:
+            type: "string"
+        - name: "from"
+          in: "query"
+          required: true
+          schema:
+            type: "string"
+            format: "date"
+        - name: "to"
+          in: "query"
+          required: true
+          schema:
+            type: "string"
+            format: "date"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/prices/trim":
+    post:
+      operationId: "postPricesTrim"
+      tags:
+        - "prices"
+      summary: "Trim history before a date for chosen stocks (owner confirm required). (docs/03 section 4)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/TrimRequest"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/prices/trim/preview":
+    post:
+      operationId: "postPricesTrimPreview"
+      tags:
+        - "prices"
+      summary: "Row counts per symbol and estimated MB freed for a trim. (docs/03 section 4)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/TrimPreviewRequest"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/stocks/{symbol}/indicators":
+    get:
+      operationId: "getStocksSymbolIndicators"
+      tags:
+        - "prices"
+      summary: "Latest analysis_snapshot: returns, technicals, scores, series. (docs/03 section 4)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive (M%26M, BAJAJ-AUTO); old symbols resolve through symbol_alias (data.redirect_symbol)."
+          schema:
+            type: "string"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/stocks/{symbol}/fundamentals":
+    get:
+      operationId: "getStocksSymbolFundamentals"
+      tags:
+        - "owner-data"
+      summary: "Owner-supplied fundamentals with derived values. (docs/03 section 5)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive (M%26M, BAJAJ-AUTO); old symbols resolve through symbol_alias (data.redirect_symbol)."
+          schema:
+            type: "string"
+        - name: "basis"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            enum:
+              - "consolidated"
+              - "standalone"
+              - "auto"
+        - name: "period"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            enum:
+              - "Q"
+              - "A"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/stocks/{symbol}/shareholding":
+    get:
+      operationId: "getStocksSymbolShareholding"
+      tags:
+        - "owner-data"
+      summary: "Shareholding by quarter (promoter, FII, DII, MF, ...). (docs/03 section 5)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive (M%26M, BAJAJ-AUTO); old symbols resolve through symbol_alias (data.redirect_symbol)."
+          schema:
+            type: "string"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+    post:
+      operationId: "postStocksSymbolShareholding"
+      tags:
+        - "imports"
+      summary: "Manual shareholding quarter entry. (docs/03 section 14)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive (M%26M, BAJAJ-AUTO); old symbols resolve through symbol_alias (data.redirect_symbol)."
+          schema:
+            type: "string"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/FreeObject"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/stocks/{symbol}/events":
+    get:
+      operationId: "getStocksSymbolEvents"
+      tags:
+        - "owner-data"
+      summary: "Corporate actions and calendar. (docs/03 section 5)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive (M%26M, BAJAJ-AUTO); old symbols resolve through symbol_alias (data.redirect_symbol)."
+          schema:
+            type: "string"
+        - name: "from"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            format: "date"
+        - name: "to"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            format: "date"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/stocks/{symbol}/peers":
+    get:
+      operationId: "getStocksSymbolPeers"
+      tags:
+        - "owner-data"
+      summary: "Peers (analytics spec section 7). (docs/03 section 5)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive (M%26M, BAJAJ-AUTO); old symbols resolve through symbol_alias (data.redirect_symbol)."
+          schema:
+            type: "string"
+        - name: "limit"
+          in: "query"
+          required: false
+          schema:
+            type: "integer"
+            default: 8
+        - name: "add"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+          description: "Comma separated symbols (temporary)."
+        - name: "remove"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+          description: "Comma separated symbols (temporary)."
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/stocks/{symbol}/links":
+    get:
+      operationId: "getStocksSymbolLinks"
+      tags:
+        - "owner-data"
+      summary: "Plain research hyperlinks from config/research_links.json (never fetched by the server). (docs/03 section 5)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive (M%26M, BAJAJ-AUTO); old symbols resolve through symbol_alias (data.redirect_symbol)."
+          schema:
+            type: "string"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/stocks/{symbol}/prediction":
+    get:
+      operationId: "getStocksSymbolPrediction"
+      tags:
+        - "predictions"
+      summary: "Experimental prediction; carries the experimental flag and disclaimer, never a single target price. (docs/03 section 6)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive (M%26M, BAJAJ-AUTO); old symbols resolve through symbol_alias (data.redirect_symbol)."
+          schema:
+            type: "string"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+              example:
+                data:
+                  experimental: true
+                  disclaimer: "Experimental. Not investment advice. Statistical models often fail out of sample."
+                  as_of: "2026-10-09"
+                  ref_close: 3500.0
+                  horizons:
+                    - days: 5
+                      shown: true
+                      p_up: 0.54
+                      bucket: "slightly_up"
+                      band:
+                        q10: -0.041
+                        q50: 0.002
+                        q90: 0.046
+                        price_q10: 3356
+                        price_q50: 3507
+                        price_q90: 3661
+                      hidden_reason: null
+                    - days: 21
+                      shown: false
+                      hidden_reason: "model_not_better_than_baseline"
+                  trend:
+                    score: 72
+                    label: "up"
+                  risk:
+                    score: 41
+                    label: "medium"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/stocks/{symbol}/refresh":
+    post:
+      operationId: "postStocksSymbolRefresh"
+      tags:
+        - "jobs"
+      summary: "Refresh job (broker mode only; 422 PRICE_MODE_MANUAL in manual price mode). (docs/03 section 7)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive (M%26M, BAJAJ-AUTO); old symbols resolve through symbol_alias (data.redirect_symbol)."
+          schema:
+            type: "string"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      responses:
+        "202":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/jobs/{id}":
+    get:
+      operationId: "getJobsId"
+      tags:
+        - "jobs"
+      summary: "Job status (poll every 3 s up to 3 minutes). (docs/03 section 7)"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Numeric id."
+          schema:
+            type: "integer"
+            format: "int64"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/mf/schemes/{code}/refresh":
+    post:
+      operationId: "postMfSchemesCodeRefresh"
+      tags:
+        - "jobs"
+      summary: "mf_refresh job. (docs/03 section 7)"
+      parameters:
+        - name: "code"
+          in: "path"
+          required: true
+          description: "Mutual fund scheme code (AMFI)."
+          schema:
+            type: "integer"
+            format: "int64"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      responses:
+        "202":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/market/overview":
+    get:
+      operationId: "getMarketOverview"
+      tags:
+        - "market"
+      summary: "Indices, VIX, movers, market status. (docs/03 section 8)"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/market/holidays":
+    get:
+      operationId: "getMarketHolidays"
+      tags:
+        - "market"
+      summary: "Trading holidays for a year plus year_loaded. (docs/03 section 8)"
+      parameters:
+        - name: "year"
+          in: "query"
+          required: false
+          schema:
+            type: "integer"
+            format: "int64"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/compare":
+    get:
+      operationId: "getCompare"
+      tags:
+        - "market"
+      summary: "Compare 2-5 stocks (rebased series and metrics). (docs/03 section 8)"
+      parameters:
+        - name: "symbols"
+          in: "query"
+          required: true
+          schema:
+            type: "string"
+          description: "Comma separated, 2-5."
+        - name: "range"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+          description: "Default 1Y."
+        - name: "metrics"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+          description: "Comma separated whitelist."
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/screener/query":
+    post:
+      operationId: "postScreenerQuery"
+      tags:
+        - "screener"
+      summary: "Run a screen over whitelisted metrics. (docs/03 section 9)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/ScreenerQuery"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/screener/saved":
+    get:
+      operationId: "getScreenerSaved"
+      tags:
+        - "screener"
+      summary: "List saved screens (max 30). (docs/03 section 9)"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+    post:
+      operationId: "postScreenerSaved"
+      tags:
+        - "screener"
+      summary: "Save a screen. (docs/03 section 9)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/SavedScreenCreate"
+      responses:
+        "201":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/screener/saved/{name}":
+    delete:
+      operationId: "deleteScreenerSavedName"
+      tags:
+        - "screener"
+      summary: "Delete a saved screen by name. (docs/03 section 9)"
+      parameters:
+        - name: "name"
+          in: "path"
+          required: true
+          description: "Saved screen name."
+          schema:
+            type: "string"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/mf/schemes":
+    get:
+      operationId: "getMfSchemes"
+      tags:
+        - "mutual-funds"
+      summary: "Search schemes (trigram on name). (docs/03 section 10)"
+      parameters:
+        - name: "q"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+        - name: "category"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+        - name: "plan"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            enum:
+              - "direct"
+              - "regular"
+        - name: "option"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            enum:
+              - "growth"
+              - "idcw"
+        - name: "fund_house"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+        - name: "include_all"
+          in: "query"
+          required: false
+          schema:
+            type: "boolean"
+        - name: "group"
+          in: "query"
+          required: false
+          schema:
+            type: "boolean"
+        - "$ref": "#/components/parameters/Limit"
+        - "$ref": "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/mf/schemes/{code}":
+    get:
+      operationId: "getMfSchemesCode"
+      tags:
+        - "mutual-funds"
+      summary: "Scheme meta, latest NAV, return table, risk metrics, warnings. (docs/03 section 10)"
+      parameters:
+        - name: "code"
+          in: "path"
+          required: true
+          description: "Mutual fund scheme code (AMFI)."
+          schema:
+            type: "integer"
+            format: "int64"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/mf/schemes/{code}/nav":
+    get:
+      operationId: "getMfSchemesCodeNav"
+      tags:
+        - "mutual-funds"
+      summary: "NAV points (max 2,000). (docs/03 section 10)"
+      parameters:
+        - name: "code"
+          in: "path"
+          required: true
+          description: "Mutual fund scheme code (AMFI)."
+          schema:
+            type: "integer"
+            format: "int64"
+        - name: "range"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            enum:
+              - "1M"
+              - "6M"
+              - "1Y"
+              - "3Y"
+              - "5Y"
+              - "MAX"
+        - name: "log"
+          in: "query"
+          required: false
+          schema:
+            type: "boolean"
+            default: false
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/mf/schemes/{code}/sip":
+    get:
+      operationId: "getMfSchemesCodeSip"
+      tags:
+        - "mutual-funds"
+      summary: "SIP simulation (analytics spec section 9.4). (docs/03 section 10)"
+      parameters:
+        - name: "code"
+          in: "path"
+          required: true
+          description: "Mutual fund scheme code (AMFI)."
+          schema:
+            type: "integer"
+            format: "int64"
+        - name: "amount"
+          in: "query"
+          required: false
+          schema:
+            type: "number"
+        - name: "start"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            format: "date"
+        - name: "end"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            format: "date"
+        - name: "day"
+          in: "query"
+          required: false
+          schema:
+            type: "integer"
+            format: "int64"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/mf/compare":
+    get:
+      operationId: "getMfCompare"
+      tags:
+        - "mutual-funds"
+      summary: "Compare 2-5 schemes. (docs/03 section 10)"
+      parameters:
+        - name: "codes"
+          in: "query"
+          required: true
+          schema:
+            type: "string"
+          description: "Comma separated, 2-5."
+        - name: "range"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+          description: "Default 3Y."
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/mf/categories":
+    get:
+      operationId: "getMfCategories"
+      tags:
+        - "mutual-funds"
+      summary: "Distinct categories for filters. (docs/03 section 10)"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/watchlist":
+    get:
+      operationId: "getWatchlist"
+      tags:
+        - "watchlist"
+      summary: "Watchlist stocks and funds. (docs/03 section 11)"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+    post:
+      operationId: "postWatchlist"
+      tags:
+        - "watchlist"
+      summary: "Add a stock or fund (duplicate: 409). (docs/03 section 11)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/WatchlistCreate"
+      responses:
+        "201":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/watchlist/{id}":
+    patch:
+      operationId: "patchWatchlistId"
+      tags:
+        - "watchlist"
+      summary: "Update the note (max 500 chars). (docs/03 section 11)"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Numeric id."
+          schema:
+            type: "integer"
+            format: "int64"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/WatchlistPatch"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+    delete:
+      operationId: "deleteWatchlistId"
+      tags:
+        - "watchlist"
+      summary: "Remove an entry. (docs/03 section 11)"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Numeric id."
+          schema:
+            type: "integer"
+            format: "int64"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/portfolio/txns":
+    get:
+      operationId: "getPortfolioTxns"
+      tags:
+        - "portfolio"
+      summary: "List transactions. (docs/03 section 12)"
+      parameters:
+        - name: "symbol"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+        - "$ref": "#/components/parameters/Limit"
+        - "$ref": "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+    post:
+      operationId: "postPortfolioTxns"
+      tags:
+        - "portfolio"
+      summary: "Create a transaction (optional Idempotency-Key header, 24 h). (docs/03 section 12)"
+      parameters:
+        - name: "Idempotency-Key"
+          in: "header"
+          required: false
+          schema:
+            type: "string"
+            format: "uuid"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/TxnCreate"
+      responses:
+        "201":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/portfolio/txns/{id}":
+    patch:
+      operationId: "patchPortfolioTxnsId"
+      tags:
+        - "portfolio"
+      summary: "Edit a transaction (the whole symbol sequence is re-validated). (docs/03 section 12)"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Numeric id."
+          schema:
+            type: "integer"
+            format: "int64"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/TxnPatch"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+    delete:
+      operationId: "deletePortfolioTxnsId"
+      tags:
+        - "portfolio"
+      summary: "Delete a transaction (the whole symbol sequence is re-validated). (docs/03 section 12)"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Numeric id."
+          schema:
+            type: "integer"
+            format: "int64"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/portfolio/summary":
+    get:
+      operationId: "getPortfolioSummary"
+      tags:
+        - "portfolio"
+      summary: "Holdings, totals, XIRR, realized/unrealized P&L, allocation. Money fields are strings. (docs/03 section 12)"
+      parameters:
+        - name: "as_of"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            format: "date"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/portfolio/adjustments":
+    get:
+      operationId: "getPortfolioAdjustments"
+      tags:
+        - "portfolio"
+      summary: "Portfolio adjustments. (docs/03 section 12)"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+    post:
+      operationId: "postPortfolioAdjustments"
+      tags:
+        - "portfolio"
+      summary: "Override an adjustment. (docs/03 section 12)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/FreeObject"
+      responses:
+        "201":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/alerts":
+    post:
+      operationId: "postAlerts"
+      tags:
+        - "alerts"
+      summary: "Create an alert (params validated per kind; unknown keys rejected). (docs/03 section 13)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/AlertCreate"
+      responses:
+        "201":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+    get:
+      operationId: "getAlerts"
+      tags:
+        - "alerts"
+      summary: "List alerts. (docs/03 section 13)"
+      parameters:
+        - name: "status"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/alerts/events":
+    get:
+      operationId: "getAlertsEvents"
+      tags:
+        - "alerts"
+      summary: "Alert history with delivery status. (docs/03 section 13)"
+      parameters:
+        - name: "limit"
+          in: "query"
+          required: false
+          schema:
+            type: "integer"
+            format: "int64"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/alerts/{id}":
+    patch:
+      operationId: "patchAlertsId"
+      tags:
+        - "alerts"
+      summary: "Pause/resume or change params. (docs/03 section 13)"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Numeric id."
+          schema:
+            type: "integer"
+            format: "int64"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/FreeObject"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+    delete:
+      operationId: "deleteAlertsId"
+      tags:
+        - "alerts"
+      summary: "Delete an alert. (docs/03 section 13)"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Numeric id."
+          schema:
+            type: "integer"
+            format: "int64"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/telegram/link-code":
+    post:
+      operationId: "postTelegramLinkcode"
+      tags:
+        - "alerts"
+      summary: "Create a Telegram link code (valid 15 minutes, one use). (docs/03 section 13)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/telegram/link":
+    delete:
+      operationId: "deleteTelegramLink"
+      tags:
+        - "alerts"
+      summary: "Clear the linked chat id. (docs/03 section 13)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/telegram/test":
+    post:
+      operationId: "postTelegramTest"
+      tags:
+        - "alerts"
+      summary: "Send a test message (1 per minute). (docs/03 section 13)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/telegram/webhook":
+    post:
+      operationId: "postTelegramWebhook"
+      tags:
+        - "alerts"
+      summary: "Telegram webhook (public; authenticated by the X-Telegram-Bot-Api-Secret-Token header). (docs/03 section 13)"
+      security: []
+      parameters:
+        - name: "X-Telegram-Bot-Api-Secret-Token"
+          in: "header"
+          required: true
+          schema:
+            type: "string"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/FreeObject"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/imports/{kind}/validate":
+    post:
+      operationId: "postImportsKindValidate"
+      tags:
+        - "imports"
+      summary: "Validate an upload (multipart, 5 MB / 50,000 rows; prices 25 MB / 300,000 rows). Nothing is written. (docs/03 section 14)"
+      parameters:
+        - name: "kind"
+          in: "path"
+          required: true
+          description: "Import kind."
+          schema:
+            type: "string"
+            enum:
+              - "prices"
+              - "instruments"
+              - "holidays"
+              - "results_quarterly"
+              - "results_annual"
+              - "balance_cashflow"
+              - "fundamentals_long"
+              - "shareholding"
+              - "corporate_actions"
+              - "instrument_meta"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "multipart/form-data":
+            schema:
+              type: "object"
+              properties:
+                file:
+                  type: "string"
+                  format: "binary"
+              required:
+                - "file"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/imports/{kind}/commit":
+    post:
+      operationId: "postImportsKindCommit"
+      tags:
+        - "imports"
+      summary: "Commit a validated upload in one transaction. (docs/03 section 14)"
+      parameters:
+        - name: "kind"
+          in: "path"
+          required: true
+          description: "Import kind."
+          schema:
+            type: "string"
+            enum:
+              - "prices"
+              - "instruments"
+              - "holidays"
+              - "results_quarterly"
+              - "results_annual"
+              - "balance_cashflow"
+              - "fundamentals_long"
+              - "shareholding"
+              - "corporate_actions"
+              - "instrument_meta"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/ImportCommit"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/imports/batches":
+    get:
+      operationId: "getImportsBatches"
+      tags:
+        - "imports"
+      summary: "List import batches. (docs/03 section 14)"
+      parameters:
+        - name: "limit"
+          in: "query"
+          required: false
+          schema:
+            type: "integer"
+            format: "int64"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/imports/batches/{id}/undo":
+    post:
+      operationId: "postImportsBatchesIdUndo"
+      tags:
+        - "imports"
+      summary: "Undo a non-price, non-instruments batch within 30 days. (docs/03 section 14)"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Numeric id."
+          schema:
+            type: "integer"
+            format: "int64"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/imports/templates/{kind}":
+    get:
+      operationId: "getImportsTemplatesKind"
+      tags:
+        - "imports"
+      summary: "CSV template (header row and one example row). (docs/03 section 14)"
+      parameters:
+        - name: "kind"
+          in: "path"
+          required: true
+          description: "Import kind."
+          schema:
+            type: "string"
+            enum:
+              - "prices"
+              - "instruments"
+              - "holidays"
+              - "results_quarterly"
+              - "results_annual"
+              - "balance_cashflow"
+              - "fundamentals_long"
+              - "shareholding"
+              - "corporate_actions"
+              - "instrument_meta"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "text/csv":
+              schema:
+                type: "string"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/settings/prices-adjustment":
+    get:
+      operationId: "getSettingsPricesadjustment"
+      tags:
+        - "imports"
+      summary: "Whether prices are raw or already adjusted (null = not chosen). (docs/03 section 14)"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+    put:
+      operationId: "putSettingsPricesadjustment"
+      tags:
+        - "imports"
+      summary: "Set raw (false) or already adjusted (true). (docs/03 section 14)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/PricesAdjustmentPut"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/imports/prices/adjustment-check":
+    post:
+      operationId: "postImportsPricesAdjustmentcheck"
+      tags:
+        - "imports"
+      summary: "Compare bars around an ex-date in the uploaded file (reads only the upload). (docs/03 section 14)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/AdjustmentCheckRequest"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/instruments":
+    post:
+      operationId: "postInstruments"
+      tags:
+        - "imports"
+      summary: "Manual Add stock (existing symbol: 409). (docs/03 section 14)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/InstrumentCreate"
+      responses:
+        "201":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/stocks/{symbol}/results":
+    post:
+      operationId: "postStocksSymbolResults"
+      tags:
+        - "imports"
+      summary: "Single-period manual results entry. (docs/03 section 14)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive (M%26M, BAJAJ-AUTO); old symbols resolve through symbol_alias (data.redirect_symbol)."
+          schema:
+            type: "string"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/ResultsEntry"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+    delete:
+      operationId: "deleteStocksSymbolResults"
+      tags:
+        - "imports"
+      summary: "Remove a manual period. (docs/03 section 14)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive (M%26M, BAJAJ-AUTO); old symbols resolve through symbol_alias (data.redirect_symbol)."
+          schema:
+            type: "string"
+        - name: "period_type"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            enum:
+              - "Q"
+              - "A"
+        - name: "period_end"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            format: "date"
+        - name: "basis"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            enum:
+              - "consolidated"
+              - "standalone"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/stocks/{symbol}/actions":
+    post:
+      operationId: "postStocksSymbolActions"
+      tags:
+        - "imports"
+      summary: "Manual corporate action entry (status confirmed). (docs/03 section 14)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive (M%26M, BAJAJ-AUTO); old symbols resolve through symbol_alias (data.redirect_symbol)."
+          schema:
+            type: "string"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/FreeObject"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/stocks/{symbol}/actions/{id}":
+    patch:
+      operationId: "patchStocksSymbolActionsId"
+      tags:
+        - "imports"
+      summary: "Confirm or reject a detected action. (docs/03 section 14)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive (M%26M, BAJAJ-AUTO); old symbols resolve through symbol_alias (data.redirect_symbol)."
+          schema:
+            type: "string"
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Numeric id."
+          schema:
+            type: "integer"
+            format: "int64"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/ActionStatusPatch"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/broker/status":
+    get:
+      operationId: "getBrokerStatus"
+      tags:
+        - "broker"
+      summary: "Manual price mode: {enabled:false, mode:manual}. (docs/03 section 14a)"
+      responses:
+        "200":
+          description: "Success (stub: 501 until implemented)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "501":
+          "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/broker/login":
+    get:
+      operationId: "getBrokerLogin"
+      tags:
+        - "broker"
+      summary: "Not built in manual price mode: always 422 BROKER_DISABLED. (docs/03 section 14a)"
+      responses:
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/broker/callback":
+    get:
+      operationId: "getBrokerCallback"
+      tags:
+        - "broker"
+      summary: "Not built in manual price mode: always 422 BROKER_DISABLED. (docs/03 section 14a)"
+      security: []
+      responses:
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/broker/session":
+    delete:
+      operationId: "deleteBrokerSession"
+      tags:
+        - "broker"
+      summary: "Not built in manual price mode: always 422 BROKER_DISABLED. (docs/03 section 14a)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      responses:
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+components:
+  securitySchemes:
+    cookieAuth:
+      type: "apiKey"
+      in: "cookie"
+      name: "session"
+      description: "httpOnly, Secure, SameSite=Lax session cookie."
+  parameters:
+    Limit:
+      name: "limit"
+      in: "query"
+      schema:
+        type: "integer"
+        minimum: 1
+        maximum: 200
+        default: 50
+      description: "Page size (values above 200 are clamped)."
+    Cursor:
+      name: "cursor"
+      in: "query"
+      schema:
+        type: "string"
+      description: "Opaque keyset cursor from next_cursor."
+    CsrfHeader:
+      name: "X-Requested-With"
+      in: "header"
+      required: true
+      schema:
+        type: "string"
+        enum:
+          - "fetch"
+      description: "CSRF guard for non-GET requests."
+  schemas:
+    Meta:
+      type: "object"
+      properties:
+        as_of:
+          type: "string"
+          format: "date-time"
+        source:
+          type: "string"
+        stale:
+          type: "boolean"
+        stale_age_hours:
+          type: "number"
+        interval:
+          type: "string"
+          enum:
+            - "1d"
+            - "1w"
+        excluded_for_missing:
+          type: "object"
+          additionalProperties:
+            type: "integer"
+            format: "int64"
+      additionalProperties: true
+      description: "Optional response metadata. Unavailable values are null with a *_reason sibling or a warning, never 0."
+    Warning:
+      type: "object"
+      properties:
+        code:
+          type: "string"
+        message:
+          type: "string"
+      required:
+        - "code"
+        - "message"
+    SuccessEnvelope:
+      type: "object"
+      properties:
+        data:
+          type: "object"
+          additionalProperties: true
+        meta:
+          "$ref": "#/components/schemas/Meta"
+        warnings:
+          type: "array"
+          items:
+            "$ref": "#/components/schemas/Warning"
+      required:
+        - "data"
+      description: "Success envelope. Each owning task replaces the generic `data` schema with the exact shape of its endpoint (contract change rule: docs/03, openapi.yaml, docs/field-map.json together)."
+    FieldError:
+      type: "object"
+      properties:
+        field:
+          type: "string"
+        message:
+          type: "string"
+      required:
+        - "field"
+        - "message"
+    ErrorBody:
+      type: "object"
+      properties:
+        code:
+          type: "string"
+          description: "BAD_REQUEST, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, UNPROCESSABLE, RATE_LIMITED, DATA_UNAVAILABLE, SOURCE_DOWN, INTERNAL, NOT_IMPLEMENTED (B01 stubs), plus task-specific 422 codes such as PRICE_MODE_MANUAL, BROKER_DISABLED, INSUFFICIENT_HOLDINGS, PRICES_ADJUSTMENT_UNSET, DB_SIZE_LIMIT, THRESHOLD_ALREADY_MET."
+        message:
+          type: "string"
+        details:
+          type: "object"
+          additionalProperties: true
+          description: "422: fields[]; 429: retry_after_seconds; DATA_UNAVAILABLE: reason."
+      required:
+        - "code"
+        - "message"
+    ErrorEnvelope:
+      type: "object"
+      properties:
+        error:
+          "$ref": "#/components/schemas/ErrorBody"
+      required:
+        - "error"
+      example:
+        error:
+          code: "NOT_FOUND"
+          message: "Instrument not found"
+          details:
+            symbol: "XYZ"
+    Page:
+      type: "object"
+      properties:
+        items:
+          type: "array"
+          items: {}
+        next_cursor:
+          type: "string"
+          nullable: true
+      required:
+        - "items"
+        - "next_cursor"
+      description: "Keyset page: the `data` payload of paginated lists."
+    Health:
+      type: "object"
+      properties:
+        ok:
+          type: "boolean"
+          enum:
+            - true
+      required:
+        - "ok"
+      example:
+        ok: true
+    FreeObject:
+      type: "object"
+      additionalProperties: true
+      description: "Body shape is defined by the owning task from docs/03."
+    LoginRequest:
+      type: "object"
+      properties:
+        password:
+          type: "string"
+          minLength: 1
+          maxLength: 200
+      required:
+        - "password"
+      additionalProperties: false
+    ChangePasswordRequest:
+      type: "object"
+      properties:
+        current:
+          type: "string"
+        new:
+          type: "string"
+          minLength: 12
+      required:
+        - "current"
+        - "new"
+      additionalProperties: false
+    ConfirmBody:
+      type: "object"
+      properties:
+        confirm:
+          type: "boolean"
+          enum:
+            - true
+      required:
+        - "confirm"
+      additionalProperties: false
+    TrimRequest:
+      type: "object"
+      properties:
+        symbols:
+          type: "array"
+          items:
+            type: "string"
+          minItems: 1
+        before:
+          type: "string"
+          format: "date"
+        confirm:
+          type: "boolean"
+          enum:
+            - true
+      required:
+        - "symbols"
+        - "before"
+        - "confirm"
+      additionalProperties: false
+    TrimPreviewRequest:
+      type: "object"
+      properties:
+        symbols:
+          type: "array"
+          items:
+            type: "string"
+          minItems: 1
+        before:
+          type: "string"
+          format: "date"
+      required:
+        - "symbols"
+        - "before"
+      additionalProperties: false
+    ScreenerFilter:
+      type: "object"
+      properties:
+        metric:
+          type: "string"
+        op:
+          type: "string"
+          enum:
+            - ">"
+            - ">="
+            - "<"
+            - "<="
+            - "="
+            - "between"
+            - "in"
+        value:
+          description: "number, string, [number, number] for between, or string[] (max 50) for in."
+      required:
+        - "metric"
+        - "op"
+        - "value"
+    ScreenerQuery:
+      type: "object"
+      properties:
+        filters:
+          type: "array"
+          items:
+            "$ref": "#/components/schemas/ScreenerFilter"
+          maxItems: 12
+        sort:
+          type: "object"
+          properties:
+            metric:
+              type: "string"
+            dir:
+              type: "string"
+              enum:
+                - "asc"
+                - "desc"
+        limit:
+          type: "integer"
+          minimum: 1
+          maximum: 200
+        cursor:
+          type: "string"
+          nullable: true
+        universe:
+          type: "object"
+          properties:
+            index:
+              type: "string"
+            kind:
+              type: "string"
+            company_type:
+              type: "string"
+      required:
+        - "filters"
+    SavedScreenCreate:
+      type: "object"
+      properties:
+        name:
+          type: "string"
+        spec:
+          "$ref": "#/components/schemas/ScreenerQuery"
+      required:
+        - "name"
+        - "spec"
+    WatchlistCreate:
+      oneOf:
+        - type: "object"
+          properties:
+            type:
+              type: "string"
+              enum:
+                - "stock"
+            symbol:
+              type: "string"
+            note:
+              type: "string"
+              maxLength: 500
+          required:
+            - "type"
+            - "symbol"
+        - type: "object"
+          properties:
+            type:
+              type: "string"
+              enum:
+                - "mf"
+            code:
+              type: "integer"
+              format: "int64"
+          required:
+            - "type"
+            - "code"
+    WatchlistPatch:
+      type: "object"
+      properties:
+        note:
+          type: "string"
+          maxLength: 500
+      required:
+        - "note"
+    TxnCreate:
+      type: "object"
+      properties:
+        symbol:
+          type: "string"
+        side:
+          type: "string"
+          enum:
+            - "buy"
+            - "sell"
+        qty:
+          type: "string"
+          description: "Decimal string, 0 < qty <= 1e9."
+        price:
+          type: "string"
+        fees:
+          type: "string"
+        trade_date:
+          type: "string"
+          format: "date"
+        note:
+          type: "string"
+      required:
+        - "symbol"
+        - "side"
+        - "qty"
+        - "price"
+        - "trade_date"
+    TxnPatch:
+      type: "object"
+      additionalProperties: true
+      description: "Same fields as TxnCreate, all optional."
+    AlertCreate:
+      type: "object"
+      properties:
+        target:
+          type: "object"
+          properties:
+            type:
+              type: "string"
+              enum:
+                - "stock"
+                - "mf"
+            symbol:
+              type: "string"
+            code:
+              type: "integer"
+              format: "int64"
+          required:
+            - "type"
+        kind:
+          type: "string"
+          enum:
+            - "price_above"
+            - "price_below"
+            - "day_change_pct"
+            - "wk52_high"
+            - "wk52_low"
+            - "ma_cross"
+            - "rsi_above"
+            - "rsi_below"
+            - "results_upcoming"
+            - "results_declared"
+            - "holding_change"
+            - "nav_above"
+            - "nav_below"
+        params:
+          type: "object"
+          additionalProperties: true
+        one_shot:
+          type: "boolean"
+        cooldown_minutes:
+          type: "integer"
+          format: "int64"
+        expires_on:
+          type: "string"
+          format: "date"
+      required:
+        - "target"
+        - "kind"
+    ImportCommit:
+      type: "object"
+      properties:
+        upload_id:
+          type: "string"
+          format: "uuid"
+        upload_ids:
+          type: "array"
+          items:
+            type: "string"
+            format: "uuid"
+        upload_group:
+          type: "string"
+          format: "uuid"
+        note:
+          type: "string"
+      description: "Either upload_id, or upload_ids with upload_group (large prices file split by the browser)."
+    PricesAdjustmentPut:
+      type: "object"
+      properties:
+        value:
+          type: "boolean"
+        confirm:
+          type: "boolean"
+      required:
+        - "value"
+    AdjustmentCheckRequest:
+      type: "object"
+      properties:
+        upload_id:
+          type: "string"
+          format: "uuid"
+        symbol:
+          type: "string"
+        ex_date:
+          type: "string"
+          format: "date"
+        expected_ratio:
+          type: "object"
+          properties:
+            num:
+              type: "integer"
+              format: "int64"
+            den:
+              type: "integer"
+              format: "int64"
+          required:
+            - "num"
+            - "den"
+      required:
+        - "upload_id"
+        - "symbol"
+        - "ex_date"
+    InstrumentCreate:
+      type: "object"
+      properties:
+        symbol:
+          type: "string"
+        name:
+          type: "string"
+        isin:
+          type: "string"
+      required:
+        - "symbol"
+        - "name"
+      additionalProperties: false
+    ResultsEntry:
+      type: "object"
+      properties:
+        basis:
+          type: "string"
+          enum:
+            - "consolidated"
+            - "standalone"
+        period_type:
+          type: "string"
+          enum:
+            - "Q"
+            - "A"
+        period_end:
+          type: "string"
+          format: "date"
+        values:
+          type: "object"
+          additionalProperties:
+            type: "number"
+        note:
+          type: "string"
+      required:
+        - "basis"
+        - "period_type"
+        - "period_end"
+        - "values"
+    ActionStatusPatch:
+      type: "object"
+      properties:
+        status:
+          type: "string"
+          enum:
+            - "confirmed"
+            - "rejected"
+      required:
+        - "status"
+      additionalProperties: false
+  responses:
+    BadRequest:
+      description: "BAD_REQUEST"
+      content:
+        "application/json":
+          schema:
+            "$ref": "#/components/schemas/ErrorEnvelope"
+    Unauthenticated:
+      description: "UNAUTHENTICATED (no valid session cookie)"
+      content:
+        "application/json":
+          schema:
+            "$ref": "#/components/schemas/ErrorEnvelope"
+    NotFound:
+      description: "NOT_FOUND or DATA_UNAVAILABLE"
+      content:
+        "application/json":
+          schema:
+            "$ref": "#/components/schemas/ErrorEnvelope"
+    Unprocessable:
+      description: "UNPROCESSABLE (details.fields[]) or a task-specific 422 code"
+      content:
+        "application/json":
+          schema:
+            "$ref": "#/components/schemas/ErrorEnvelope"
+    RateLimited:
+      description: "RATE_LIMITED (details.retry_after_seconds)"
+      content:
+        "application/json":
+          schema:
+            "$ref": "#/components/schemas/ErrorEnvelope"
+      headers:
+        "Retry-After":
+          description: "Seconds to wait."
+          schema:
+            type: "integer"
+            format: "int64"
+    NotImplemented:
+      description: "NOT_IMPLEMENTED: stub until the owning task lands (B01)"
+      content:
+        "application/json":
+          schema:
+            "$ref": "#/components/schemas/ErrorEnvelope"
+    Internal:
+      description: "INTERNAL"
+      content:
+        "application/json":
+          schema:
+            "$ref": "#/components/schemas/ErrorEnvelope"
