@@ -83,7 +83,9 @@ export function createApiClient(deps: ClientDeps = {}) {
     const method = options.method ?? "GET";
     const headers: Record<string, string> = { Accept: "application/json" };
     if (method !== "GET") headers["X-Requested-With"] = "fetch"; // CSRF header, docs/03 section 1
-    if (options.body !== undefined) headers["Content-Type"] = "application/json";
+    // A FormData body (file upload) gets its multipart boundary from the browser: no Content-Type.
+    const isForm = typeof FormData !== "undefined" && options.body instanceof FormData;
+    if (options.body !== undefined && !isForm) headers["Content-Type"] = "application/json";
 
     const controller = new AbortController();
     let timedOut = false;
@@ -101,7 +103,12 @@ export function createApiClient(deps: ClientDeps = {}) {
         response = await fetchImpl(buildUrl(path, options.query), {
           method,
           headers,
-          body: options.body === undefined ? undefined : JSON.stringify(options.body),
+          body:
+            options.body === undefined
+              ? undefined
+              : isForm
+                ? (options.body as FormData)
+                : JSON.stringify(options.body),
           credentials: "same-origin",
           signal: controller.signal,
         });
