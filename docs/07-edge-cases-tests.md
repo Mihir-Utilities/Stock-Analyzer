@@ -309,8 +309,8 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | API-27 | Expected last trading date edge cases (B03, SYS-13 helper) | Before 18:00 IST the previous trading day is expected; weekends and holidays are skipped; the IST date (not the UTC date) decides; with holiday rows the bar must be >= the expected date; without them stale only when more than 4 calendar days old | U |
 | API-28 | Weekly aggregation (B04) | ISO-week candle = open of first, high max, low min, close of last, volume sum, dated with the last trading day of the week; no forward fill | U |
 | API-29 | Series expansion (B04, D05a-A6) | Stored columnar `series` returns as `[[date, value]]` pairs, nulls kept at warm-up, no `dates`/`format` keys | U |
-| API-30 | Detected split on prices/indicators (B04) | `UNCONFIRMED_ACTION` warning, no marker; confirmed split gives a marker `{date,type,label}`; rejected ignored | I |
-| API-31 | Prices/indicators validation and aliases (B04) | Bad `range`/`adjusted`/`downsample` is 422 with `details.fields`; an old symbol answers `redirect_symbol`; bars but no snapshot gives `DATA_UNAVAILABLE` reason `no_history` | I |
+| API-36 | Detected split on prices/indicators (B04) | `UNCONFIRMED_ACTION` warning, no marker; confirmed split gives a marker `{date,type,label}`; rejected ignored | I |
+| API-37 | Prices/indicators validation and aliases (B04) | Bad `range`/`adjusted`/`downsample` is 422 with `details.fields`; an old symbol answers `redirect_symbol`; bars but no snapshot gives `DATA_UNAVAILABLE` reason `no_history` | I |
 
 ## UI/SYS
 | ID | Scenario | Required behavior | Test |
