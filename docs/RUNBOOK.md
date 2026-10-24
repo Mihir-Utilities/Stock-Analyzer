@@ -309,3 +309,12 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Index tiles stay empty with a reason until `NIFTY50` and `INDIAVIX` rows are imported through `prices.csv` (IMP-21) and the market overview endpoint exists.
 - The "stale" chip on the last price import counts weekends only; it can say stale after a trading holiday (F04-4).
 - E2E: `tests/e2e/f04-login-dashboard.spec.ts` mocks the API with Playwright routes; no backend is needed.
+
+## 39. Stock page: header and Overview (F05)
+
+- Route `/stocks/{symbol}?tab=overview|chart|analysis|fundamentals|ownership|peers|prediction|events|data`. Only Overview is built; the other tabs say so. An alias symbol redirects with `router.replace` and a toast; an unknown symbol shows "No stock with the symbol X" with search advice.
+- Data: `GET /stocks/{symbol}` (60 s), `/prices?range=1Y&adjusted=true` (5 min), `/indicators` (10 min), `/events`, `/links`, `/fundamentals` (KPI ratios). Browser calls go only to same-origin `/api/v1`; research links are plain `ExternalLink` anchors that the app never fetches.
+- Manual price mode (current): no Refresh button; chip "Last price import: {date}" (amber with the word "stale" from `freshness.prices_stale`), "Import prices" link, "Holiday list missing" chip from `freshness.holidays_missing`, manual-mode banner. Header price is the last imported close (assumption F05-1).
+- Failure modes: KPI, gauges and scores show a dash with `not computed yet` until D05b writes the snapshot (not a bug). A card that errors shows Retry; the rest of the page stays. `DATA_UNAVAILABLE` (`no_prices_imported`, `no_history`) shows the reason, never 0.
+- Notices that wait for B07: Confirm / Reject on the UNCONFIRMED_ACTION banner and Dismiss on the soft-flag notice are disabled with a reason; the soft flag is derived in the browser (20% one-day drop, assumption F05-5). When B07 ships, fill `apps/web/src/lib/stock/soft-flag-adapter.ts`.
+- Tests: `npm test` (`stock-page.test.tsx`, `stock-derive.test.ts` incl. the UI-09 field map in `docs/field-map.json`); `npx playwright test tests/e2e/stock.spec.ts` after `npm run build` (port 3100 must be free).
