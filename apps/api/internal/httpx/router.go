@@ -62,6 +62,10 @@ type Deps struct {
 	// MF serves the /mf/* read routes (B10); nil keeps them 501 stubs.
 	MF MFService
 
+	// Imports serves the B06a routes (/imports/*, /settings/prices-adjustment, POST /instruments,
+	// price delete and trim); nil keeps them 501 stubs.
+	Imports ImportService
+
 	// LoginLimiter (default 10/min per IP) guards POST /auth/login; GeneralLimiter (default
 	// 120/min) guards authenticated routes (docs/03 section 16).
 	LoginLimiter   *Limiter

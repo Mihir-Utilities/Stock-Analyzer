@@ -2085,7 +2085,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data: {deleted, job_id (post_import; null when nothing was deleted), batch_id}. Writes an import_batch audit row (kind manual_form). 422 for from > to, a missing date or confirm other than true; 404 for an unknown symbol. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2095,6 +2095,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
@@ -2127,7 +2128,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data: {rows}. Counts the bars a delete between from and to (inclusive) would remove. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2137,6 +2138,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
@@ -2167,7 +2169,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data: {deleted, per_symbol [{symbol, rows}], batch_id, job_id}. Owner-initiated only; housekeeping never trims. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2207,7 +2209,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data: {per_symbol [{symbol, rows}], total_rows, estimated_mb_freed}. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4036,7 +4038,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data: {upload_id, upload_group, rows, preview (first 20 normalized rows), errors[{row,column,message}], warnings[], error_count, warning_count, estimated_growth_mb (prices), prices_already_adjusted (prices; null = not chosen yet)}. Row numbers are file lines (header = 1). The error and warning lists keep the first 200 entries; the counts are complete. Nothing is written; the file is stored in import_upload for 1 hour. 413 when the file exceeds the byte limit (5 MB; prices 5 MB until spike S9 passes, then 25 MB); 422 for more rows than allowed, a wrong type (CSV only; xlsx, zip and UTF-16 are refused) or no file; 404 for an unknown kind; 501 for kinds B06b has not built yet. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4046,6 +4048,16 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /** @description Body or file too large (envelope BAD_REQUEST). */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
@@ -4079,7 +4091,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data: {batch_id, inserted, updated, renamed, post_import_job_id (null when nothing was queued), warnings[] (TRACKED_OVER_400, POST_IMPORT_NOT_QUEUED)}. 422 UNPROCESSABLE when the upload has errors, PRICES_ADJUSTMENT_UNSET while the raw/adjusted choice is missing, DB_SIZE_LIMIT when the file would exceed DB_SOFT_LIMIT_MB; 404 when the upload is unknown or expired. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4089,6 +4101,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
@@ -4114,7 +4127,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data: {items:[{id, kind, upload_group, row_count, warning_count, note, created_at, undone_at}], next_cursor}, newest first. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4153,7 +4166,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Never succeeds in B06a: 409 for prices, instruments and already-undone batches, 404 for an unknown batch, 501 for the other kinds until B06b. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4163,6 +4176,16 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /** @description Conflict (envelope CONFLICT). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
@@ -4188,7 +4211,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description CSV template (header row and one example row) as an attachment; built for prices and instruments (B06a). 404 unknown kind; 501 for kinds B06b has not built yet. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4198,6 +4221,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
@@ -4220,7 +4244,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data: {value: null|true|false, set_at: null|timestamp}. null means the owner has not chosen yet. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4259,7 +4283,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data: {value, set_at}. Changing an already-set value without confirm=true is a 422 on field confirm; "I don't know" calls nothing. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4299,7 +4323,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data: {bars [[date, close], ... up to 5 trading days each side], ratio, nearest_fraction (1/2, 1/3, ... or null), hint raw_likely|adjusted_likely|inconclusive}. Reads only the validated upload and writes nothing. 422 for a symbol or ex_date not covered by the file; 404 for an unknown or expired upload. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4309,6 +4333,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
@@ -4339,7 +4364,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Created. data: {id, symbol, warnings[] (ISIN_MALFORMED, SYMBOL_UPPERCASED)}. 409 when the symbol already exists (use instruments.csv to update). */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -4349,6 +4374,15 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            /** @description Conflict (envelope CONFLICT). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
