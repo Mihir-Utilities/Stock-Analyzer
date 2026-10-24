@@ -924,7 +924,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Undo a non-price, non-instruments batch within 30 days. (docs/03 section 14) */
+        /** Undo a results, balance/cash-flow, fundamentals, shareholding or corporate-action batch within 30 days. (docs/03 section 14) */
         post: operations["postImportsBatchesIdUndo"];
         delete?: never;
         options?: never;
@@ -1427,9 +1427,39 @@ export interface components {
             period_type: "Q" | "A";
             /** Format: date */
             period_end: string;
+            /** @description Keys: revenue, ebitda, operating_income, other_income, interest, depreciation, pbt, tax, net_profit, eps (INR crore except eps in INR). A number, a numeric string or null/empty (not stored); at least one value. */
             values: {
-                [key: string]: number;
+                [key: string]: number | null;
             };
+            note?: string;
+        };
+        /** @description One shareholding quarter (docs/01 7.3). Percent numbers 0-100 (numbers or numeric strings); blank or null = unknown (never 0). */
+        ShareholdingEntry: {
+            /** Format: date */
+            quarter_end: string;
+            promoter?: number | null;
+            fii?: number | null;
+            dii?: number | null;
+            mf?: number | null;
+            insurance?: number | null;
+            govt?: number | null;
+            public?: number | null;
+            pledged_of_promoter?: number | null;
+            shareholders_count?: number | null;
+            /** Format: date */
+            filed_on?: string | null;
+            note?: string;
+        };
+        /** @description One corporate action (docs/01 7.4), stored as confirmed. split: ratio_num = old face value, ratio_den = new; bonus: ratio_num = new shares, ratio_den = held. */
+        ActionEntry: {
+            /** Format: date */
+            ex_date: string;
+            /** @enum {string} */
+            type: "split" | "bonus" | "dividend" | "rights" | "buyback" | "merger" | "demerger" | "other";
+            ratio_num?: number | null;
+            ratio_den?: number | null;
+            amount_per_share?: number | null;
+            purpose_text?: string | null;
             note?: string;
         };
         ActionStatusPatch: {
@@ -2360,11 +2390,11 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["FreeObject"];
+                "application/json": components["schemas"]["ShareholdingEntry"];
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Re-entered (only updates, nothing new inserted): same body as 201. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2373,7 +2403,17 @@ export interface operations {
                     "application/json": components["schemas"]["SuccessEnvelope"];
                 };
             };
+            /** @description Saved. data: {batch_id, inserted, updated, warnings[{field, code, message}], post_import_job_id}. 404 unknown or old symbol; 422 with details.fields (a delisted stock is a symbol error). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
@@ -4038,7 +4078,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success. data: {upload_id, upload_group, rows, preview (first 20 normalized rows), errors[{row,column,message}], warnings[], error_count, warning_count, estimated_growth_mb (prices), prices_already_adjusted (prices; null = not chosen yet)}. Row numbers are file lines (header = 1). The error and warning lists keep the first 200 entries; the counts are complete. Nothing is written; the file is stored in import_upload for 1 hour. 413 when the file exceeds the byte limit (5 MB; prices 5 MB until spike S9 passes, then 25 MB); 422 for more rows than allowed, a wrong type (CSV only; xlsx, zip and UTF-16 are refused) or no file; 404 for an unknown kind; 501 for kinds B06b has not built yet. */
+            /** @description Success. data: {upload_id, upload_group, rows, preview (first 20 normalized rows), errors[{row,column,message}], warnings[], error_count, warning_count, estimated_growth_mb (prices), prices_already_adjusted (prices; null = not chosen yet)}. Row numbers are file lines (header = 1). The error and warning lists keep the first 200 entries; the counts are complete. Nothing is written; the file is stored in import_upload for 1 hour. 413 when the file exceeds the byte limit (5 MB; prices 5 MB until spike S9 passes, then 25 MB); 422 for more rows than allowed, a wrong type (CSV only; xlsx, zip and UTF-16 are refused) or no file; 404 for an unknown kind. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4166,7 +4206,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Never succeeds in B06a: 409 for prices, instruments and already-undone batches, 404 for an unknown batch, 501 for the other kinds until B06b. */
+            /** @description Done. data: {batch_id, removed (rows deleted), post_import_job_id (null when nothing was queued)}. The rows tagged with the batch are deleted; values the batch overwrote are NOT restored. 404 unknown batch; 409 for prices, instruments, holidays, instrument_meta and manual-entry batches (not undoable), for an already-undone batch and after the 30-day window. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4211,7 +4251,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description CSV template (header row and one example row) as an attachment; built for prices and instruments (B06a). 404 unknown kind; 501 for kinds B06b has not built yet. */
+            /** @description CSV template (header row and one example row; the holidays template is the header only, no example dates) as an attachment. 404 unknown kind. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4416,7 +4456,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Re-entered (only updates, nothing new inserted): same body as 201. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4425,7 +4465,17 @@ export interface operations {
                     "application/json": components["schemas"]["SuccessEnvelope"];
                 };
             };
+            /** @description Saved. data: {batch_id, inserted, updated, warnings[{field, code, message}], post_import_job_id} (inserted/updated count stored metric values). Re-entering a period restates it (source manual). 404 unknown or old symbol; 422 with details.fields (values.<column> for cells; a delisted stock is a symbol error). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
@@ -4459,7 +4509,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Deleted. data: {deleted (stored values), batch_id (audit batch), post_import_job_id}. Only manual values are removed. 404 when the period has no manual entry; 422 for a bad query. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4469,6 +4519,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
@@ -4498,11 +4549,11 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["FreeObject"];
+                "application/json": components["schemas"]["ActionEntry"];
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Re-entered (only updates, nothing new inserted): same body as 201. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4511,7 +4562,17 @@ export interface operations {
                     "application/json": components["schemas"]["SuccessEnvelope"];
                 };
             };
+            /** @description Saved as a confirmed action. data: {id, batch_id, inserted, updated, warnings[{field, code, message}], post_import_job_id}. A repeat of the same stock, ex_date, type and purpose updates the one row (200). A future ex_date is stored. 404 unknown or old symbol; 422 with details.fields. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];

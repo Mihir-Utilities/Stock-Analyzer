@@ -155,8 +155,12 @@ func TestLimitsFor(t *testing.T) {
 func TestTemplatesMatchFixtures(t *testing.T) {
 	_, file, _, _ := runtime.Caller(0)
 	dir := filepath.Join(filepath.Dir(file), "..", "..", "..", "..", "fixtures", "templates")
-	for _, kind := range []string{KindPrices, KindInstruments} {
-		want, err := os.ReadFile(filepath.Join(dir, kind+".csv")) //nolint:gosec // test fixture path
+	for _, kind := range AllKinds {
+		file := kind
+		if kind == KindBalanceCashflow {
+			file = "balance_cashflow_annual" // the owner-format file name
+		}
+		want, err := os.ReadFile(filepath.Join(dir, file+".csv")) //nolint:gosec // test fixture path
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -168,7 +172,10 @@ func TestTemplatesMatchFixtures(t *testing.T) {
 			t.Errorf("%s template differs from fixtures/templates/%s.csv", kind, kind)
 		}
 	}
-	if _, _, err := Template("results_quarterly"); err == nil {
-		t.Error("results_quarterly template is B06b")
+	if _, _, err := Template("screener_xlsx"); err == nil {
+		t.Error("screener_xlsx has no template (D-5)")
+	}
+	if h, _, _ := Template(KindHolidays); strings.Count(string(h), "\n") != 1 {
+		t.Errorf("the holidays template is the header only (no example dates): %q", h)
 	}
 }

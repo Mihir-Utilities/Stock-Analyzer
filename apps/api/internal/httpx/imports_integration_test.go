@@ -199,8 +199,9 @@ func TestImportValidateHTTP(t *testing.T) {
 		t.Errorf("too many rows: %d %s", r.Code, truncate(r.Body.String()))
 	}
 
-	// Kinds: unknown 404, screener_xlsx (SAF-05: not built, flag off) 404, other contract kinds 501.
-	for kind, want := range map[string]int{"nonsense": 404, "screener_xlsx": 404, "results_quarterly": 501, "holidays": 501} {
+	// Kinds: unknown 404, screener_xlsx (SAF-05: not built, flag off) 404, B06b kinds are served
+	// (a wrong header is a validation result, not a 501).
+	for kind, want := range map[string]int{"nonsense": 404, "screener_xlsx": 404, "results_quarterly": 200, "holidays": 200} {
 		if r := e.upload(kind, upload{filename: "x.csv", ctype: "text/csv", content: pHdr}, e.cookie, true); r.Code != want {
 			t.Errorf("kind %s: %d, want %d", kind, r.Code, want)
 		}
@@ -261,8 +262,8 @@ func TestImportCommitHTTP(t *testing.T) {
 	if r := e.post("/imports/prices/commit", `{"upload_id":"x","extra":1}`); r.Code != 400 {
 		t.Errorf("unknown field: %d", r.Code)
 	}
-	if r := e.post("/imports/results_quarterly/commit", body); r.Code != 501 {
-		t.Errorf("B06b kind: %d", r.Code)
+	if r := e.post("/imports/results_quarterly/commit", body); r.Code != 404 {
+		t.Errorf("a consumed prices upload is not a results upload: %d", r.Code)
 	}
 
 	// Batches list and undo refusal (price batches are not undoable: 409).
@@ -294,8 +295,10 @@ func TestTemplatesHTTP(t *testing.T) {
 	if r := e.do(http.MethodGet, "/api/v1/imports/templates/nonsense", "", e.cookie, nil); r.Code != 404 {
 		t.Errorf("unknown: %d", r.Code)
 	}
-	if r := e.do(http.MethodGet, "/api/v1/imports/templates/results_quarterly", "", e.cookie, nil); r.Code != 501 {
-		t.Errorf("B06b template: %d", r.Code)
+	for _, kind := range importers.AllKinds {
+		if r := e.do(http.MethodGet, "/api/v1/imports/templates/"+kind, "", e.cookie, nil); r.Code != 200 {
+			t.Errorf("template %s: %d", kind, r.Code)
+		}
 	}
 }
 

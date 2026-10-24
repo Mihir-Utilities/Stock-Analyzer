@@ -72,6 +72,7 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ACT-20 | Confirmed `rights`/`buyback`/`merger`/`demerger` or an untyped `split_or_bonus` (D03) | `adj_close` is never changed; the stock is listed in `review_needed` of the re-adjust result | I |
 | ACT-21 | Events read API (B05) | Actions include `detected` and `rejected` with `status`; default window last 5 years (no upper bound), calendar next 90 days; `from`/`to` override both; bad dates or `to < from` -> 422; detected rows add `UNCONFIRMED_ACTION` warnings; nothing entered -> `reason = no_data_entered` | I |
 | ACT-22 | Old symbol on fundamentals/shareholding/events/links (B05) | HTTP 200 with `data.redirect_symbol`; unknown symbol -> 404 | I |
+| ACT-23 | Imported and manual corporate actions (B06b) | Stored `confirmed` (source `csv_import`/`manual`); repeating the same stock/ex-date/type/purpose updates one row (ACT-09); a future ex-date is stored; ratios keep the owner convention (split 10 to 2 stays 10 and 2; bonus 1:1 stays 1 and 1); split without both ratios, dividend without amount, `split_or_bonus` as a type and equal split ratios are errors; a reverse split is accepted | F/I |
 
 ## IMP: imports and manual entry
 | ID | Scenario | Required behavior | Test |
@@ -110,6 +111,12 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | IMP-32 | `prices.csv` row uses a symbol that was renamed through `previous_symbol` | Row error "symbol OLD was renamed to NEW; use the new symbol"; never silently mapped | I |
 | IMP-33 | Lower-case symbol in `instruments.csv` / Add stock form; lower-case symbol in `prices.csv` | Instruments: upper-cased with a `SYMBOL_UPPERCASED` warning (same in the form); prices: matched case-insensitively | F |
 | IMP-34 | Validation and commit share one code path (`scanPrices`, `scanInstruments`) | The preview of validate equals what commit writes; commit re-validates against the current database and refuses if errors appeared since | I |
+| IMP-35 | Undo scope and window (B06b) | Results, balance/cash-flow, fundamentals-long, shareholding and corporate-action batches undo once (rows removed, overwritten values not restored, `post_import` queued); a second undo, a batch older than 30 days, and `prices`/`instruments`/`holidays`/`instrument_meta`/manual batches are 409; unknown batch 404 | I |
+| IMP-36 | Empty cells in the B06b kinds (B06b-2) | Wide template: an empty cell stores nothing (never 0) and a row with no values is skipped with a warning; long format: an empty `value` is stored as NULL | F/I |
+| IMP-37 | Commit of the B06b kinds is atomic (B06b-5) | The batch row is created first and tags every row; a failure after the first chunk rolls back rows and batch; the upload survives and can be retried; a symbol delisted between validate and commit is caught by the commit's re-validation; `upload_ids` groups are refused for these kinds | I |
+| IMP-38 | `instrument_meta` semantics (B06b-9) | Sector/industry/company_type update, empty cell keeps the stored value, non-empty `index_tags` replace that stock's memberships, unknown or delisted symbol is a row error, batch not undoable | I |
+| IMP-39 | Manual-entry endpoints (B06b-10) | Numbers or numeric strings accepted, boolean cell 400, unknown field 400; 422 `details.fields` name the form field (`values.revenue`); unknown/old symbol 404; delisted 422 on `symbol`; each write leaves a `manual_form` batch with the note and queues `post_import`; 201 on insert, 200 on restatement | I |
+| IMP-40 | `fundamentals_long` rules (B06b-15) | Unknown `metric_key`, a unit that differs from the key's, `period_type` not Q/A, a non-quarter-end Q period and `shares_outstanding <= 0` are row errors; cross-metric warnings (net profit vs revenue) are reported once per period | F |
 
 ## INS: instruments
 | ID | Scenario | Required behavior | Test |
@@ -146,6 +153,7 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | FND-17 | Source priority and entry recency (B05) | `manual > csv_import > screener_import` per (period, metric); same source: newest entry wins; `derived` rows and NULL values are never served as metrics; `source_by_metric` and `last_updated` report the winners | U |
 | FND-18 | Worker snapshot not yet written or period missing in it (B05) | `derived`/`ratios`/`valuation` null with `*_reason = not_computed`; derived series aligned to the returned periods by date | U/I |
 | FND-19 | Invalid `basis` or `period` query (B05) | 422 with `details.fields[]` | I |
+| FND-20 | Manual results entry and delete (B06b) | A manual period is stored with source `manual` next to any `csv_import` value; re-entering restates it (batch id updated); a unit warning still saves and is returned with its field; `DELETE` removes only manual values (404 when none, 422 for a bad query) and leaves an audit batch | I |
 
 ## SHP: shareholding
 | ID | Scenario | Required behavior | Test |
@@ -157,6 +165,7 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | SHP-05 | Non-quarter-end date | Rejected | F |
 | SHP-06 | Missing quarter between the last two rows (B05) | `qoq_change` all null with `qoq_reason = previous_quarter_missing` (no multi-quarter difference shown as QoQ) | U |
 | SHP-07 | No shareholding entered (B05) | `quarters = []`, `reason = no_data_entered`, `mf_available=false`, entry hint | I |
+| SHP-08 | Shareholding restatement (B06b-11) | `revision` only grows when a re-entered quarter differs; identical re-import or re-entry keeps it; blank pledge stays NULL and `0` is stored as 0; manual and CSV rows of one quarter overwrite each other | I |
 
 ## MF: mutual funds
 | ID | Scenario | Required behavior | Test |

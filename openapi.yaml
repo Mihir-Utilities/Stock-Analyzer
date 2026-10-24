@@ -840,16 +840,24 @@ paths:
         content:
           "application/json":
             schema:
-              "$ref": "#/components/schemas/FreeObject"
+              "$ref": "#/components/schemas/ShareholdingEntry"
       responses:
+        "201":
+          description: "Saved. data: {batch_id, inserted, updated, warnings[{field, code, message}], post_import_job_id}. 404 unknown or old symbol; 422 with details.fields (a delisted stock is a symbol error)."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Re-entered (only updates, nothing new inserted): same body as 201."
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         "422":
           "$ref": "#/components/responses/Unprocessable"
         "429":
@@ -2424,7 +2432,7 @@ paths:
                 - "file"
       responses:
         "200":
-          description: "Success. data: {upload_id, upload_group, rows, preview (first 20 normalized rows), errors[{row,column,message}], warnings[], error_count, warning_count, estimated_growth_mb (prices), prices_already_adjusted (prices; null = not chosen yet)}. Row numbers are file lines (header = 1). The error and warning lists keep the first 200 entries; the counts are complete. Nothing is written; the file is stored in import_upload for 1 hour. 413 when the file exceeds the byte limit (5 MB; prices 5 MB until spike S9 passes, then 25 MB); 422 for more rows than allowed, a wrong type (CSV only; xlsx, zip and UTF-16 are refused) or no file; 404 for an unknown kind; 501 for kinds B06b has not built yet."
+          description: "Success. data: {upload_id, upload_group, rows, preview (first 20 normalized rows), errors[{row,column,message}], warnings[], error_count, warning_count, estimated_growth_mb (prices), prices_already_adjusted (prices; null = not chosen yet)}. Row numbers are file lines (header = 1). The error and warning lists keep the first 200 entries; the counts are complete. Nothing is written; the file is stored in import_upload for 1 hour. 413 when the file exceeds the byte limit (5 MB; prices 5 MB until spike S9 passes, then 25 MB); 422 for more rows than allowed, a wrong type (CSV only; xlsx, zip and UTF-16 are refused) or no file; 404 for an unknown kind."
           content:
             "application/json":
               schema:
@@ -2544,7 +2552,7 @@ paths:
       operationId: "postImportsBatchesIdUndo"
       tags:
         - "imports"
-      summary: "Undo a non-price, non-instruments batch within 30 days. (docs/03 section 14)"
+      summary: "Undo a results, balance/cash-flow, fundamentals, shareholding or corporate-action batch within 30 days. (docs/03 section 14)"
       parameters:
         - name: "id"
           in: "path"
@@ -2556,7 +2564,7 @@ paths:
         - "$ref": "#/components/parameters/CsrfHeader"
       responses:
         "200":
-          description: "Never succeeds in B06a: 409 for prices, instruments and already-undone batches, 404 for an unknown batch, 501 for the other kinds until B06b."
+          description: "Done. data: {batch_id, removed (rows deleted), post_import_job_id (null when nothing was queued)}. The rows tagged with the batch are deleted; values the batch overwrote are NOT restored. 404 unknown batch; 409 for prices, instruments, holidays, instrument_meta and manual-entry batches (not undoable), for an already-undone batch and after the 30-day window."
           content:
             "application/json":
               schema:
@@ -2607,7 +2615,7 @@ paths:
               - "instrument_meta"
       responses:
         "200":
-          description: "CSV template (header row and one example row) as an attachment; built for prices and instruments (B06a). 404 unknown kind; 501 for kinds B06b has not built yet."
+          description: "CSV template (header row and one example row; the holidays template is the header only, no example dates) as an attachment. 404 unknown kind."
           content:
             "text/csv":
               schema:
@@ -2784,14 +2792,22 @@ paths:
             schema:
               "$ref": "#/components/schemas/ResultsEntry"
       responses:
+        "201":
+          description: "Saved. data: {batch_id, inserted, updated, warnings[{field, code, message}], post_import_job_id} (inserted/updated count stored metric values). Re-entering a period restates it (source manual). 404 unknown or old symbol; 422 with details.fields (values.<column> for cells; a delisted stock is a symbol error)."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Re-entered (only updates, nothing new inserted): same body as 201."
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         "422":
           "$ref": "#/components/responses/Unprocessable"
         "429":
@@ -2841,11 +2857,13 @@ paths:
         - "$ref": "#/components/parameters/CsrfHeader"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Deleted. data: {deleted (stored values), batch_id (audit batch), post_import_job_id}. Only manual values are removed. 404 when the period has no manual entry; 422 for a bad query."
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
         "422":
@@ -2879,16 +2897,24 @@ paths:
         content:
           "application/json":
             schema:
-              "$ref": "#/components/schemas/FreeObject"
+              "$ref": "#/components/schemas/ActionEntry"
       responses:
+        "201":
+          description: "Saved as a confirmed action. data: {id, batch_id, inserted, updated, warnings[{field, code, message}], post_import_job_id}. A repeat of the same stock, ex_date, type and purpose updates the one row (200). A future ex_date is stored. 404 unknown or old symbol; 422 with details.fields."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Re-entered (only updates, nothing new inserted): same body as 201."
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         "422":
           "$ref": "#/components/responses/Unprocessable"
         "429":
@@ -3738,15 +3764,77 @@ components:
           format: "date"
         values:
           type: "object"
+          description: "Keys: revenue, ebitda, operating_income, other_income, interest, depreciation, pbt, tax, net_profit, eps (INR crore except eps in INR). A number, a numeric string or null/empty (not stored); at least one value."
           additionalProperties:
             type: "number"
+            nullable: true
         note:
           type: "string"
+          maxLength: 500
       required:
         - "basis"
         - "period_type"
         - "period_end"
         - "values"
+      additionalProperties: false
+    ShareholdingEntry:
+      type: "object"
+      description: "One shareholding quarter (docs/01 7.3). Percent numbers 0-100 (numbers or numeric strings); blank or null = unknown (never 0)."
+      properties:
+        quarter_end:
+          type: "string"
+          format: "date"
+        promoter: {type: "number", nullable: true}
+        fii: {type: "number", nullable: true}
+        dii: {type: "number", nullable: true}
+        mf: {type: "number", nullable: true}
+        insurance: {type: "number", nullable: true}
+        govt: {type: "number", nullable: true}
+        public: {type: "number", nullable: true}
+        pledged_of_promoter: {type: "number", nullable: true}
+        shareholders_count: {type: "integer", nullable: true}
+        filed_on:
+          type: "string"
+          format: "date"
+          nullable: true
+        note:
+          type: "string"
+          maxLength: 500
+      required:
+        - "quarter_end"
+      additionalProperties: false
+    ActionEntry:
+      type: "object"
+      description: "One corporate action (docs/01 7.4), stored as confirmed. split: ratio_num = old face value, ratio_den = new; bonus: ratio_num = new shares, ratio_den = held."
+      properties:
+        ex_date:
+          type: "string"
+          format: "date"
+        type:
+          type: "string"
+          enum:
+            - "split"
+            - "bonus"
+            - "dividend"
+            - "rights"
+            - "buyback"
+            - "merger"
+            - "demerger"
+            - "other"
+        ratio_num: {type: "number", nullable: true}
+        ratio_den: {type: "number", nullable: true}
+        amount_per_share: {type: "number", nullable: true}
+        purpose_text:
+          type: "string"
+          maxLength: 500
+          nullable: true
+        note:
+          type: "string"
+          maxLength: 500
+      required:
+        - "ex_date"
+        - "type"
+      additionalProperties: false
     ActionStatusPatch:
       type: "object"
       properties:

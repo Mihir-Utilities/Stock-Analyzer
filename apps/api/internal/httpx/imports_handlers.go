@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -32,10 +33,14 @@ type ImportService interface {
 	TrimPreviewFor(ctx context.Context, symbols []string, before string) (*importers.TrimPreview, error)
 	Trim(ctx context.Context, symbols []string, before string, confirm bool) (*importers.TrimResult, error)
 	ListBatches(ctx context.Context, limit int, beforeID int64) ([]importers.Batch, error)
-	Undo(ctx context.Context, id int64) error
+	Undo(ctx context.Context, id int64) (*importers.UndoResult, error)
+	AddResults(ctx context.Context, symbol string, in importers.ResultsEntry) (*importers.ManualResult, error)
+	AddShareholding(ctx context.Context, symbol string, in importers.ShareholdingEntry) (*importers.ManualResult, error)
+	AddAction(ctx context.Context, symbol string, in importers.ActionEntry) (*importers.ManualResult, error)
+	DeleteResults(ctx context.Context, symbol, periodType, periodEnd, basis string) (*importers.DeleteResultsOutcome, error)
 }
 
-// importsHandler returns the B06a handler for a route, or nil when the route is not one of B06a's or
+// importsHandler returns the B06a/B06b handler for a route, or nil when the route is not one of B06a's or
 // the service is not wired (the route then stays a 501 stub). Kept out of routes.go so parallel
 // tasks do not collide there.
 func importsHandler(rt route, d Deps) http.Handler {
@@ -75,6 +80,14 @@ func importsHandler(rt route, d Deps) http.Handler {
 		return wrap(pricesTrim)
 	case "POST /prices/trim/preview":
 		return wrap(pricesTrimPreview)
+	case "POST /stocks/{symbol}/results":
+		return wrap(manualResults)
+	case "DELETE /stocks/{symbol}/results":
+		return wrap(manualResultsDelete)
+	case "POST /stocks/{symbol}/shareholding":
+		return wrap(manualShareholding)
+	case "POST /stocks/{symbol}/actions":
+		return wrap(manualAction)
 	}
 	return nil
 }
@@ -127,7 +140,11 @@ func mapImportError(err error) error {
 	case errors.Is(err, importers.ErrBatchNotFound):
 		return ErrNotFound("Import batch not found", nil)
 	case errors.Is(err, importers.ErrNotUndoable):
-		return ErrConflict("Price and instrument imports cannot be undone; import corrected data instead")
+		return ErrConflict("This batch cannot be undone: prices, instruments, holidays, instrument metadata and manual entries are corrected by importing again")
+	case errors.Is(err, importers.ErrUndoExpired):
+		return ErrConflict("The 30-day undo window for this batch has passed")
+	case errors.Is(err, importers.ErrNoManualPeriod):
+		return ErrNotFound("No manual entry exists for that period", nil)
 	case errors.Is(err, importers.ErrConfirmChange):
 		return ErrValidation(FieldError{Field: "confirm", Message: "changing the raw/adjusted choice needs confirm=true; stored bars keep the value they were imported with, and mixing raw and adjusted files for one stock is an owner error"})
 	}
@@ -273,7 +290,12 @@ func importUndo(svc ImportService, w http.ResponseWriter, r *http.Request) error
 	if err != nil || id < 1 {
 		return ErrValidation(FieldError{Field: "id", Message: "must be a positive integer"})
 	}
-	return svc.Undo(r.Context(), id)
+	res, err := svc.Undo(r.Context(), id)
+	if err != nil {
+		return err
+	}
+	WriteData(w, http.StatusOK, res)
+	return nil
 }
 
 func importTemplate(_ ImportService, w http.ResponseWriter, r *http.Request) error {
@@ -444,5 +466,136 @@ func pricesTrim(svc ImportService, w http.ResponseWriter, r *http.Request) error
 		return err
 	}
 	WriteData(w, http.StatusOK, res)
+	return nil
+}
+
+// cell accepts a JSON number, string or null as the raw text of one form field, so the manual
+// forms feed the same text validators as the CSV importers (IMP-17).
+type cell string
+
+func (c *cell) UnmarshalJSON(b []byte) error {
+	t := strings.TrimSpace(string(b))
+	switch {
+	case t == "null":
+		*c = ""
+	case strings.HasPrefix(t, `"`):
+		var s string
+		if err := json.Unmarshal(b, &s); err != nil {
+			return err
+		}
+		*c = cell(s)
+	case t == "true" || t == "false" || strings.HasPrefix(t, "{") || strings.HasPrefix(t, "["):
+		return errors.New("expected a number or a string")
+	default:
+		*c = cell(t)
+	}
+	return nil
+}
+
+func manualStatus(r *importers.ManualResult) int {
+	if r.Inserted == 0 {
+		return http.StatusOK
+	}
+	return http.StatusCreated
+}
+
+func manualResults(svc ImportService, w http.ResponseWriter, r *http.Request) error {
+	sym, err := symbolParam(r)
+	if err != nil {
+		return err
+	}
+	var b struct {
+		Basis      string          `json:"basis"`
+		PeriodType string          `json:"period_type"`
+		PeriodEnd  string          `json:"period_end"`
+		Values     map[string]cell `json:"values"`
+		Note       string          `json:"note"`
+	}
+	if err := DecodeJSON(r, &b); err != nil {
+		return err
+	}
+	vals := make(map[string]string, len(b.Values))
+	for k, v := range b.Values {
+		vals[k] = string(v)
+	}
+	res, err := svc.AddResults(r.Context(), sym, importers.ResultsEntry{Basis: b.Basis, PeriodType: b.PeriodType, PeriodEnd: b.PeriodEnd, Values: vals, Note: b.Note})
+	if err != nil {
+		return err
+	}
+	WriteData(w, manualStatus(res), res)
+	return nil
+}
+
+func manualResultsDelete(svc ImportService, w http.ResponseWriter, r *http.Request) error {
+	sym, err := symbolParam(r)
+	if err != nil {
+		return err
+	}
+	q := r.URL.Query()
+	res, err := svc.DeleteResults(r.Context(), sym, q.Get("period_type"), q.Get("period_end"), q.Get("basis"))
+	if err != nil {
+		return err
+	}
+	WriteData(w, http.StatusOK, res)
+	return nil
+}
+
+func manualShareholding(svc ImportService, w http.ResponseWriter, r *http.Request) error {
+	sym, err := symbolParam(r)
+	if err != nil {
+		return err
+	}
+	var b struct {
+		QuarterEnd cell   `json:"quarter_end"`
+		Promoter   cell   `json:"promoter"`
+		FII        cell   `json:"fii"`
+		DII        cell   `json:"dii"`
+		MF         cell   `json:"mf"`
+		Insurance  cell   `json:"insurance"`
+		Govt       cell   `json:"govt"`
+		Public     cell   `json:"public"`
+		Pledged    cell   `json:"pledged_of_promoter"`
+		Count      cell   `json:"shareholders_count"`
+		FiledOn    cell   `json:"filed_on"`
+		Note       string `json:"note"`
+	}
+	if err := DecodeJSON(r, &b); err != nil {
+		return err
+	}
+	res, err := svc.AddShareholding(r.Context(), sym, importers.ShareholdingEntry{ShareholdingInput: importers.ShareholdingInput{
+		QuarterEnd: string(b.QuarterEnd), Promoter: string(b.Promoter), FII: string(b.FII), DII: string(b.DII), MF: string(b.MF),
+		Insurance: string(b.Insurance), Govt: string(b.Govt), Public: string(b.Public), Pledged: string(b.Pledged),
+		Count: string(b.Count), FiledOn: string(b.FiledOn)}, Note: b.Note})
+	if err != nil {
+		return err
+	}
+	WriteData(w, manualStatus(res), res)
+	return nil
+}
+
+func manualAction(svc ImportService, w http.ResponseWriter, r *http.Request) error {
+	sym, err := symbolParam(r)
+	if err != nil {
+		return err
+	}
+	var b struct {
+		ExDate  cell   `json:"ex_date"`
+		Type    cell   `json:"type"`
+		Num     cell   `json:"ratio_num"`
+		Den     cell   `json:"ratio_den"`
+		Amount  cell   `json:"amount_per_share"`
+		Purpose cell   `json:"purpose_text"`
+		Note    string `json:"note"`
+	}
+	if err := DecodeJSON(r, &b); err != nil {
+		return err
+	}
+	res, err := svc.AddAction(r.Context(), sym, importers.ActionEntry{ActionInput: importers.ActionInput{
+		ExDate: string(b.ExDate), Type: string(b.Type), RatioNum: string(b.Num), RatioDen: string(b.Den),
+		Amount: string(b.Amount), Purpose: string(b.Purpose)}, Note: b.Note})
+	if err != nil {
+		return err
+	}
+	WriteData(w, manualStatus(res), res)
 	return nil
 }
