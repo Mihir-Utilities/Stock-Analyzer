@@ -2038,7 +2038,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data = {bars: [[date, open, high, low, close, volume]], adjusted, actions[], range, limited_history, depth{first_bar,last_bar,bars}}; meta.interval is 1d or 1w (weekly candles when more than 2,000 daily points, then LTTB); suspect rows excluded; UNCONFIRMED_ACTION warnings for detected splits. An alias answers data = {redirect_symbol}. 404 DATA_UNAVAILABLE reason no_prices_imported when nothing is imported. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2048,6 +2048,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
@@ -2242,7 +2243,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. Latest analysis_snapshot: returns, technicals, scores, null_reasons, units and series/analysis arrays as [[date, value]] pairs (nulls at warm-up positions, last 750 rows). 404 DATA_UNAVAILABLE reason no_prices_imported or no_history (fewer than 60 valid bars or snapshot not computed yet). An alias answers data = {redirect_symbol}. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2252,6 +2253,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
