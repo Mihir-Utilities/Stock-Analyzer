@@ -189,3 +189,16 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | B05-7 | Quarter-over-quarter change definition | Latest quarter minus the quarter before it, in percentage points, only when the two are 70-111 days apart; each series is null when either value is null | `BuildShareholding` |
 | B05-8 | Events default window | Actions: last 5 years with no upper bound (a coming ex-date shows); calendar: today to +90 days (IST); an explicit `from`/`to` applies to both lists | `Events` |
 | B05-9 | Where the API finds `research_links.json` | New optional env `CONFIG_DIR` (default `config`); startup fails when the file is invalid | `cmd/api/ownerdata_wiring.go` |
+
+## B10 choices where the spec is silent (Claude, 2026-10-24; owner may overrule, none blocks)
+| # | Question | Interim assumption | Where |
+|---|---|---|---|
+| B10-1 | `group=true` with keyset pagination: a fund's variants can sort onto different pages | Grouping folds the rows of the returned page only; variants of one fund share a name prefix so they are normally adjacent | `internal/mf/group.go` |
+| B10-2 | Search ordering and typo tolerance (spec says "trigram on name") | Words AND-ed as `ILIKE '%word%'` (index-served), ordered by `(name, code)`; no similarity ranking and no typo tolerance | `internal/mf/service.go` |
+| B10-3 | When is MF data `stale`? (only the 10-day merged/closed notice is specified) | `meta.stale` when the latest NAV is older than 4 calendar days (long weekend plus one day) | `internal/mf/service.go` |
+| B10-4 | MF-13 "404; suggestions" has no definition | Active schemes whose code starts with the first four digits of the requested code, at most 5 | `details.suggestions` |
+| B10-5 | `log=false` on the NAV endpoint is unexplained | A chart axis flag: echoed in `data.log`, values are never transformed | `GET /mf/schemes/{code}/nav` |
+| B10-6 | S10 / MF-12: is `random_page_cost` enough? | The API pool sets `random_page_cost=1.1` (`cmd/api/main.go`). Measured finding: with the ILIKE-per-word query the planner already picks the trigram index on Postgres 16 and 18 at the default 4 **once the GIN pending list is flushed**; right after a bulk insert (the `sync_mf_schemes` shape) it chooses a sequential scan until autovacuum runs. No migration added (would need `fastupdate=off`; owner may ask for it). Re-measure on Neon (still owner action, S10) | RUNBOOK section 19 |
+| B10-7 | Defaults the spec does not give: NAV `range`, SIP bounds | NAV `range` defaults to `1Y`; SIP `amount` 0 < amount <= 1e9 with <= 2 decimals, `start` >= 1990-01-01, `amount` and `start` required; compare `range` defaults to `3Y`; at most 12 search words | `internal/mf/params.go` |
+| B10-8 | Attribution text differs: `docs/00` "NAV data: AMFI, via mfapi.in" vs `docs/01`, `docs/06`, task file "AMFI via mfapi.in" | The API sends the `docs/00` text (the legal-and-safety doc) in `attribution`; one constant (`mf.Attribution`); F-tasks should render that field rather than hard-code the string | `internal/mf/calc.go` |
+| B10-9 | Lumpsum calculator (named in `docs/06`) has no endpoint in `docs/03` section 10 | Not built; the UI can compute it from the NAV series. Say so if an endpoint is wanted | out of scope |

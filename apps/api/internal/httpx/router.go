@@ -59,6 +59,9 @@ type Deps struct {
 	// OwnerData serves GET /stocks/{symbol}/fundamentals|shareholding|events|links (B05); nil keeps them 501 stubs.
 	OwnerData OwnerDataService
 
+	// MF serves the /mf/* read routes (B10); nil keeps them 501 stubs.
+	MF MFService
+
 	// LoginLimiter (default 10/min per IP) guards POST /auth/login; GeneralLimiter (default
 	// 120/min) guards authenticated routes (docs/03 section 16).
 	LoginLimiter   *Limiter

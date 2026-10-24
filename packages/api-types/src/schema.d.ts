@@ -2991,7 +2991,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data = {items, next_cursor, attribution}; items are schemes, or funds with variants[] when group=true. Defaults to plan=direct and option=growth unless include_all=true. Percent figures are percent numbers; latest_nav is INR per unit. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3003,7 +3003,6 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3027,7 +3026,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data has meta, latest_nav, returns (r_1m..r_since, percent, null with return_reasons when history is shorter), risk, backfill (when no NAV rows yet) and attribution; warnings[] carries IDCW, merged/closed and metrics-pending notices. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3037,8 +3036,8 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3065,7 +3064,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data.points = [[date, nav]...] downsampled to at most 2,000 points (INR per unit); data.log only echoes the requested axis scale. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3075,9 +3074,9 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3106,7 +3105,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. Money fields are INR strings; xirr_pct and absolute_return_pct are percent numbers or null; skipped_installments counts those before the first NAV. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3116,9 +3115,9 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3144,7 +3143,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. Series rebased to 100 at the first common date; table has return, volatility and drawdown per scheme (percent); different_starts flags unequal histories. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3154,9 +3153,9 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3177,7 +3176,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data.items is the list of category names of active schemes. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3188,7 +3187,6 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {

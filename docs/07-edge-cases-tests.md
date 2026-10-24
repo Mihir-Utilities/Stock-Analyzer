@@ -178,6 +178,14 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | MF-85 | `sync_mf_schemes` status rule | Stale or absent-with-no-NAV schemes become `inactive`, fresh ones (also with a value date after the file date) `active`; a failed or invalid AMFI file never changes status | I |
 | MF-86 | Flat or short NAV series in `mf_return_cache` | No NaN/Inf anywhere; zero volatility is 0 with Sharpe null (`n/m`); under 1Y volatility null | U |
 | MF-87 | mfapi 404 for a tracked code | Item error (not an AMFI-fallback case); other schemes continue | I |
+| MF-88 | XIRR golden vector (`internal/finmath`): -1000 on 2020-01-01, +1100 on 2021-01-01; no sign change; fewer than one outflow and one inflow | 0.09973 within 1e-4; monotonic in the terminal value; `ErrNoFlows` / `ErrNoSignChange` surface as null | Go: `TestXIRR*` (finmath) |
+| MF-89 | Scheme search text | Words AND-ed, case-insensitive, any order; `%` and `_` in the query are literal; every value is a bind parameter; at most 12 words / 100 chars | Go: `TestMFSearchDefaultsAndGrouping`, `TestBuildSearchParameterised` |
+| MF-90 | Scheme with no NAV rows opened | 200 with `backfill {status, job_id}` and warning `NO_NAV_DATA`; `mf_refresh` enqueued once; a refused enqueue (cooldown) gives `status: none` | Go: `TestMFDetailNoNavEnqueuesBackfill` |
+| MF-91 | NAV series longer than 2,000 points | Downsampled to <= 2,000 points, first and last kept, ascending; `raw_count` and `downsampled` reported; unknown `range` is 422; scheme without NAV is 404 `DATA_UNAVAILABLE` | Go: `TestMFNavSeries`, `TestDownsample` |
+| MF-92 | SIP `end` after the latest NAV; every installment before the first NAV | `end` clamped with warning `END_CLAMPED`; with no executed installment `value`, `xirr_pct` and `absolute_return_pct` are null (never 0) and `NO_INSTALLMENTS` is raised | Go: `TestMFSip`, `TestSIPNoInstallmentsAndShortPeriod` |
+| MF-93 | SIP shorter than 30 days between first execution and end | XIRR null with `xirr_reason: period_too_short`; absolute return still shown (docs/05 8.3) | Go: `TestSIPNoInstallmentsAndShortPeriod` |
+| MF-94 | Compare input | 2-5 distinct numeric codes else 422; unknown code 404; code without NAV 404 `DATA_UNAVAILABLE`; no shared NAV date in the window 422 `NO_COMMON_DATES`; invalid `range` 422 | Go: `TestMFCompare` |
+| MF-95 | Scheme search plan after a bulk `sync_mf_schemes` insert | After autovacuum (or `gin_clean_pending_list`) the planner uses `mf_scheme_name_trgm`; the 10,000-scheme search is < 300 ms and cursor pages are complete and disjoint | Go: `TestMF12SearchUsesTrigramIndexAndIsFast` |
 
 ## PF: portfolio
 | ID | Scenario | Required behavior | Test |

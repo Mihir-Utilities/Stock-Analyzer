@@ -47,6 +47,8 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 	}
 	poolCfg.MaxConns = 5 // Neon free tier: stay small
 	poolCfg.MaxConnIdleTime = 4 * time.Minute
+	// S10: make the planner pick the trigram index for scheme search (MF-12).
+	poolCfg.ConnConfig.RuntimeParams["random_page_cost"] = "1.1"
 	// NewWithConfig does not dial, so a sleeping Neon database does not block start-up; /readyz pings.
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
@@ -73,7 +75,8 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 		return err
 	}
 	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts, Jobs: jobSvc, Alerts: alertDeps, Stocks: instSvc,
-		Prices: prices.New(pool, instSvc), OwnerData: ownerSvc})
+		Prices: prices.New(pool, instSvc), OwnerData: ownerSvc,
+		MF: mfService(pool, jobSvc)})
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
 		Handler:           router,
