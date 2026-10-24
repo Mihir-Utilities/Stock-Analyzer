@@ -57,7 +57,7 @@ export function Card({
             type="button"
             data-testid="card-retry"
             onClick={onRetry}
-            className="h-9 rounded-control border border-border px-3 text-body-sm hover:bg-surface-3"
+            className="h-9 touch-target rounded-control border border-border px-3 text-body-sm hover:bg-surface-3"
           >
             Retry
           </button>

@@ -184,3 +184,11 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Failure mode: if the Playwright web server fails with "already used", a previous run left `next start` (port 3100) or `scripts/serve-static.mjs` (port 6100) running; stop that process and re-run.
 - Failure mode: a chart shows a red "could not be drawn" banner when ECharts throws on an option; the data table (Show data) and CSV still work, so no data is lost while it is fixed.
 - Licences checked for S15: echarts 6.1.0 Apache-2.0, zrender BSD-3-Clause, lucide-react ISC, Inter OFL-1.1, @tanstack/react-table and react-virtual MIT.
+
+## 23. Frontend review fixes for F01/F02
+
+- Touch targets: the root font size is 14 px, so Tailwind rem classes are 12.5 percent smaller than their names (`h-11` is 38.5 px). Use the `touch-target` utility (`globals.css`, 44 px minimum below 1024 px and on coarse pointers) on every new button or link; the Playwright test `UI-21` fails for any `button[data-testid]` or `a[data-testid]` under 44 px at 375 px (the visually hidden skip link is the only exclusion).
+- Dialogs and drawers (`ui/overlays.tsx`): the `open` prop is the source of truth. If a browser closes a modal natively while the parent still says open (second Escape without user activation), `onClose` is called and the dialog is re-opened. Backdrop click intentionally does nothing.
+- Login redirect (`middleware.ts`) clones `request.nextUrl`. A relative `Location` header was tried and rejected: Next's middleware adapter throws `Invalid URL` (HTTP 500) on it. Behind Render the public `Host` header must be forwarded so the redirect stays on the public origin.
+- External links must use `ui/ExternalLink` (adds `rel="noopener noreferrer"`); `tests/unit/repo-guards.test.ts` fails on any other `target="_blank"`.
+- `npm run build` in `apps/web` currently ends with `SecurityFatalError` (the installed Next.js 16.4.0 is flagged by the advisory service); the compile and page generation steps pass and the output serves. Upgrading Next is a separate task.

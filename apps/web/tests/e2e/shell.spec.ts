@@ -52,7 +52,7 @@ test.describe("axe in a real browser (UI-04, Lighthouse a11y proxy)", () => {
 });
 
 // UI-03: 320 px width; no horizontal scroll (the shell has no sticky-column tables).
-test.describe("responsive shell (UI-03)", () => {
+test.describe("responsive shell (UI-03, UI-13)", () => {
   for (const width of [320, 375, 768, 1024, 1440]) {
     for (const path of ["/", "/mf"]) {
       test(`no horizontal scroll at ${width} px on ${path}`, async ({ page }) => {
@@ -68,7 +68,7 @@ test.describe("responsive shell (UI-03)", () => {
     }
   }
 
-  test("mobile shows bottom tabs and no sidebar; desktop the reverse", async ({ page }) => {
+  test("UI-13 mobile shows bottom tabs and no sidebar; desktop the reverse", async ({ page }) => {
     await signIn(page);
     await page.setViewportSize({ width: 375, height: 800 });
     await page.goto("/");
@@ -79,7 +79,7 @@ test.describe("responsive shell (UI-03)", () => {
     await expect(page.getByTestId("bottom-tabs")).toBeHidden();
   });
 
-  test("touch targets in the bottom tab bar are at least 44 px", async ({ page }) => {
+  test("UI-13 touch targets in the bottom tab bar are at least 44 px", async ({ page }) => {
     await signIn(page);
     await page.setViewportSize({ width: 320, height: 800 });
     await page.goto("/");
@@ -111,7 +111,7 @@ test.describe("footer on every page (SAF-03)", () => {
 });
 
 test.describe("no external network, CSP, headers", () => {
-  test("every request stays on this origin and the CSP blocks nothing we ship", async ({
+  test("UI-14 every request stays on this origin and the CSP blocks nothing we ship", async ({
     page,
   }) => {
     const external: string[] = [];
@@ -187,7 +187,7 @@ test.describe("auth gate and safe next (SEC-06)", () => {
 });
 
 test.describe("theme", () => {
-  test("toggle persists across reloads without a flash", async ({ page }) => {
+  test("UI-19 toggle persists across reloads without a flash", async ({ page }) => {
     await signIn(page);
     await page.goto("/");
     const before = await page.locator("html").getAttribute("data-theme");

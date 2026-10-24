@@ -199,7 +199,7 @@ export function ChartFrame({
   const sampled = dataset.x.length > 1000;
 
   const toolbarButton =
-    "inline-flex h-9 items-center gap-1 rounded-control border border-border px-2 text-body-sm text-text-1 hover:bg-surface-3 aria-pressed:border-accent";
+    "inline-flex h-9 touch-target items-center justify-center gap-1 rounded-control border border-border px-2 text-body-sm text-text-1 hover:bg-surface-3 aria-pressed:border-accent";
 
   let body: ReactNode;
   if (effective === "loading") {
@@ -265,7 +265,7 @@ export function ChartFrame({
                     data-testid={`range-${r}`}
                     aria-pressed={ranges.value === r}
                     onClick={() => ranges.onChange(r)}
-                    className="h-9 min-w-9 rounded-chip border border-border px-2 text-caption text-text-1 hover:bg-surface-3 aria-pressed:border-accent aria-pressed:bg-accent-weak"
+                    className="h-9 touch-target rounded-chip border border-border px-2 text-caption text-text-1 hover:bg-surface-3 aria-pressed:border-accent aria-pressed:bg-accent-weak"
                   >
                     {r}
                   </button>
@@ -392,7 +392,7 @@ function LegendItem({
         aria-pressed={!off}
         onClick={() => onToggle(s.id)}
         className={cx(
-          "inline-flex h-9 items-center gap-2 rounded-chip border border-border px-3 text-caption hover:bg-surface-3",
+          "inline-flex h-9 touch-target items-center gap-2 rounded-chip border border-border px-3 text-caption hover:bg-surface-3",
           off ? "text-text-2 line-through" : "text-text-1",
         )}
       >

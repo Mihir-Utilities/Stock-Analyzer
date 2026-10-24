@@ -119,7 +119,7 @@ function BottomTabs({ pathname }: { pathname: string }) {
                   data-testid={`more-${item.testId}`}
                   onClick={() => setMoreOpen(false)}
                   aria-current={isActive(pathname, item.href) ? "page" : undefined}
-                  className="flex h-11 items-center gap-2 rounded-control px-3 text-body text-text-1 hover:bg-surface-2"
+                  className="touch-target flex h-11 items-center gap-2 rounded-control px-3 text-body text-text-1 hover:bg-surface-2"
                 >
                   <NavIcon name={item.icon} />
                   {item.label}

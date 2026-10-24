@@ -68,7 +68,11 @@ export function Heatmap({
                 </th>
                 {columns.map((c, ci) => {
                   const cell = cells[ri]?.[ci];
-                  const known = cell !== undefined && cell.value !== null && cell.text !== null;
+                  const known =
+                    cell !== undefined &&
+                    cell.value !== null &&
+                    Number.isFinite(cell.value) &&
+                    cell.text !== null;
                   return (
                     <td
                       key={c}

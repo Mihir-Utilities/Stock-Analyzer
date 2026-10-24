@@ -26,7 +26,7 @@ function docColorTable(): Record<string, { dark: string; light: string }> {
   return out;
 }
 
-describe("tokens match docs/06a section 3.1 exactly", () => {
+describe("UI-11 tokens match docs/06a section 3.1 exactly", () => {
   const table = docColorTable();
 
   it("has every documented colour token and no extras", () => {
@@ -45,7 +45,7 @@ describe("tokens match docs/06a section 3.1 exactly", () => {
   });
 });
 
-describe("CSS variables are generated from the tokens", () => {
+describe("UI-11 CSS variables are generated from the tokens", () => {
   const css = themeStylesheet();
   it("defines every token for both themes", () => {
     for (const name of names) {
@@ -106,7 +106,7 @@ describe("contrast (UI-04)", () => {
     });
   }
 
-  it("semantic text pairs below 4.5:1 are exactly the documented deviations (OQ-16)", () => {
+  it("UI-12 semantic text pairs below 4.5:1 are exactly the documented deviations (OQ-16)", () => {
     const failing: string[] = [];
     for (const theme of themes) {
       for (const fg of semantic) {
@@ -124,7 +124,7 @@ describe("contrast (UI-04)", () => {
     expect(failing.sort()).toEqual([...KNOWN_TEXT_DEVIATIONS].sort());
   });
 
-  it("categorical chart colours below 3:1 on the card surface are exactly the documented ones (OQ-16)", () => {
+  it("UI-12 categorical chart colours below 3:1 on the card surface are exactly the documented ones (OQ-16)", () => {
     const failing: string[] = [];
     for (const theme of themes) {
       for (const colour of categoricalPalette) {
@@ -152,7 +152,7 @@ describe("contrast (UI-04)", () => {
   });
 });
 
-describe("ECharts theme from tokens", () => {
+describe("UI-11 ECharts theme from tokens", () => {
   it.each(themes)("%s theme only uses token colours", (theme) => {
     const t = echartsTheme(theme);
     expect(t.textStyle.color).toBe(colorTokens["text-2"][theme]);
@@ -190,7 +190,7 @@ describe("tokens only (CLAUDE.md section 3)", () => {
   const src = join(webRoot, "src");
   const files = walk(src).filter((f) => /\.(tsx?|css)$/.test(f));
 
-  it("has no hex colour literal outside lib/theme/tokens.ts", () => {
+  it("UI-11 has no hex colour literal outside lib/theme/tokens.ts", () => {
     const offenders = files.filter(
       (f) =>
         !/lib[\\/]theme[\\/]tokens\.ts$/.test(f) &&
@@ -199,7 +199,7 @@ describe("tokens only (CLAUDE.md section 3)", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("makes no reference to an external http(s) host in source (no external requests)", () => {
+  it("UI-14 makes no reference to an external http(s) host in source (no external requests)", () => {
     const offenders = files.filter((f) =>
       /https?:\/\/(?!app\.invalid)/.test(readFileSync(f, "utf8")),
     );

@@ -74,7 +74,7 @@ export function InfoPopover({
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex size-6 items-center justify-center rounded-control text-text-2 hover:bg-surface-3"
+        className="inline-flex size-6 touch-target items-center justify-center rounded-control text-text-2 hover:bg-surface-3"
       >
         <CircleHelp size={16} strokeWidth={1.75} aria-hidden="true" />
       </button>
@@ -93,15 +93,39 @@ export function InfoPopover({
   );
 }
 
+function openDialog(d: HTMLDialogElement) {
+  if (d.open) return;
+  if (typeof d.showModal === "function") d.showModal();
+  else d.setAttribute("open", "");
+}
+
+// The `open` prop is the single source of truth. A second Escape (no user activation in between)
+// makes browsers close the dialog without a cancelable `cancel` event; the `close` listener reports
+// that through onClose and, if the parent keeps `open` true, re-opens the dialog so the DOM and the
+// parent state never disagree.
 function useDialog(open: boolean, onClose: () => void) {
   const ref = useRef<HTMLDialogElement>(null);
+  const openRef = useRef(open);
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (open && !d.open) {
-      if (typeof d.showModal === "function") d.showModal();
-      else d.setAttribute("open", "");
-    }
+    const onNativeClose = () => {
+      if (!openRef.current) return;
+      onClose();
+      setTimeout(() => {
+        if (openRef.current && ref.current) openDialog(ref.current);
+      }, 0);
+    };
+    d.addEventListener("close", onNativeClose);
+    return () => d.removeEventListener("close", onNativeClose);
+  }, [onClose]);
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (open) openDialog(d);
     if (!open && d.open) {
       if (typeof d.close === "function") d.close();
       else d.removeAttribute("open");
@@ -159,7 +183,7 @@ export function ConfirmDialog({
           data-testid="confirm-cancel"
           autoFocus
           onClick={onCancel}
-          className="h-9 rounded-control border border-border px-3 text-body-sm hover:bg-surface-3"
+          className="h-9 touch-target rounded-control border border-border px-3 text-body-sm hover:bg-surface-3"
         >
           {cancelLabel}
         </button>
@@ -168,7 +192,7 @@ export function ConfirmDialog({
           data-testid="confirm-ok"
           onClick={onConfirm}
           className={cx(
-            "h-9 rounded-control border px-3 text-body-sm font-medium hover:bg-surface-3",
+            "h-9 touch-target rounded-control border px-3 text-body-sm font-medium hover:bg-surface-3",
             danger ? "border-down text-text-1" : "border-accent text-text-1",
           )}
         >
@@ -209,7 +233,7 @@ export function Drawer({
           data-testid="drawer-close"
           aria-label="Close"
           onClick={onClose}
-          className="inline-flex size-9 items-center justify-center rounded-control hover:bg-surface-3"
+          className="inline-flex size-9 touch-target items-center justify-center rounded-control hover:bg-surface-3"
         >
           <X size={16} strokeWidth={1.75} aria-hidden="true" />
         </button>
@@ -275,7 +299,7 @@ export function ToastProvider({
               data-testid="toast-close"
               aria-label="Dismiss"
               onClick={() => dismiss(t.id)}
-              className="shrink-0 text-text-2"
+              className="inline-flex size-6 touch-target shrink-0 items-center justify-center text-text-2"
             >
               <X size={14} strokeWidth={1.75} aria-hidden="true" />
             </button>
@@ -347,7 +371,7 @@ export function Tabs({
             tabIndex={t.id === active ? 0 : -1}
             onClick={() => select(t.id)}
             className={cx(
-              "h-9 whitespace-nowrap border-b-2 px-3 text-body-sm",
+              "h-9 touch-target whitespace-nowrap border-b-2 px-3 text-body-sm",
               t.id === active
                 ? "border-accent font-medium text-text-1"
                 : "border-transparent text-text-2 hover:text-text-1",
