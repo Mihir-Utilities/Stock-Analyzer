@@ -15,6 +15,9 @@ from worker.runner import JobSpec
 # docs/04 section 4: stock_refresh / stock_backfill are broker mode (inactive, D-1).
 HTTP_ALLOWED_KINDS = frozenset({"post_import", "mf_refresh"})
 
+# Kinds whose progress lives in refresh_job.result so a hard-capped run can be continued.
+RESUMABLE_KINDS = frozenset({"post_import"})
+
 CLI_JOBS: dict[str, JobSpec] = {}
 
 

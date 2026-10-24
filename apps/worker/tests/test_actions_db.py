@@ -358,3 +358,22 @@ async def test_soft_flag_disappears_once_an_action_exists_on_that_date(
     assert len(await actions_db.list_soft_flags(pg_full, "ADD")) == 1
     await add_action(pg_full, iid, bars[40].trade_date, "bonus", 1, 2)  # "Add corporate action"
     assert await actions_db.list_soft_flags(pg_full, "ADD") == []
+
+
+async def test_act20_load_bars_returns_suspect_and_detect_ignores_it_in_the_average(
+    pg_full: asyncpg.Pool,
+) -> None:
+    bars = make_series(60, jumps={40: (0.5, 3.0)})
+    iid = await seed(pg_full, "SUS", bars)
+    # twelve earlier bars flagged suspect with a huge volume: the clean 20 still decide
+    await pg_full.execute(
+        "UPDATE price_daily SET suspect = true, volume = 900000000 "
+        "WHERE instrument_id = $1 AND trade_date = ANY($2)",
+        iid,
+        [b.trade_date for b in bars[10:22]],
+    )
+    loaded = await actions_db.load_bars(pg_full, iid)
+    assert sum(b.suspect for b in loaded) == 12
+    out = await actions_db.detect_actions(pg_full, "SUS")
+    assert [d.ex_date for d in out.new_actions] == [bars[40].trade_date]
+    assert out.summary()["low_confidence"] == []

@@ -62,6 +62,7 @@ class DetectOutcome:
             "new_actions": [d.ex_date.isoformat() for d in self.new_actions],
             "conflicts": [d.isoformat() for d in self.conflicts],
             "soft_flags": [f.trade_date.isoformat() for f in self.soft_flags],
+            "low_confidence": [d.ex_date.isoformat() for d in self.new_actions if d.low_confidence],
         }
 
 
@@ -72,12 +73,13 @@ async def instrument_id_for(pool: asyncpg.Pool, symbol: str) -> int | None:
 
 async def load_bars(pool: asyncpg.Pool, instrument_id: int) -> list[Bar]:
     rows = await pool.fetch(
-        "SELECT trade_date, close, volume, src_adjusted FROM price_daily "
+        "SELECT trade_date, close, volume, src_adjusted, suspect FROM price_daily "
         "WHERE instrument_id = $1 ORDER BY trade_date",
         instrument_id,
     )
     return [
-        Bar(r["trade_date"], float(r["close"]), int(r["volume"]), r["src_adjusted"]) for r in rows
+        Bar(r["trade_date"], float(r["close"]), int(r["volume"]), r["src_adjusted"], r["suspect"])
+        for r in rows
     ]
 
 

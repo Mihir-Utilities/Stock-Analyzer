@@ -220,3 +220,44 @@ def test_act10_future_ex_date_is_not_applied() -> None:
     assert adj_close(100.0, date(2026, 10, 1), False, steps) == 100.0
     on_day = adjustment_steps([(date(2026, 10, 17), Decimal(2))], as_of=date(2026, 10, 17))
     assert len(on_day) == 1  # ex_date <= as_of applies
+
+
+# --------------------------------------------------------------------------- D03 review fixes
+def test_act20_suspect_bars_are_excluded_from_the_volume_average() -> None:
+    # 10 spiky bars inside the prior window would inflate the average to ~5.5M and hide the split.
+    def bars(suspect: bool) -> list[Bar]:
+        out = flat_then_jump(0.5, volume_at_jump=300_000, n_before=40)
+        return [
+            Bar(b.trade_date, b.close, 10_000_000, b.src_adjusted, suspect)
+            if 20 <= i < 30
+            else Bar(b.trade_date, b.close, b.volume, b.src_adjusted, False)
+            for i, b in enumerate(out)
+        ]
+
+    assert detect_splits(bars(suspect=False), CFG) == []  # the spikes count as ordinary volume
+    [det] = detect_splits(bars(suspect=True), CFG)  # flagged suspect: skipped, 20 clean bars remain
+    assert (det.ratio_num, det.ratio_den) == (1, 2)
+
+
+def test_act20_fewer_than_20_clean_prior_bars_means_no_detection() -> None:
+    out = flat_then_jump(0.5, volume_at_jump=300_000, n_before=25)
+    flagged = [Bar(b.trade_date, b.close, b.volume, False, i < 10) for i, b in enumerate(out)]
+    assert detect_splits(flagged, CFG) == []  # only 15 non-suspect prior bars
+
+
+def test_act20_the_suspect_split_day_bar_itself_is_still_detected() -> None:
+    # docs/01 3.5: a >50% day-over-day change marks the bar suspect AND triggers detection (1/3).
+    out = flat_then_jump(1 / 3, volume_at_jump=300_000)
+    out = [Bar(b.trade_date, b.close, b.volume, False, i == 30) for i, b in enumerate(out)]
+    [det] = detect_splits(out, CFG)
+    assert (det.ratio_num, det.ratio_den) == (1, 3)
+
+
+def test_act21_a_multi_month_hole_before_the_jump_is_flagged_low_confidence() -> None:
+    days = trading_days(200)
+    before = [Bar(d, 1000.0, 100_000) for d in days[:30]]
+    after = [Bar(d, 500.0, 300_000 if d == days[170] else 100_000) for d in days[170:175]]
+    [gap] = detect_splits(before + after, CFG)  # trigger unchanged: still a candidate
+    assert gap.low_confidence is True
+    [tight] = detect_splits(flat_then_jump(0.5, volume_at_jump=300_000), CFG)
+    assert tight.low_confidence is False

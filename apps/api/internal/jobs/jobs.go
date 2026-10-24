@@ -67,11 +67,13 @@ type Config struct {
 
 // Service creates and reads refresh jobs.
 type Service struct {
-	db  dbq.DBTX
-	q   *dbq.Queries
-	sig Signaler
-	cfg Config
-	log zerolog.Logger
+	q *dbq.Queries
+	// begin starts the transaction that serialises Enqueue; nil only for a DBTX that cannot
+	// (tests with a fake), where Enqueue falls back to the unserialised check-then-insert.
+	begin txBeginner
+	sig   Signaler
+	cfg   Config
+	log   zerolog.Logger
 	// Now is the clock (tests replace it).
 	Now func() time.Time
 	wg  sync.WaitGroup
@@ -79,9 +81,22 @@ type Service struct {
 	signalTimeout time.Duration
 }
 
+type txBeginner interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
+// enqueueLockKey is the transaction-scoped advisory lock that serialises cooldown, global-limit
+// and insert across concurrent Enqueue calls (parallel clicks on different targets must not
+// exceed REFRESH_GLOBAL_PER_HOUR).
+const enqueueLockKey int64 = 0x6a6f627345 // "jobsE"
+
 // New builds a Service over a pgx pool. sig may be nil (no signal is sent).
 func New(db dbq.DBTX, sig Signaler, cfg Config, log zerolog.Logger) *Service {
-	return &Service{db: db, q: dbq.New(db), sig: sig, cfg: cfg, log: log, Now: time.Now, signalTimeout: 15 * time.Second}
+	s := &Service{q: dbq.New(db), sig: sig, cfg: cfg, log: log, Now: time.Now, signalTimeout: 15 * time.Second}
+	if b, ok := db.(txBeginner); ok {
+		s.begin = b
+	}
+	return s
 }
 
 // Wait blocks until in-flight worker signals finish (graceful shutdown, tests).
@@ -109,32 +124,29 @@ func (s *Service) Enqueue(ctx context.Context, kind, target string) (Job, bool, 
 	default:
 		return Job{}, false, fmt.Errorf("jobs: kind %q is not enqueued on demand", kind)
 	}
-	// The cooldown and global-hour checks and the insert run in one transaction under an advisory
-	// lock, so parallel enqueues for different targets cannot all pass the count and overshoot
-	// REFRESH_GLOBAL_PER_HOUR (check-then-insert race). The worker signal fires after the commit.
-	q := s.q
-	var tx pgx.Tx
-	if b, ok := s.db.(interface {
-		Begin(context.Context) (pgx.Tx, error)
-	}); ok {
-		var err error
-		if tx, err = b.Begin(ctx); err != nil {
-			return Job{}, false, err
+	if s.begin == nil {
+		j, created, err := s.enqueueChecked(ctx, s.q, kind, target)
+		if created {
+			s.fire(j.ID)
 		}
-		defer func() { _ = tx.Rollback(ctx) }()
-		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('refresh_job_enqueue'))`); err != nil {
-			return Job{}, false, err
-		}
-		q = dbq.New(tx)
+		return j, created, err
 	}
-	j, created, err := s.enqueueChecked(ctx, q, kind, target)
+	tx, err := s.begin.Begin(ctx)
 	if err != nil {
 		return Job{}, false, err
 	}
-	if tx != nil {
-		if err := tx.Commit(ctx); err != nil {
-			return Job{}, false, err
-		}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op after Commit
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", enqueueLockKey); err != nil {
+		return Job{}, false, err
+	}
+	// The lock is held from here to Commit, and each statement below takes a fresh READ COMMITTED
+	// snapshot, so the counts include every enqueue that committed before we got the lock.
+	j, created, err := s.enqueueChecked(ctx, s.q.WithTx(tx), kind, target)
+	if err != nil {
+		return j, created, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Job{}, false, err
 	}
 	if created {
 		s.fire(j.ID)
@@ -142,6 +154,7 @@ func (s *Service) Enqueue(ctx context.Context, kind, target string) (Job, bool, 
 	return j, created, nil
 }
 
+// enqueueChecked runs the active-job, cooldown and global-limit checks and the insert on q.
 func (s *Service) enqueueChecked(ctx context.Context, q *dbq.Queries, kind, target string) (Job, bool, error) {
 	active, err := q.GetActiveRefreshJob(ctx, dbq.GetActiveRefreshJobParams{Kind: kind, Target: target})
 	if err == nil {
@@ -169,7 +182,7 @@ func (s *Service) enqueueChecked(ctx context.Context, q *dbq.Queries, kind, targ
 		oldest := times[len(times)-s.cfg.GlobalHour].Time
 		return Job{}, false, &RateLimitedError{RetryAfterSeconds: ceilSeconds(oldest.Add(time.Hour).Sub(now))}
 	}
-	return s.insertRow(ctx, q, kind, target, nil)
+	return s.insertWith(ctx, q, kind, target, nil)
 }
 
 // PostImportResult is the initial refresh_job.result of a post_import job (docs/04 3.12).
@@ -204,15 +217,15 @@ func (s *Service) MFSchemeExists(ctx context.Context, code int32) (bool, error) 
 }
 
 func (s *Service) insert(ctx context.Context, kind, target string, result []byte) (Job, bool, error) {
-	j, created, err := s.insertRow(ctx, s.q, kind, target, result)
+	j, created, err := s.insertWith(ctx, s.q, kind, target, result)
 	if created {
 		s.fire(j.ID)
 	}
 	return j, created, err
 }
 
-// insertRow inserts without signalling the worker (the caller fires after its commit).
-func (s *Service) insertRow(ctx context.Context, q *dbq.Queries, kind, target string, result []byte) (Job, bool, error) {
+// insertWith inserts without signalling the worker (the caller fires after its commit).
+func (s *Service) insertWith(ctx context.Context, q *dbq.Queries, kind, target string, result []byte) (Job, bool, error) {
 	row, err := q.InsertRefreshJob(ctx, dbq.InsertRefreshJobParams{Kind: kind, Target: target, Result: result})
 	if errors.Is(err, pgx.ErrNoRows) { // lost the race: the unique active-job index kept one row (API-06)
 		active, aerr := q.GetActiveRefreshJob(ctx, dbq.GetActiveRefreshJobParams{Kind: kind, Target: target})

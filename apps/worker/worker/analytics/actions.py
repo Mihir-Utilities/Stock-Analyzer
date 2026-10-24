@@ -26,6 +26,8 @@ FRACTIONS: tuple[tuple[int, int], ...] = (
     (5, 6),
 )
 
+LOW_CONFIDENCE_GAP_DAYS = 14  # about 10 trading days; see Detection.low_confidence
+
 EPS = 1e-9  # boundary values (exactly 3%, exactly -20%) must not flip on float noise
 
 FLAG_LARGE_DROP = "large_one_day_drop"
@@ -51,6 +53,7 @@ class Bar:
     close: float
     volume: int
     src_adjusted: bool = False
+    suspect: bool = False  # failed a sanity rule (docs/01 3.5): never part of the volume average
 
 
 @dataclass(frozen=True)
@@ -65,6 +68,13 @@ class Detection:
     @property
     def change_pct(self) -> float:
         return (self.ratio - 1.0) * 100.0
+
+    @property
+    def low_confidence(self) -> bool:
+        """Interim assumption (docs/OPEN_QUESTIONS.md D03R-1): the two compared stored bars are
+        more than ``LOW_CONFIDENCE_GAP_DAYS`` calendar days apart, so the "jump" may be a data
+        hole rather than a split. Informational only; it never changes the trigger."""
+        return (self.ex_date - self.prev_date).days > LOW_CONFIDENCE_GAP_DAYS
 
 
 @dataclass(frozen=True)
@@ -96,6 +106,21 @@ def match_fraction(ratio: float, cfg: DetectorConfig) -> tuple[int, int] | None:
     return None if best is None else best[1]
 
 
+def _prior_window(series: Sequence[Bar], i: int, cfg: DetectorConfig) -> list[Bar]:
+    """The prior ``volume_window`` non-suspect bars before index ``i`` (day t excluded, D-T).
+
+    Suspect bars are excluded from the average (docs/05 section 1); they stay in the price series
+    because the >50% jump rule marks the split-day bar itself ``suspect`` (docs/01 3.5).
+    """
+    picked: list[Bar] = []
+    for j in range(i - 1, -1, -1):
+        if not series[j].suspect:
+            picked.append(series[j])
+            if len(picked) == cfg.volume_window:
+                break
+    return picked
+
+
 def _volume_ok(window: Sequence[Bar], volume: int, cfg: DetectorConfig) -> bool:
     if len(window) < cfg.volume_window:
         return False  # not enough history to judge a volume spike (assumption D03-A1)
@@ -116,7 +141,7 @@ def detect_splits(bars: Iterable[Bar], cfg: DetectorConfig | None = None) -> lis
         fraction = match_fraction(ratio, cfg)
         if fraction is None:
             continue  # reverse splits (ratio > 1.35) never match: ACT-13
-        window = series[max(0, i - cfg.volume_window) : i]  # prior bars, excluding day t
+        window = _prior_window(series, i, cfg)  # prior non-suspect bars, excluding day t
         if not _volume_ok(window, cur.volume, cfg):
             continue
         found.append(
