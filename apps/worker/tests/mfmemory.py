@@ -16,6 +16,7 @@ class MemoryMfStore:
         self.navs: dict[int, dict[date, float]] = {}
         self.cache: dict[int, tuple[date, dict[str, Any]]] = {}
         self.risk_free = 0.065
+        self.previous_rows: int | None = None
 
     def add(
         self, code: int, *, tracked: bool = False, status: str = "active", last: date | None = None
@@ -78,6 +79,9 @@ class MemoryMfStore:
 
     async def save_cache(self, code: int, as_of: date, metrics: dict[str, Any]) -> None:
         self.cache[code] = (as_of, metrics)
+
+    async def previous_amfi_rows(self) -> int | None:
+        return self.previous_rows
 
     async def risk_free_rate(self) -> float:
         return self.risk_free

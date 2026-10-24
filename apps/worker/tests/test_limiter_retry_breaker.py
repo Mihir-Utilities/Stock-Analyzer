@@ -145,6 +145,7 @@ async def test_breaker_success_resets_a_non_open_streak(health_store) -> None:  
     await b.before_call()
 
 
+# SYS-19
 async def test_breaker_half_open_then_closes_after_three_successes(health_store) -> None:  # type: ignore[no-untyped-def]
     now = Now()
     b = CircuitBreaker("mfapi", health_store, now=now)
@@ -159,6 +160,7 @@ async def test_breaker_half_open_then_closes_after_three_successes(health_store)
     assert row.consecutive_failures == 0 and row.ok is True and row.disabled_until is None
 
 
+# SYS-19
 async def test_breaker_escalates_30_min_2_h_12_h(health_store) -> None:  # type: ignore[no-untyped-def]
     now = Now()
     b = CircuitBreaker("mfapi", health_store, now=now)
@@ -189,6 +191,7 @@ async def test_failed_probe_resets_success_count(health_store) -> None:  # type:
     assert health_store.rows["mfapi"].consecutive_failures == 6  # needs 3 fresh successes
 
 
+# SYS-19
 async def test_call_wrapper_counts_only_source_failures(health_store) -> None:  # type: ignore[no-untyped-def]
     b = CircuitBreaker("amfi", health_store, now=Now())
 

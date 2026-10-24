@@ -56,7 +56,9 @@ def drawdown_column(close: F64) -> list[float | None]:
 
 def histogram(close: F64, bins: int = HIST_BINS) -> dict[str, Any] | None:
     """Histogram of daily simple returns (percent) over the last window; None if < 20 returns."""
-    r = rt.simple_returns(close[-(SERIES_ROWS + 1) :]) * 100.0
+    with np.errstate(all="ignore"):
+        r = rt.simple_returns(close[-(SERIES_ROWS + 1) :]) * 100.0
+    r = r[np.isfinite(r)]  # np.histogram raises on nan/inf
     if len(r) < 20:
         return None
     counts, edges = np.histogram(r, bins=bins)
@@ -77,7 +79,9 @@ def month_year(dates: list[date], close: F64) -> list[list[Any]]:
     keys = sorted(month_end)
     out: list[list[Any]] = []
     for prev, cur in zip(keys, keys[1:], strict=False):
-        out.append([cur[0], cur[1], num((month_end[cur] / month_end[prev] - 1.0) * 100.0)])
+        base = month_end[prev]
+        pct = (month_end[cur] / base - 1.0) * 100.0 if base else math.nan
+        out.append([cur[0], cur[1], num(pct)])
     cutoff = dates[-1].year - HEATMAP_YEARS
     return [row for row in out if row[0] > cutoff]
 
@@ -90,5 +94,7 @@ def calendar_days(dates: list[date], close: F64) -> dict[str, Any]:
     for i in range(1, len(close)):
         if (last - dates[i]).days < CALENDAR_DAYS:
             out_dates.append(dates[i].isoformat())
-            out_values.append(num(round((close[i] / close[i - 1] - 1.0) * 100.0, DIGITS)))
+            base = float(close[i - 1])
+            pct = (float(close[i]) / base - 1.0) * 100.0 if base else math.nan
+            out_values.append(num(round(pct, DIGITS)) if math.isfinite(pct) else None)
     return {"dates": out_dates, "values": out_values}

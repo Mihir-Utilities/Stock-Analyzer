@@ -16,6 +16,12 @@ from worker.errors import RetryableError
 from worker.mf_jobs import PgMfStore, run_ingest_mf_navs, run_sync_mf_schemes
 from worker.runner import JobContext
 
+
+@pytest.fixture(autouse=True)
+def _small_amfi_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("worker.mf_jobs.AMFI_MIN_ROWS", 1)  # the fixture file has 9 rows
+
+
 pytestmark = [pytest.mark.anyio, pytest.mark.integration]
 
 TODAY = date(2026, 10, 10)
@@ -82,7 +88,7 @@ async def test_sync_then_ingest_roundtrip(pg_full: asyncpg.Pool) -> None:
     assert cache is not None and cache["as_of"] == last and '"returns"' in cache["metrics"]
     # incremental: only dates after last_nav_date are requested, no duplicates on re-run
     await run_ingest_mf_navs(JobContext(job="ingest"), store, api, amfi(), TODAY)
-    assert api.calls[-1][1] == last + timedelta(days=1)
+    assert api.calls[-1][1] == last  # last stored date is re-fetched (D04R-2)
     assert await pg_full.fetchval("SELECT count(*) FROM mf_nav WHERE scheme_code = 135762") == 30
 
 

@@ -207,6 +207,7 @@ async def test_job_must_be_queued(make_queue) -> None:  # type: ignore[no-untype
     assert r1.json()["error"]["code"] == "JOB_NOT_QUEUED" and calls == []
 
 
+# SYS-22 (422 kind)
 async def test_kind_must_be_allow_listed_and_handled(make_queue, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.delitem(jobs.HTTP_HANDLERS, "mf_refresh", raising=False)  # D04 installs one
     q = make_queue({1: ("stock_refresh", "TCS", "queued"), 2: ("mf_refresh", "119551", "queued")})
@@ -241,6 +242,7 @@ async def test_body_validation_and_no_target_from_request(make_queue, payload: b
     assert r.status_code == 422
 
 
+# SYS-22 (409 BUSY)
 async def test_one_job_at_a_time(make_queue) -> None:  # type: ignore[no-untyped-def]
     release, started = asyncio.Event(), asyncio.Event()
 
@@ -280,6 +282,7 @@ async def test_handler_exception_marks_job_failed_with_scrubbed_error(make_queue
     assert r2.status_code == 409
 
 
+# SYS-22 (hard_timeout)
 async def test_hard_cap_marks_job_failed(make_queue) -> None:  # type: ignore[no-untyped-def]
     async def hang(job: HttpJob) -> HttpJobResult:
         await asyncio.sleep(30)

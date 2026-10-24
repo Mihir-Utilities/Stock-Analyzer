@@ -11,8 +11,12 @@ import math
 import statistics
 from bisect import bisect_right
 from collections.abc import Sequence
-from datetime import date, timedelta
+from datetime import date
 from typing import Any
+
+from worker.analytics.returns import subtract_months  # the one shared implementation
+
+__all__ = ["compute_mf_metrics", "nav_jumps", "nav_on_or_before", "subtract_months"]
 
 JUMP_THRESHOLD = 0.25  # docs/04 3.5: day change > 25% is flagged (kept)
 WEEKLY_NAV_GAP_DAYS = 3  # docs/05 9.3: median gap above this -> volatility null (MF-07)
@@ -26,16 +30,6 @@ WINDOWS: tuple[tuple[str, int], ...] = (
     ("3y", 36),
     ("5y", 60),
 )
-
-
-def subtract_months(d: date, months: int) -> date:
-    """Calendar offset ``d - months`` clamping the day to the month length."""
-    total = d.year * 12 + (d.month - 1) - months
-    year, month = divmod(total, 12)
-    month += 1
-    nxt = date(year + (month == 12), month % 12 + 1, 1)
-    last_day = (nxt - timedelta(days=1)).day
-    return date(year, month, min(d.day, last_day))
 
 
 def nav_on_or_before(dates: Sequence[date], d: date) -> int | None:
@@ -164,7 +158,7 @@ def compute_mf_metrics(
         drawdown = worst
         if vol is None:
             sharpe_reason = vol_reason
-        elif window_years < 3.0 - 1e-9 or cagr_3y is None:
+        elif cagr_3y is None:  # no base NAV at or before end-36M (not a year-length test)
             sharpe_reason = "insufficient_history"
         elif vol <= 0:
             sharpe_reason = "n/m"

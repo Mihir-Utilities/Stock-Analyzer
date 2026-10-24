@@ -22,6 +22,8 @@ from worker.egress import (
     TOTAL_TIMEOUT_S,
     HttpClient,
     HttpResponse,
+    ResponseTooLarge,
+    get_capped,
     raise_if_retryable,
 )
 from worker.errors import RetryableError
@@ -62,6 +64,11 @@ def build_guard(
     return SourceGuard(source, get_limiter(source, interval), CircuitBreaker(source, store))
 
 
+MAX_BODY_BYTES = 5 * 1024 * 1024  # default per-response cap; callers pass tighter/larger ones
+MAX_NAV = Decimal("10000000")  # D04R-3: larger than any real NAV; rejects overflow garbage
+MAX_CODE = 999_999_999  # fits int4 (the DB scheme code is int)
+
+
 async def guarded_get(
     client: HttpClient,
     url: str,
@@ -70,6 +77,7 @@ async def guarded_get(
     params: dict[str, str | int] | None = None,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     rng: random.Random | None = None,
+    max_bytes: int = MAX_BODY_BYTES,
 ) -> HttpResponse:
     """GET with throttle, up to 3 retries (5xx/429/network), breaker and 60 s total per attempt.
 
@@ -81,7 +89,7 @@ async def guarded_get(
         await guard.limiter.acquire()
         try:
             async with asyncio.timeout(TOTAL_TIMEOUT_S):
-                response = await client.get(url, params=params)
+                response = await get_capped(client, url, params=params, max_bytes=max_bytes)
         except NETWORK_ERRORS as exc:
             raise RetryableError(type(exc).__name__) from exc
         except TimeoutError as exc:
@@ -89,7 +97,10 @@ async def guarded_get(
         raise_if_retryable(response)
         return response
 
-    response = await guard.breaker.call(lambda: retry_async(attempt, sleep=sleep, rng=rng))
+    try:
+        response = await guard.breaker.call(lambda: retry_async(attempt, sleep=sleep, rng=rng))
+    except ResponseTooLarge as exc:
+        raise SchemaError(f"{guard.source}: response too large ({exc})") from exc
     if response.status_code == 404:
         raise NotFound(f"{guard.source}: 404")
     if response.status_code >= 400:
@@ -97,7 +108,8 @@ async def guarded_get(
     return response
 
 
-_NAV_RE = re.compile(r"^\d+(\.\d+)?$")
+_NAV_RE = re.compile(r"[0-9]{1,12}(\.[0-9]{1,12})?")  # ASCII digits only
+_CODE_RE = re.compile(r"[0-9]{1,9}")
 _ISIN_RE = re.compile(r"^IN[A-Z0-9]{10}$")
 
 
@@ -106,13 +118,24 @@ def parse_nav(value: Any) -> Decimal | None:
     if isinstance(value, bool) or value is None:
         return None
     text = str(value).strip()
-    if not _NAV_RE.match(text):
+    if not _NAV_RE.fullmatch(text):
         return None
     try:
         nav = Decimal(text)
     except InvalidOperation:  # pragma: no cover - the regex already guarantees a number
         return None
-    return nav if nav > 0 else None
+    return nav if 0 < nav <= MAX_NAV else None
+
+
+def parse_scheme_code(value: Any) -> int | None:
+    """Positive ASCII-digit scheme code that fits the DB int column, else None."""
+    if isinstance(value, bool) or value is None:
+        return None
+    text = str(value).strip()
+    if not _CODE_RE.fullmatch(text):
+        return None
+    code = int(text)
+    return code if 0 < code <= MAX_CODE else None
 
 
 def clean_isin(value: Any) -> str | None:
@@ -129,13 +152,13 @@ _MONTHS = {
         ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1
     )
 }
-_DMY_RE = re.compile(r"^(\d{2})-(\d{2})-(\d{4})$")
-_DMON_RE = re.compile(r"^(\d{2})-([A-Za-z]{3})-(\d{4})$")
+_DMY_RE = re.compile(r"([0-9]{2})-([0-9]{2})-([0-9]{4})")
+_DMON_RE = re.compile(r"([0-9]{2})-([A-Za-z]{3})-([0-9]{4})")
 
 
 def parse_date_dmy(value: Any) -> date | None:
     """mfapi ``DD-MM-YYYY`` (MF-03)."""
-    m = _DMY_RE.match(str(value).strip()) if value is not None else None
+    m = _DMY_RE.fullmatch(str(value).strip()) if value is not None else None
     if not m:
         return None
     try:
@@ -146,7 +169,7 @@ def parse_date_dmy(value: Any) -> date | None:
 
 def parse_date_dmon(value: Any) -> date | None:
     """AMFI ``DD-Mon-YYYY`` (MF-03); locale independent."""
-    m = _DMON_RE.match(str(value).strip()) if value is not None else None
+    m = _DMON_RE.fullmatch(str(value).strip()) if value is not None else None
     if not m or m.group(2).lower() not in _MONTHS:
         return None
     try:

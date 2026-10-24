@@ -24,6 +24,12 @@ from worker.runner import JobContext
 
 pytestmark = pytest.mark.anyio
 
+
+@pytest.fixture(autouse=True)
+def _small_amfi_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("worker.mf_jobs.AMFI_MIN_ROWS", 1)  # the fixture file has 9 rows
+
+
 TODAY = date(2026, 10, 10)
 AMFI_FIXTURE = Path(__file__).resolve().parents[3] / "fixtures" / "amfi" / "NAVAll_sample.txt"
 
@@ -56,6 +62,7 @@ def test_decide_status_rule() -> None:
     assert decide_status(old, fresh, TODAY, "active") == "active"  # freshest evidence wins
 
 
+# MF-85
 async def test_mf06_mf18_sync_marks_inactive_and_keeps_active() -> None:
     store = MemoryMfStore()
     listing = SchemeList(
@@ -76,6 +83,7 @@ async def test_mf06_mf18_sync_marks_inactive_and_keeps_active() -> None:
     assert not c.marked_partial
 
 
+# MF-85 (failed file never changes status)
 async def test_sync_amfi_failure_keeps_status_and_is_partial() -> None:
     store = MemoryMfStore()
     store.add(
@@ -118,6 +126,7 @@ async def test_sync_dry_run_writes_nothing() -> None:
 
 
 # --------------------------------------------------------------------------- ingest
+# MF-83 (amended by D04R-2: start = last stored date)
 async def test_ingest_full_history_for_new_scheme_then_incremental_start_date() -> None:
     store = MemoryMfStore()
     store.add(5, tracked=True)
@@ -130,12 +139,12 @@ async def test_ingest_full_history_for_new_scheme_then_incremental_start_date() 
     assert store.cache[5][0] == date(2025, 1, 10) and store.schemes[5]["last_nav_date"] == date(
         2025, 1, 10
     )
-    # next run: more data exists; request startDate = last_nav_date + 1 up to today
+    # next run: more data exists; request startDate = last stored date (D04R-2) up to today
     api.history[5] += pts(date(2025, 1, 11), ["200", "201"])
     c2 = ctx()
     await run_ingest_mf_navs(c2, store, api, FakeAmfi(amfi_file()), TODAY)
-    assert api.calls[-1] == (5, date(2025, 1, 11), TODAY)
-    assert len(store.navs[5]) == 12 and c2.rows_written == 2
+    assert api.calls[-1] == (5, date(2025, 1, 10), TODAY)
+    assert len(store.navs[5]) == 12 and c2.rows_written == 3  # last date re-upserted
     # re-running adds nothing and duplicates nothing
     await run_ingest_mf_navs(ctx(), store, api, FakeAmfi(amfi_file()), TODAY)
     assert len(store.navs[5]) == 12
@@ -144,7 +153,7 @@ async def test_ingest_full_history_for_new_scheme_then_incremental_start_date() 
 async def test_ingest_skips_call_when_start_after_today() -> None:
     store = MemoryMfStore()
     store.add(5, tracked=True)
-    await store.upsert_navs(5, pts(TODAY, ["10"]))
+    await store.upsert_navs(5, pts(TODAY + timedelta(days=1), ["10"]))
     api = FakeMfapi({5: []})
     await run_ingest_mf_navs(ctx(), store, api, FakeAmfi(amfi_file()), TODAY)
     assert api.calls == []
@@ -177,6 +186,7 @@ async def test_mf09_mfapi_down_falls_back_to_amfi_latest_with_db_history() -> No
     assert amfi.downloads == 1
 
 
+# MF-82
 async def test_mf09_one_amfi_download_per_run_and_missing_amfi_row_is_item_error() -> None:
     store = MemoryMfStore()
     for code in (135762, 135765, 424242):
@@ -190,6 +200,7 @@ async def test_mf09_one_amfi_download_per_run_and_missing_amfi_row_is_item_error
     assert 135765 in store.navs
 
 
+# MF-87
 async def test_ingest_wrong_code_and_untracked_cap_and_only_filter() -> None:
     store = MemoryMfStore()
     store.add(1, tracked=True)

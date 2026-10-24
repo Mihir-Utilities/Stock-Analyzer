@@ -9,6 +9,10 @@
   type are known is rejected, never attached to a missing one.
 * CRLF and LF are both accepted. NAV ``N.A.``/``-``/non-numeric rows are skipped (MF-02); dates are
   ``DD-Mon-YYYY`` (MF-03); a value date after the file date is kept with its own date (MF-17).
+* Duplicate scheme codes: the LAST row in file order wins (deterministic); ``AmfiFile.duplicates``
+  counts them and the job summary records the count.
+* Codes and dates accept ASCII digits only; NAVs above ``MAX_NAV`` and lines over
+  ``MAX_LINE_CHARS`` are rejected as rows (the parse continues).
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ from worker.adapters.base import (
     guarded_get,
     parse_date_dmon,
     parse_nav,
+    parse_scheme_code,
 )
 from worker.adapters.mfnames import classify_plan_option
 from worker.egress import HttpClient
@@ -43,6 +48,8 @@ _H_OPTION = "option"
 _H_NAV = "net asset value"
 _H_DATE = "date"
 _REQUIRED = (_H_CODE, _H_ISIN_G, _H_ISIN_R, _H_NAME, _H_NAV, _H_DATE)
+MAX_LINE_CHARS = 2000
+MAX_BYTES = 10 * 1024 * 1024  # NAVAll.txt is ~4 MB; refuse anything above 10 MB
 _LINE_SPLIT = re.compile(r"\r\n|\n|\r")
 _SECTION_RE = re.compile(r"^(.*?)\s*\((.*)\)\s*$")
 
@@ -103,6 +110,9 @@ def parse_navall(text: str) -> AmfiFile:
         line = raw_line.strip()
         if not line:
             continue
+        if len(line) > MAX_LINE_CHARS:
+            reject("line_too_long")  # D04R-3: hostile/garbled line, never parsed
+            continue
         if ";" not in line:
             if line.startswith(SCHEME_TYPE_PREFIXES):
                 scheme_type, category = _split_section(line)
@@ -122,8 +132,8 @@ def parse_navall(text: str) -> AmfiFile:
         if len(parts) <= max(index[h] for h in _REQUIRED):
             reject("short_row")
             continue
-        code_text = parts[index[_H_CODE]]
-        if not code_text.isdigit() or int(code_text) <= 0:
+        code = parse_scheme_code(parts[index[_H_CODE]])  # ASCII digits only; '²' is rejected
+        if code is None:
             reject("code")
             continue
         if fund_house is None or scheme_type is None:
@@ -153,7 +163,6 @@ def parse_navall(text: str) -> AmfiFile:
             plan = classify_plan_option(plan_text)[0]
         if option == "unknown" and option_text:
             option = classify_plan_option(option_text)[1]
-        code = int(code_text)
         if code in by_code:
             out.duplicates += 1
         by_code[code] = AmfiRow(
@@ -186,7 +195,7 @@ class AmfiClient:
         self._url = url
 
     async def latest_navs(self) -> AmfiFile:
-        response = await guarded_get(self._client, self._url, self._guard)
+        response = await guarded_get(self._client, self._url, self._guard, max_bytes=MAX_BYTES)
         try:
             text = response.content.decode("utf-8-sig")
         except UnicodeDecodeError as exc:
