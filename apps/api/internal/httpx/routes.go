@@ -8,6 +8,7 @@ const (
 	kindStub           handlerKind = iota // 501 NOT_IMPLEMENTED until the owning task lands
 	kindHealthz                           // GET /healthz
 	kindReadyz                            // GET /readyz
+	kindBrokerStatus                      // GET /broker/status (B08, manual mode)
 	kindBrokerDisabled                    // 422 BROKER_DISABLED (manual price mode, D-1)
 	kindAuthLogin                         // POST /auth/login
 	kindAuthLogout
@@ -54,6 +55,11 @@ func (rt route) handler(d Deps) http.Handler {
 		return http.HandlerFunc(healthz)
 	case kindReadyz:
 		return readyz(d)
+	case kindBrokerStatus:
+		return Adapt(func(w http.ResponseWriter, _ *http.Request) error {
+			WriteData(w, http.StatusOK, map[string]any{"enabled": false, "mode": "manual"})
+			return nil
+		})
 	case kindBrokerDisabled:
 		return Adapt(func(http.ResponseWriter, *http.Request) error {
 			return NewError(http.StatusUnprocessableEntity, "BROKER_DISABLED",
@@ -181,7 +187,7 @@ var routes = []route{
 	{Method: mPatch, Path: "/stocks/{symbol}/actions/{id}"},
 
 	// Broker (section 14a): only /broker/status is built; the rest answer 422 BROKER_DISABLED.
-	{Method: mGet, Path: "/broker/status"},
+	{Method: mGet, Path: "/broker/status", Kind: kindBrokerStatus},
 	{Method: mGet, Path: "/broker/login", Kind: kindBrokerDisabled},
 	{Method: mGet, Path: "/broker/callback", Public: true, Kind: kindBrokerDisabled},
 	{Method: mDelete, Path: "/broker/session", Kind: kindBrokerDisabled},

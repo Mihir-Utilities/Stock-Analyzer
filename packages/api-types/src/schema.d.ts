@@ -4542,13 +4542,20 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. Always enabled=false, mode=manual in manual price mode. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SuccessEnvelope"];
+                    "application/json": {
+                        data: {
+                            enabled: boolean;
+                            /** @enum {string} */
+                            mode: "manual";
+                        };
+                        meta?: components["schemas"]["Meta"];
+                    };
                 };
             };
             401: components["responses"]["Unauthenticated"];

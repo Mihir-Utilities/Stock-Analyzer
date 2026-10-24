@@ -2917,11 +2917,28 @@ paths:
       summary: "Manual price mode: {enabled:false, mode:manual}. (docs/03 section 14a)"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success. Always enabled=false, mode=manual in manual price mode."
           content:
             "application/json":
               schema:
-                "$ref": "#/components/schemas/SuccessEnvelope"
+                type: "object"
+                properties:
+                  data:
+                    type: "object"
+                    properties:
+                      enabled:
+                        type: "boolean"
+                      mode:
+                        type: "string"
+                        enum:
+                          - "manual"
+                    required:
+                      - "enabled"
+                      - "mode"
+                  meta:
+                    "$ref": "#/components/schemas/Meta"
+                required:
+                  - "data"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
         "429":
