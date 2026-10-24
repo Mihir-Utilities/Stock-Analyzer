@@ -273,3 +273,20 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | D03R-4 | Request body cap for worker-http | 4 KiB (the only valid body is `{"job_id": n}`), `413 PAYLOAD_TOO_LARGE` before authentication | `http.py` |
 | D03R-5 | Telegram chat id source for the worker note | `app_user.telegram_chat_id` (set by the link flow), token from `TELEGRAM_BOT_TOKEN`; D06 may reuse `worker.notify.TelegramNotifier` | `notify.py` |
 
+
+## D06 assumptions (Claude, 2026-10-24; owner may overrule, none blocks)
+| # | Question | Choice made in D06 | Where |
+|---|---|---|---|
+| D06-1 | `alert_event` has no column for the next retry time or a delivery lease | Kept in `payload.delivery.next_attempt_at` (no migration). A claim leases the event for 15 min and counts one attempt, so duplicate or concurrent runs cannot send twice; a failure sets the next attempt 15 min ahead (longer if Telegram's `retry_after` is larger). `payload.message` holds the final HTML text | `alerts_db.py` |
+| D06-2 | "Retried 5 times at 15-minute spacing then failed": 5 attempts or 1 + 5 retries? | 1 send + 5 retries = 6 attempts, then `failed` (`MAX_ATTEMPTS`) | `alerts_delivery.py` |
+| D06-3 | docs/04 3.9 says quiet-hours events stay `pending`, the table allows `skipped_quiet_hours` | `pending` (spec text); `skipped_quiet_hours` is never written. `last_error` shows `quiet_hours`, `not_linked` or `bot_not_configured` while held, with 0 attempts counted | `alerts_delivery.py` |
+| D06-4 | Exact crossing and price basis per kind | Price thresholds use `close`; day change, MA cross and RSI(14) use `adj_close`; `wk52_*` compare `adj_close` with the extreme of the k-scaled high/low of the **prior 252 bars** (fewer: never fires); `rsi_above` fires when `prev <= level < cur` (below mirrored); MA cross as in docs/04 | `alerts_eval.py` |
+| D06-5 | First evaluation of an alert (NULL `last_state`, B12-4) | Only the latest bar is evaluated, never history. `results_declared` / `holding_change` record what exists without firing (`initialised`); when nothing existed yet, the first results or a second quarter do fire | `alerts_eval.py` |
+| D06-6 | Message copy for kinds other than `price_*` (docs/04 gives only that pattern) | Same pattern: `<b>SYM</b> {what} | {value}, as of the last price import (09 Oct 2026). Alert #id`. NAV alerts end "as of the latest NAV (date)". Calendar and owner-data kinds end "from your events calendar / imported data". Numbers use Indian digit grouping (default display preference), identical to the spec example below 1 lakh | `alerts_eval.py` |
+| D06-7 | What "expired with note" means for a delisted stock | Status `expired`, `last_state.expired_reason`, plus one history event (`{id}|expired|delisted`) so the owner is told by Telegram. Expiry by `expires_on` is silent | `alerts_db.py` |
+| D06-8 | Digest shape | One message per up-to-3,500 characters, header "{n} alerts fired (part k)", one line per event (the normal message text) | `alerts_delivery.py` |
+| D06-9 | Bot token not yet created (D-9) | `TELEGRAM_BOT_TOKEN` unset: nothing is sent, events stay `pending` (`last_error=bot_not_configured`), jobs succeed; owner notices (detected actions) are only logged | `telegram.py` |
+| D06-10 | Shared limiter / breaker for Telegram | Not used: pacing is the fixed 1.1 s between sends of one run (the shared limiter jitters +/-20%, which could undercut it) and the 15-minute retry is the backoff; a 429 stops the run and gives unsent events back | `alerts_delivery.py` |
+| D06-11 | NAV alerts: evaluation points and the "1 business day" NAV freshness | Evaluated in the EOD run only (no hook after `mf_refresh`); freshness is moot because only NAV rows newer than the last evaluated one can fire | `alerts_db.py` |
+| D06-12 | Recurring alert, bar swallowed by the cooldown | That bar counts as evaluated; the next qualifying bar after the cooldown fires (re-arm rule unchanged) | `alerts_eval.py` |
+| D06-13 | Who schedules the 19:30 EOD run | The CLI job `evaluate_alerts` exists (`python -m worker run evaluate_alerts`); no GitHub schedule workflow exists yet for any job, so none was added | docs/RUNBOOK.md 23 |

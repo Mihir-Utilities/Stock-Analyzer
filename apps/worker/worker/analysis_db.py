@@ -181,7 +181,7 @@ async def recompute_screener(pool: asyncpg.Pool, symbols: Sequence[str]) -> int:
 
 
 def production_hooks(pool: asyncpg.Pool) -> Hooks:
-    """The ``post_import`` hooks with D05a plugged in (alert evaluation stays the D06 no-op)."""
+    """The ``post_import`` hooks with D05a (analysis, screener) and D06 (alerts) plugged in."""
 
     async def analysis(symbol: str) -> None:
         await compute_analysis(pool, symbol)
@@ -189,8 +189,13 @@ def production_hooks(pool: asyncpg.Pool) -> Hooks:
     async def screener(symbols: Sequence[str]) -> None:
         await recompute_screener(pool, symbols)
 
-    return Hooks(
-        compute_analysis=analysis,
-        evaluate_alerts=HOOKS.evaluate_alerts,
-        recompute_screener=screener,
+    from worker.alerts_db import wire_hooks  # D06; lazy: alerts_db imports post_import too
+
+    return wire_hooks(
+        pool,
+        Hooks(
+            compute_analysis=analysis,
+            evaluate_alerts=HOOKS.evaluate_alerts,
+            recompute_screener=screener,
+        ),
     )

@@ -37,8 +37,8 @@ Evaluate all alert kinds with deduplication and deliver via Telegram with pacing
 3. Add quiet-hours and digest tests
 
 ## Acceptance criteria (all must be true)
-- [ ] ALR-02..ALR-10, ALR-14, ALR-17 pass
-- [ ] A fired alert is delivered exactly once under duplicate runs
+- [x] ALR-02..ALR-10, ALR-17, ALR-18 pass (ALR-14 N/A in manual mode; evidence: `tests/test_alerts_eval.py`, `test_alerts_delivery.py`, `test_alerts_db.py`, 374 worker tests green against Postgres 16)
+- [x] A fired alert is delivered exactly once under duplicate runs (`test_delivered_exactly_once_under_duplicate_concurrent_runs`, `test_alr03_duplicate_evaluation_never_creates_a_second_event`)
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `ALR-02` (see `docs/07-edge-cases-tests.md`)

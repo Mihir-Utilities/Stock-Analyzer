@@ -268,6 +268,11 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ALR-64 | Link code storage (B12) | Only the sha256 is stored (no plaintext), `expires_at` = now + 15 min, expired rows are purged a day after expiry; without `TELEGRAM_BOT_USERNAME` the bot fields are null with warning `BOT_NOT_CONFIGURED` | I |
 | ALR-65 | Unlink and test message (B12) | Test message needs a linked chat (409 otherwise), is sent HTML-escaped, a second one within 60 s is 429 with `Retry-After`, a send failure is 503 without the cause, no bot configured is 503; unlink clears the chat id | I |
 | ALR-66 | Alert routes without a service (B12) | While no alerts service is wired the routes answer 501 `NOT_IMPLEMENTED`, never a panic | I |
+| ALR-67 | Alert evaluation per kind (D06) | `price_*` on `close`; `day_change_pct` on `adj_close`; `wk52_*` need 252 prior bars and use k-scaled highs/lows; MA cross and RSI cross use consecutive values; NAV alerts use `mf_nav`; a NULL `last_state` evaluates the latest bar only; `results_declared` / `holding_change` initialise silently; each fire carries a dedupe key with its bar date, event, period or quarter | U |
+| ALR-68 | Delivery pass without a bot token (D-9, D06) | Events stay `pending` with `last_error=bot_not_configured`, no attempt counted, no exception; the owner notifier only logs | I |
+| ALR-69 | Concurrent delivery runs (D06) | A claim leases events for 15 min and counts one attempt; four parallel runs send each event once | I |
+| ALR-70 | Telegram error mapping (D06) | 429 carries `retry_after` and stops the pass (unsent events released); 403/400 become `telegram_http_<status>: <description>`; network errors never include the URL or token | U |
+| ALR-71 | Recurring alert re-arm (D06) | After a fire the alert is disarmed; it re-arms only after the price moves 0.5% back across the threshold, and a fire inside the cooldown is swallowed | U |
 
 ## ML: predictions
 | ID | Scenario | Required behavior | Test |
