@@ -32,8 +32,8 @@ Let the owner confirm or reject detected split/bonus candidates and trigger hist
 2. Enqueue worker job through `refresh_job` kind reuse or a dedicated queue column
 
 ## Acceptance criteria (all must be true)
-- [ ] ACT-03, ACT-04, ACT-06, ACT-09, ACT-10 pass
-- [ ] Confirming sets the multiplier used by portfolio math
+- [x] ACT-03, ACT-04, ACT-06, ACT-09, ACT-10 pass (httpx/actions_integration_test.go, plus ACT-26..28)
+- [x] Confirming sets the multiplier used by portfolio math (stored ratios and `multiplier` in the response; the worker's `post_import` re-adjust and B11 read the confirmed row; no double confirm, ACT-27)
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `ACT-03` (see `docs/07-edge-cases-tests.md`)
