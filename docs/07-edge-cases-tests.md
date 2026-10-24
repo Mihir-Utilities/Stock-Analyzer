@@ -68,6 +68,8 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ACT-18 | Ratio 2/3 and the trigger (D03, pins ACT-14) | Exactly 0.667 is not detected; only the sliver r in [0.6467, 0.65) of the 2/3 tolerance band passes the 0.35 trigger and is matched as 2/3 | U |
 | ACT-19 | Soft-flag dismissal lifecycle (D-U, D03) | Dismiss inserts one `flag_dismissals` row (repeat is a no-op); Undo deletes it; per bar date (a later drop still shows); survives a prices re-import; the flag disappears once an action exists on that date | I |
 | ACT-20 | Confirmed `rights`/`buyback`/`merger`/`demerger` or an untyped `split_or_bonus` (D03) | `adj_close` is never changed; the stock is listed in `review_needed` of the re-adjust result | I |
+| ACT-21 | Events read API (B05) | Actions include `detected` and `rejected` with `status`; default window last 5 years (no upper bound), calendar next 90 days; `from`/`to` override both; bad dates or `to < from` -> 422; detected rows add `UNCONFIRMED_ACTION` warnings; nothing entered -> `reason = no_data_entered` | I |
+| ACT-22 | Old symbol on fundamentals/shareholding/events/links (B05) | HTTP 200 with `data.redirect_symbol`; unknown symbol -> 404 | I |
 
 ## IMP: imports and manual entry
 | ID | Scenario | Required behavior | Test |
@@ -130,6 +132,9 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | FND-14 | Market cap missing (no shares outstanding) | Dependent metrics null | U |
 | FND-15 | Restated period re-entered | Overwrites; audit via batch | I |
 | FND-16 | Formula golden tests | All formulas of `05` verified against references/hand values | U |
+| FND-17 | Source priority and entry recency (B05) | `manual > csv_import > screener_import` per (period, metric); same source: newest entry wins; `derived` rows and NULL values are never served as metrics; `source_by_metric` and `last_updated` report the winners | U |
+| FND-18 | Worker snapshot not yet written or period missing in it (B05) | `derived`/`ratios`/`valuation` null with `*_reason = not_computed`; derived series aligned to the returned periods by date | U/I |
+| FND-19 | Invalid `basis` or `period` query (B05) | 422 with `details.fields[]` | I |
 
 ## SHP: shareholding
 | ID | Scenario | Required behavior | Test |
@@ -139,6 +144,8 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | SHP-03 | No promoter | Chart still renders | U |
 | SHP-04 | Single quarter | No QoQ | U |
 | SHP-05 | Non-quarter-end date | Rejected | F |
+| SHP-06 | Missing quarter between the last two rows (B05) | `qoq_change` all null with `qoq_reason = previous_quarter_missing` (no multi-quarter difference shown as QoQ) | U |
+| SHP-07 | No shareholding entered (B05) | `quarters = []`, `reason = no_data_entered`, `mf_available=false`, entry hint | I |
 
 ## MF: mutual funds
 | ID | Scenario | Required behavior | Test |

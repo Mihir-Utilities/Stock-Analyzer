@@ -2280,7 +2280,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Owner-entered fundamentals for one basis (never mixed), with derived values read from analysis_snapshot. Nulls carry *_reason. data.redirect_symbol for an old symbol. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2290,6 +2290,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
@@ -2316,7 +2317,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Quarterly shareholding aligned to data.quarters (percent numbers), qoq_change in percentage points, mf_available. data.redirect_symbol for an old symbol. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2326,6 +2327,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
@@ -2397,7 +2399,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Corporate actions (confirmed, detected, rejected; status field) and owner calendar; detected rows add UNCONFIRMED_ACTION warnings. data.redirect_symbol for an old symbol. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2407,6 +2409,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
@@ -2475,7 +2478,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Rendered research hyperlinks (URL-encoded, never fetched). data.redirect_symbol for an old symbol. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2485,6 +2488,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
             /** @description Error envelope */

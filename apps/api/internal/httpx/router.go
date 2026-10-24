@@ -53,6 +53,9 @@ type Deps struct {
 	// Stocks serves GET /stocks, /stocks/index and /stocks/{symbol} (B03); nil keeps them 501 stubs.
 	Stocks StockService
 
+	// OwnerData serves GET /stocks/{symbol}/fundamentals|shareholding|events|links (B05); nil keeps them 501 stubs.
+	OwnerData OwnerDataService
+
 	// LoginLimiter (default 10/min per IP) guards POST /auth/login; GeneralLimiter (default
 	// 120/min) guards authenticated routes (docs/03 section 16).
 	LoginLimiter   *Limiter

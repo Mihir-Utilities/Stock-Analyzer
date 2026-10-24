@@ -66,7 +66,11 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts, Jobs: jobSvc, Alerts: alertDeps, Stocks: instruments.New(pool)})
+	ownerSvc, err := ownerDataService(pool)
+	if err != nil {
+		return err
+	}
+	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts, Jobs: jobSvc, Alerts: alertDeps, Stocks: instruments.New(pool), OwnerData: ownerSvc})
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
 		Handler:           router,
