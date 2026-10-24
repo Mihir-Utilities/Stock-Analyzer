@@ -85,6 +85,11 @@ class MemoryHealthStore:
     async def save(self, health: SourceHealth) -> None:
         self.rows[health.source] = health
 
+    async def update(self, source, fn):  # type: ignore[no-untyped-def]
+        new = fn(self.rows.get(source) or SourceHealth(source=source, ok=True))
+        self.rows[source] = new
+        return new
+
 
 class MemoryRunStore:
     """Mimics ``ingestion_run`` including the one-running-per-job unique index."""

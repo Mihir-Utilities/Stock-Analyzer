@@ -111,6 +111,47 @@ def make_client(
     )
 
 
+class ResponseTooLarge(Exception):  # noqa: N818 - plain name, mirrors EgressDenied
+    """The response body exceeded the per-call byte cap (not retried, not a source failure)."""
+
+
+async def get_capped(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    max_bytes: int,
+    params: dict[str, str | int] | None = None,
+) -> httpx.Response:
+    """GET that streams the body and aborts as soon as it exceeds ``max_bytes`` (decoded size).
+
+    Returns an ordinary ``Response`` holding the (already decoded) body, so callers still use
+    ``.content`` / ``.json()`` and never need httpx themselves.
+    """
+    async with client.stream("GET", url, params=params) as response:
+        declared = response.headers.get("Content-Length")
+        if declared is not None and declared.isdigit() and int(declared) > max_bytes:
+            raise ResponseTooLarge(f"declared {declared} bytes > cap {max_bytes}")
+        if response.status_code >= 400:  # error bodies are never needed; keep them tiny
+            body = b""
+        else:
+            chunks: list[bytes] = []
+            total = 0
+            async for chunk in response.aiter_bytes():
+                total += len(chunk)
+                if total > max_bytes:
+                    raise ResponseTooLarge(f"body exceeds cap {max_bytes} bytes")
+                chunks.append(chunk)
+            body = b"".join(chunks)
+        headers = [
+            (k, v)
+            for k, v in response.headers.multi_items()
+            if k.lower() not in ("content-encoding", "content-length", "transfer-encoding")
+        ]
+        return httpx.Response(
+            response.status_code, headers=headers, content=body, request=response.request
+        )
+
+
 def raise_if_retryable(response: httpx.Response) -> None:
     """429 and 5xx become ``RetryableError`` (honouring Retry-After in seconds)."""
     if response.status_code == 429 or response.status_code >= 500:

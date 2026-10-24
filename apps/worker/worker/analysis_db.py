@@ -110,7 +110,7 @@ async def compute_analysis(pool: asyncpg.Pool, symbol: str) -> dict[str, Any]:
             "indicators = EXCLUDED.indicators, version = EXCLUDED.version",
             iid,
             as_of,
-            json.dumps(snap),
+            json.dumps(snap, allow_nan=False),
             VERSION,
         )
         await conn.execute(
@@ -173,7 +173,7 @@ async def recompute_screener(pool: asyncpg.Pool, symbols: Sequence[str]) -> int:
             "metrics = (screener_row.metrics - $4::text[]) || EXCLUDED.metrics",
             int(row["id"]),
             row["as_of"],
-            json.dumps(metrics),
+            json.dumps(metrics, allow_nan=False),
             drop,
         )
         written += 1

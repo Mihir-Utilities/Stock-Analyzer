@@ -26,6 +26,7 @@ from worker.adapters.base import (
     guarded_get,
     parse_date_dmy,
     parse_nav,
+    parse_scheme_code,
 )
 from worker.adapters.mfnames import classify_plan_option
 from worker.egress import HttpClient
@@ -33,6 +34,8 @@ from worker.egress import HttpClient
 SOURCE = "mfapi"
 MFAPI_BASE = "https://api.mfapi.in"
 ATTRIBUTION = "NAV data: AMFI via mfapi.in"  # docs/01 section 4; docs/00 section 1 rule 6
+MAX_LIST_BYTES = 30 * 1024 * 1024  # one /mf page of 10000 schemes is ~1 MB
+MAX_HISTORY_BYTES = 8 * 1024 * 1024  # a full scheme history is ~0.3 MB
 LIST_PAGE_SIZE = 10000  # MF-18 / S6: limit=10000 is accepted
 LIST_MAX_PAGES = 20  # safety stop; the list is about 38k schemes (4 pages)
 DEFAULT_MIN_INTERVAL_S = 0.5  # MFAPI_MIN_INTERVAL_SEC
@@ -100,13 +103,7 @@ def _text(value: Any) -> str | None:
 
 
 def _code(value: Any) -> int | None:
-    if isinstance(value, bool):
-        return None
-    try:
-        code = int(str(value).strip())
-    except (TypeError, ValueError):
-        return None
-    return code if code > 0 else None
+    return parse_scheme_code(value)
 
 
 def _envelope(payload: Any) -> _Envelope:
@@ -230,9 +227,19 @@ class MfapiClient:
         if sleep is not None:
             self._kwargs["sleep"] = sleep
 
-    async def _json(self, path: str, params: dict[str, str | int] | None = None) -> Any:
+    async def _json(
+        self,
+        path: str,
+        params: dict[str, str | int] | None = None,
+        max_bytes: int = MAX_HISTORY_BYTES,
+    ) -> Any:
         response = await guarded_get(
-            self._client, f"{self._base}{path}", self._guard, params=params, **self._kwargs
+            self._client,
+            f"{self._base}{path}",
+            self._guard,
+            params=params,
+            max_bytes=max_bytes,
+            **self._kwargs,
         )
         try:
             return response.json()
@@ -245,7 +252,11 @@ class MfapiClient:
         rejected = 0
         for page in range(LIST_MAX_PAGES):
             parsed = parse_list(
-                await self._json("/mf", {"limit": page_size, "offset": page * page_size})
+                await self._json(
+                    "/mf",
+                    {"limit": page_size, "offset": page * page_size},
+                    max_bytes=MAX_LIST_BYTES,
+                )
             )
             rejected += parsed.rejected
             if not parsed.items and not parsed.rejected:

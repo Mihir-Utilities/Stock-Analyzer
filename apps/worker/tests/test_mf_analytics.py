@@ -93,6 +93,7 @@ def test_sharpe_null_under_three_years() -> None:
     assert m["volatility_years"] == pytest.approx(499 / 365.25, abs=0.01)  # full history >= 1Y
 
 
+# MF-84
 def test_mf07_weekly_nav_scheme_volatility_null() -> None:
     start = date(2023, 1, 6)
     dates = [start + timedelta(days=7 * i) for i in range(120)]  # about 2.3 years, weekly
@@ -148,6 +149,7 @@ def test_mf08_jump_over_25_percent_flagged_and_kept() -> None:
     assert m is not None and len(m["nav_jumps"]) == 2 and m["end_nav"] == 94.0
 
 
+# MF-86
 def test_no_nan_or_inf_in_output() -> None:
     dates, navs = _daily(1200, lambda i: 100.0)  # flat NAV: zero volatility
     m = compute_mf_metrics(dates, navs)

@@ -8,6 +8,7 @@ on fixtures with in-memory fakes; ``PgMfStore`` is the production store (paramet
 from __future__ import annotations
 
 import json
+import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -45,8 +46,15 @@ from worker.marketdate import ist_today
 from worker.runner import JobContext
 
 TRACKED_CAP = 150  # docs/04 3.5
+log = logging.getLogger(__name__)
+
 INACTIVE_AFTER_DAYS = 60  # docs/04 3.6; MF-06
 UPSERT_CHUNK = 5000
+# D04R-1: status changes need a plausible AMFI file (a truncated or header-only file must not
+# mark ~38k schemes inactive): at least this many rows AND at least this fraction of the previous
+# successfully applied file.
+AMFI_MIN_ROWS = 5000
+AMFI_MIN_FRACTION = 0.5
 SOURCE_ERRORS = (RetryableError, SourceDisabled, SchemaError)
 SYNC_ERRORS = (*SOURCE_ERRORS, NotFound)
 
@@ -78,6 +86,7 @@ class MfStore(Protocol):
     async def load_series(self, code: int) -> tuple[list[date], list[float]]: ...
     async def save_cache(self, code: int, as_of: date, metrics: dict[str, Any]) -> None: ...
     async def risk_free_rate(self) -> float: ...
+    async def previous_amfi_rows(self) -> int | None: ...
 
 
 def decide_status(amfi_date: date | None, last_nav: date | None, today: date, current: str) -> str:
@@ -123,6 +132,7 @@ async def run_sync_mf_schemes(
         ctx.extra["amfi_rows"] = len(amfi_file.rows)
         ctx.extra["amfi_rejected"] = amfi_file.rejected
         ctx.extra["amfi_reject_reasons"] = amfi_file.reasons
+        ctx.extra["amfi_duplicates"] = amfi_file.duplicates  # last row of a code wins
     if ctx.dry_run:
         return
     if listing is not None:
@@ -130,7 +140,17 @@ async def run_sync_mf_schemes(
             ctx.add_rows(await store.upsert_list(listing.items[i : i + UPSERT_CHUNK]))
     if amfi_file is not None:
         ctx.add_rows(await store.apply_amfi(amfi_file))
-        # Only a successfully parsed AMFI file may change status (never on a failed download).
+        # Only a plausible, successfully parsed AMFI file may change status (D04R-1).
+        previous = await store.previous_amfi_rows()
+        n_rows = len(amfi_file.rows)
+        floor = max(AMFI_MIN_ROWS, int(AMFI_MIN_FRACTION * previous) if previous else 0)
+        if n_rows < floor:
+            ctx.extra["status_skipped"] = (
+                f"amfi_rows_below_floor: {n_rows} < {floor} (previous {previous})"
+            )
+            ctx.mark_partial("amfi_implausibly_small")
+            log.warning("sync_mf_schemes: status changes refused", extra={"rows": n_rows})
+            return
         amfi_dates = {r.code: r.nav_date for r in amfi_file.rows}
         changes: list[tuple[int, str]] = []
         for code, (status, last_nav) in (await store.scheme_state()).items():
@@ -138,6 +158,7 @@ async def run_sync_mf_schemes(
             if new != status:
                 changes.append((code, new))
         await store.set_status(changes)
+        ctx.extra["amfi_status_rows"] = n_rows  # read back by previous_amfi_rows
         ctx.extra["status_changed"] = len(changes)
         ctx.extra["now_inactive"] = sum(1 for _, s in changes if s == "inactive")
 
@@ -168,7 +189,9 @@ async def ingest_scheme(
     if not await store.scheme_exists(code):
         raise LookupError(f"scheme {code} is not in mf_scheme")
     last = await store.last_nav_date(code)
-    start = last + timedelta(days=1) if last is not None else None
+    # Re-fetch the last stored date too: a corrected NAV for it is refreshed (idempotent upsert).
+    start = last
+
     points: list[NavPoint] = []
     meta: SchemeMeta | None = None
     if start is None or start <= today:
@@ -359,8 +382,16 @@ class PgMfStore:
             "metrics = EXCLUDED.metrics",
             code,
             as_of,
-            json.dumps(metrics),
+            json.dumps(metrics, allow_nan=False),
         )
+
+    async def previous_amfi_rows(self) -> int | None:
+        value = await self._pool.fetchval(
+            "SELECT (details->>'amfi_status_rows')::int FROM ingestion_run "
+            "WHERE job = 'sync_mf_schemes' AND status IN ('ok', 'partial') "
+            "AND details ? 'amfi_status_rows' ORDER BY started_at DESC, id DESC LIMIT 1"
+        )
+        return int(value) if value is not None else None
 
     async def risk_free_rate(self) -> float:
         value = await self._pool.fetchval(

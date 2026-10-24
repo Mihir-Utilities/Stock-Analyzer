@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
@@ -123,6 +124,36 @@ class PgSourceHealthStore:
             health.disabled_until,
             health.note,
         )
+
+    async def update(self, source: str, fn: Callable[[SourceHealth], SourceHealth]) -> SourceHealth:
+        """Row-locked read-modify-write in one transaction (SELECT ... FOR UPDATE)."""
+        async with self._pool.acquire() as conn, conn.transaction():
+            await conn.execute(
+                "INSERT INTO source_health (source, checked_at, ok, consecutive_failures) "
+                "VALUES ($1, now(), true, 0) ON CONFLICT (source) DO NOTHING",
+                source,
+            )
+            row = await conn.fetchrow(
+                "SELECT source, ok, consecutive_failures, disabled_until, latency_ms, note, "
+                "checked_at FROM source_health WHERE source = $1 FOR UPDATE",
+                source,
+            )
+            if row is None:  # pragma: no cover - inserted just above in this transaction
+                raise RuntimeError("source_health row vanished")
+            new = fn(SourceHealth(**dict(row)))
+            await conn.execute(
+                "UPDATE source_health SET checked_at = COALESCE($2, now()), ok = $3, "
+                "latency_ms = $4, consecutive_failures = $5, disabled_until = $6, note = $7 "
+                "WHERE source = $1",
+                new.source,
+                new.checked_at,
+                new.ok,
+                new.latency_ms,
+                new.consecutive_failures,
+                new.disabled_until,
+                new.note,
+            )
+            return new
 
 
 class PgJobQueue:

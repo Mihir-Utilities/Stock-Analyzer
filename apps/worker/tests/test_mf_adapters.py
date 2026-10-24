@@ -129,6 +129,7 @@ def test_fixture_history_and_latest_and_search_and_list() -> None:
     assert lst.items[1].option_type == "idcw"
 
 
+# MF-81
 def test_list_rejects_bad_items() -> None:
     lst = parse_list(
         [
@@ -201,6 +202,7 @@ def test_amfi_more_than_10000_rows_synthetic() -> None:
         assert parsed.by_code()[101005].fund_house == "AMC 1 Mutual Fund"
 
 
+# MF-19
 def test_mf19_header_by_name_reordered_extra_and_six_field() -> None:
     reordered = (
         "Date;Extra Col;Net Asset Value;Scheme Name;ISIN Div Reinvestment;"
@@ -230,6 +232,7 @@ def test_mf19_header_by_name_reordered_extra_and_six_field() -> None:
             parse_navall(bad)
 
 
+# MF-20
 def test_mf20_type_line_vs_amc_line_and_missing_section() -> None:
     text = "\n".join(
         [
@@ -310,6 +313,7 @@ def mf_client(handler: Any, clock: FakeClock) -> tuple[MfapiClient, Routes, http
     return MfapiClient(client, make_guard(clock), sleep=clock.sleep), routes, client
 
 
+# MF-81
 async def test_list_pagination_until_empty_page(clock: FakeClock) -> None:
     pages = {
         "0": [{"schemeCode": 1, "schemeName": "A"}, {"schemeCode": 2, "schemeName": "B"}],
@@ -361,6 +365,7 @@ async def test_retries_then_breaker_opens(clock: FakeClock) -> None:
         assert len(routes.requests) == 20  # open breaker: no request is made
 
 
+# MF-80 (AMFI host passes the allow-list)
 async def test_amfi_client_downloads_once_and_parses(clock: FakeClock) -> None:
     routes = Routes(lambda r: httpx.Response(200, content=AMFI_FIXTURE.read_bytes()))
     client = egress.make_client(inner=routes)

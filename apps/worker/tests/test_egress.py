@@ -56,6 +56,7 @@ def test_allow_list_file_matches_docs() -> None:
         "https://mfapi.in:443/mf",
     ],
 )
+# MF-80
 async def test_allowed_hosts_pass(url: str) -> None:
     rec = await _get(url)
     assert len(rec.seen) == 1
@@ -82,6 +83,7 @@ async def test_allowed_hosts_pass(url: str) -> None:
         "https://localhost/",
     ],
 )
+# SAF-14 / MF-80
 async def test_hosts_outside_allow_list_raise_before_any_socket(url: str) -> None:
     rec = Recorder()
     with pytest.raises(EgressDenied):
@@ -99,6 +101,7 @@ async def test_host_read_from_environment_variable_is_refused(
     assert rec.seen == []
 
 
+# SAF-14
 async def test_redirect_to_unlisted_host_is_refused_on_the_hop() -> None:
     rec = Recorder(
         {"https://mfapi.in/mf": httpx.Response(302, headers={"Location": "https://example.com/x"})}
@@ -109,6 +112,7 @@ async def test_redirect_to_unlisted_host_is_refused_on_the_hop() -> None:
 
 
 @pytest.mark.parametrize("target", ["http://mfapi.in/mf", "https://127.0.0.1/mf"])
+# SAF-14
 async def test_redirect_downgrade_or_ip_is_refused(target: str) -> None:
     rec = Recorder({"https://mfapi.in/mf": httpx.Response(301, headers={"Location": target})})
     with pytest.raises(EgressDenied):
@@ -150,6 +154,7 @@ async def test_allowed_host_with_real_transport_still_hits_the_socket_guard() ->
             await client.get("https://mfapi.in/mf")
 
 
+# SAF-14
 def test_environment_proxies_are_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:3128")
     monkeypatch.setenv("ALL_PROXY", "http://proxy.invalid:3128")

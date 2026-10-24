@@ -151,7 +151,7 @@ def adx(high: F64, low: F64, close: F64, n: int = 14) -> Adx:
     """Wilder ADX (docs/05 3). ``+DI + -DI == 0`` gives DX 0 (no directional movement)."""
     size = len(close)
     adx_out, plus_out, minus_out = _full(size), _full(size), _full(size)
-    if size <= 2 * n:
+    if size < 2 * n:  # first ADX sits at index 2n-1, so exactly 2n bars suffice
         return Adx(adx_out, plus_out, minus_out)
     up = high[1:] - high[:-1]
     down = low[:-1] - low[1:]

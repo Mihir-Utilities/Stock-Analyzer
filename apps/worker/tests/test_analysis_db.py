@@ -115,6 +115,25 @@ async def test_ret90_snapshot_written_idempotent_and_scores_left_for_d05b(
     assert doc(again[0]["scores"]) == {"trend": {"score": 70}}
 
 
+# RET-96: the snapshot writer refuses NaN/Infinity instead of storing it in jsonb
+async def test_ret96_snapshot_writer_refuses_nan(
+    pg_full: asyncpg.Pool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    iid = await seed(pg_full, "NAN", 120)
+    real = analysis_db.build_snapshot
+
+    def poisoned(*a: Any, **k: Any) -> dict[str, Any] | None:
+        snap = real(*a, **k)
+        assert snap is not None
+        snap["last_close"] = float("nan")
+        return snap
+
+    monkeypatch.setattr(analysis_db, "build_snapshot", poisoned)
+    with pytest.raises(ValueError):
+        await analysis_db.compute_analysis(pg_full, "NAN")
+    assert await snapshot_rows(pg_full, iid) == []
+
+
 async def test_ret90_keeps_latest_30_and_only_the_newest_has_series(pg_full: asyncpg.Pool) -> None:
     iid = await seed(pg_full, "BBB", 60)
     for n in range(60, 95):  # 35 successive as_of dates

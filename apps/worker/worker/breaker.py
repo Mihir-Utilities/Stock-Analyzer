@@ -41,6 +41,10 @@ class SourceHealthStore(Protocol):
 
     async def save(self, health: SourceHealth) -> None: ...
 
+    async def update(self, source: str, fn: Callable[[SourceHealth], SourceHealth]) -> SourceHealth:
+        """Atomic read-modify-write of one source's row (concurrent jobs must not lose updates)."""
+        ...
+
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
@@ -68,19 +72,18 @@ class CircuitBreaker:
             raise SourceDisabled(self.source, health.disabled_until)
 
     async def record_success(self, latency_ms: int | None = None) -> None:
-        health = await self._load()
-        failures = health.consecutive_failures
-        note: str | None = None
-        if failures >= FAILURE_THRESHOLD:  # half-open probe
-            self._probe_successes += 1
-            if self._probe_successes >= SUCCESSES_TO_CLOSE:
-                failures, self._probe_successes = 0, 0
+        def apply(health: SourceHealth) -> SourceHealth:
+            failures = health.consecutive_failures
+            note: str | None = None
+            if failures >= FAILURE_THRESHOLD:  # half-open probe
+                self._probe_successes += 1
+                if self._probe_successes >= SUCCESSES_TO_CLOSE:
+                    failures, self._probe_successes = 0, 0
+                else:
+                    note = f"half_open {self._probe_successes}/{SUCCESSES_TO_CLOSE}"
             else:
-                note = f"half_open {self._probe_successes}/{SUCCESSES_TO_CLOSE}"
-        else:
-            failures = 0
-        await self._store.save(
-            replace(
+                failures = 0
+            return replace(
                 health,
                 ok=True,
                 consecutive_failures=failures,
@@ -89,18 +92,18 @@ class CircuitBreaker:
                 note=note,
                 checked_at=self._now(),
             )
-        )
+
+        await self._store.update(self.source, apply)
 
     async def record_failure(self, note: str | None = None) -> None:
-        health = await self._load()
-        self._probe_successes = 0
-        failures = health.consecutive_failures + 1
-        disabled_until: datetime | None = None
-        if failures >= FAILURE_THRESHOLD:
-            level = min(failures - FAILURE_THRESHOLD, len(OPEN_DURATIONS) - 1)
-            disabled_until = self._now() + OPEN_DURATIONS[level]
-        await self._store.save(
-            replace(
+        def apply(health: SourceHealth) -> SourceHealth:
+            self._probe_successes = 0
+            failures = health.consecutive_failures + 1
+            disabled_until: datetime | None = None
+            if failures >= FAILURE_THRESHOLD:
+                level = min(failures - FAILURE_THRESHOLD, len(OPEN_DURATIONS) - 1)
+                disabled_until = self._now() + OPEN_DURATIONS[level]
+            return replace(
                 health,
                 ok=False,
                 consecutive_failures=failures,
@@ -108,7 +111,8 @@ class CircuitBreaker:
                 note=note,
                 checked_at=self._now(),
             )
-        )
+
+        await self._store.update(self.source, apply)
 
     async def call(
         self,

@@ -64,6 +64,7 @@ async def test_finish_writes_counts_and_details(pg_pool: asyncpg.Pool) -> None:
     assert row["finished_at"] is not None and "bad" in row["details"]
 
 
+# SYS-20
 async def test_stale_running_row_is_failed_by_next_run(pg_pool: asyncpg.Pool) -> None:
     store = PgRunStore(pg_pool)
     await pg_pool.execute(
@@ -81,6 +82,7 @@ async def test_stale_running_row_is_failed_by_next_run(pg_pool: asyncpg.Pool) ->
     assert statuses == ["failed", "ok"]
 
 
+# SYS-19 (state survives a new process)
 async def test_breaker_persists_in_source_health(pg_pool: asyncpg.Pool) -> None:
     store = PgSourceHealthStore(pg_pool)
     breaker = CircuitBreaker("mfapi", store)
@@ -117,3 +119,15 @@ async def test_job_queue_claim_is_atomic(pg_pool: asyncpg.Pool) -> None:
     assert row is not None and row["status"] == "partial" and "TCS" in row["result"]
     assert row["finished_at"] is not None
     assert await queue.get(99999) is None
+
+
+# SYS-33: concurrent jobs must not lose breaker updates (row-locked read-modify-write)
+async def test_sys33_concurrent_breaker_failures_are_all_counted(pg_pool: asyncpg.Pool) -> None:
+    store = PgSourceHealthStore(pg_pool)
+    breakers = [CircuitBreaker("cas-test", store) for _ in range(20)]
+    await asyncio.gather(*(b.record_failure("x") for b in breakers))
+    row = await pg_pool.fetchrow("SELECT * FROM source_health WHERE source = 'cas-test'")
+    assert row is not None and row["consecutive_failures"] == 20 and row["ok"] is False
+    await asyncio.gather(*(b.record_success() for b in breakers[:3]))
+    row = await pg_pool.fetchrow("SELECT * FROM source_health WHERE source = 'cas-test'")
+    assert row is not None and row["consecutive_failures"] == 20  # probes counted per instance

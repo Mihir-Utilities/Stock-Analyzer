@@ -48,6 +48,7 @@ async def test_different_jobs_do_not_block_each_other(run_store) -> None:  # typ
     assert (await run_job(JobSpec("b", 60, _noop), run_store)).status == "ok"
 
 
+# SYS-20
 async def test_stale_running_row_older_than_twice_timeout_is_failed_and_replaced(run_store) -> None:  # type: ignore[no-untyped-def]
     await run_store.try_lock("j")
     run_store.runs[0]["started_at"] = datetime.now(UTC) - timedelta(seconds=121)
@@ -56,12 +57,14 @@ async def test_stale_running_row_older_than_twice_timeout_is_failed_and_replaced
     assert run_store.runs[0]["status"] == "failed" and run_store.runs[0]["error"] == "stale_run"
 
 
+# SYS-20
 async def test_fresh_running_row_is_not_taken_over(run_store) -> None:  # type: ignore[no-untyped-def]
     await run_store.try_lock("j")
     run_store.runs[0]["started_at"] = datetime.now(UTC) - timedelta(seconds=119)
     assert (await run_job(JobSpec("j", 60, _noop), run_store)).status == "skipped"
 
 
+# SYS-21
 async def test_timeout_marks_partial_after_finishing_current_item(run_store, clock) -> None:  # type: ignore[no-untyped-def]
     done: list[int] = []
 
@@ -80,6 +83,7 @@ async def test_timeout_marks_partial_after_finishing_current_item(run_store, clo
     assert row["details"]["timed_out"] is True and row["details"]["items_remaining"] == 6
 
 
+# SYS-21
 async def test_per_item_isolation_keeps_first_50_errors(run_store) -> None:  # type: ignore[no-untyped-def]
     async def work(ctx: JobContext) -> None:
         async def one(n: int) -> None:

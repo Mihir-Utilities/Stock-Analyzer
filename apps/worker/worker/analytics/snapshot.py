@@ -38,6 +38,31 @@ class Bars:
     volume: F64
 
 
+def _drop_invalid_prices(bars: Bars) -> tuple[Bars, int]:
+    """Drop rows whose close/adj_close/high/low is NaN, inf or <= 0 (never forward-filled).
+
+    Volume is left alone: a NaN volume only nulls the volume-based metrics (OBV, volume z-score,
+    ADV) with a reason.
+    """
+    price_ok = np.ones(len(bars.dates), dtype=bool)
+    for a in (bars.close, bars.adj_close, bars.high, bars.low):
+        price_ok &= np.isfinite(a) & (a > 0)
+    if price_ok.all():
+        return bars, 0
+    keep = [i for i, ok in enumerate(price_ok) if ok]
+    return (
+        Bars(
+            dates=[bars.dates[i] for i in keep],
+            close=bars.close[price_ok],
+            adj_close=bars.adj_close[price_ok],
+            high=bars.high[price_ok],
+            low=bars.low[price_ok],
+            volume=bars.volume[price_ok],
+        ),
+        int(len(price_ok) - len(keep)),
+    )
+
+
 def _scaled(bars: Bars) -> tuple[F64, F64]:
     """High/low scaled by ``k = adj_close / close`` per row (docs/05 1)."""
     k = bars.adj_close / bars.close
@@ -70,6 +95,10 @@ def build_snapshot(
     warnings: list[str] | None = None,
 ) -> dict[str, Any] | None:
     """The ``indicators`` jsonb of one stock, or ``None`` below ``MIN_BARS`` valid bars."""
+    bars, dropped = _drop_invalid_prices(bars)
+    warnings = list(warnings or [])
+    if dropped:
+        warnings.append(f"dropped {dropped} bar(s) with a non-finite or non-positive price")
     n = len(bars.dates)
     if n < MIN_BARS:
         return None
@@ -78,21 +107,23 @@ def build_snapshot(
     hi, lo = _scaled(bars)
     col = _Collector()
 
-    technicals, series = _technicals(bars, hi, lo, col)
-    returns = _returns(bars, bench, risk_free, col)
+    with np.errstate(all="ignore"):  # unknown stays null with a reason, never NaN/inf/raise
+        technicals, series = _technicals(bars, hi, lo, col)
+        returns = _returns(bars, bench, risk_free, col)
+        analysis = _analysis(bars, bench)
     return {
         "version": VERSION,
         "as_of": bars.dates[-1].isoformat(),
         "bars": n,
         "price_basis": PRICE_BASIS,
         "source": "owner-imported prices",
-        "last_close": float(c[-1]),
+        "last_close": col.value("last_close", float(c[-1]), "n/m"),
         "returns": returns,
         "technicals": technicals,
         "series": series,
-        "analysis": _analysis(bars, bench),
+        "analysis": analysis,
         "null_reasons": col.reasons,
-        "warnings": list(warnings or []),
+        "warnings": warnings,
         "units": UNITS,
     }
 
@@ -135,7 +166,7 @@ def _technicals(
         "minus_di14": col.value("minus_di14", _last(dmi.minus_di)),
         "stoch_k": col.value("stoch_k", _last(sto.k)),
         "stoch_d": col.value("stoch_d", _last(sto.d)),
-        "obv": float(obv[-1]),
+        "obv": col.value("obv", _last(obv), "n/m"),
         "volume_z20": col.value("volume_z20", _last(vz), "n/m"),
     }
     w52 = ind.week52(hi, lo)
@@ -145,15 +176,19 @@ def _technicals(
         t.update(high_52w=None, low_52w=None, dist_52w_high_pct=None)
     else:
         t.update(
-            high_52w=w52.high,
-            low_52w=w52.low,
+            high_52w=col.value("high_52w", w52.high, "n/m"),
+            low_52w=col.value("low_52w", w52.low, "n/m"),
             dist_52w_high_pct=col.value(
                 "dist_52w_high_pct", (float(c[-1]) / w52.high - 1) * 100, "n/m"
             ),
         )
     sup, res = ind.support_resistance(hi, lo, float(c[-1]))
-    t["support"] = [{"price": s.price, "touches": s.touches} for s in sup]
-    t["resistance"] = [{"price": r.price, "touches": r.touches} for r in res]
+    t["support"] = [
+        {"price": s.price, "touches": s.touches} for s in sup if ser.num(s.price) is not None
+    ]
+    t["resistance"] = [
+        {"price": r.price, "touches": r.touches} for r in res if ser.num(r.price) is not None
+    ]
     cross = ind.crosses(sma50, sma200)
     if cross is None:
         col.reasons["golden_cross"] = col.reasons["death_cross"] = "insufficient_history"
