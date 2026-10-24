@@ -27,7 +27,7 @@ export const SAMPLE: IndexItem[] = [
 const entries = buildEntries(SAMPLE);
 const symbols = (q: string) => searchEntries(entries, q).map((h) => h.entry.symbol);
 
-describe("normalizeQuery", () => {
+describe("UI-25: normalizeQuery", () => {
   it("uppercases and removes spaces and punctuation except & and -", () => {
     expect(normalizeQuery(" m&m ")).toBe("M&M");
     expect(normalizeQuery("bajaj-auto")).toBe("BAJAJ-AUTO");
@@ -36,7 +36,7 @@ describe("normalizeQuery", () => {
   });
 });
 
-describe("ranking tiers", () => {
+describe("UI-25: ranking tiers", () => {
   it("exact symbol first, then symbol prefix, then name word-prefix, then substring", () => {
     const hits = searchEntries(entries, "TATA");
     // TATA: symbol prefix for TATAMOTORS, TATASTEEL; name word-prefix for TCS.
@@ -72,7 +72,7 @@ describe("ranking tiers", () => {
   });
 });
 
-describe("symbols with punctuation", () => {
+describe("UI-25: symbols with punctuation", () => {
   it("M&M is found by typing M&M", () => {
     const hits = symbols("M&M");
     expect(hits[0]).toBe("M&M");

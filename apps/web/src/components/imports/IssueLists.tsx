@@ -1,5 +1,13 @@
 import type { RowIssue } from "@/lib/imports/schemas";
-import { UNKNOWN, formatCell, formatCount } from "@/lib/imports/local-format";
+import { DASH, formatCount } from "@/lib/format";
+
+/** Cell text for the preview table: empty cells show the dash, never 0. Raw file values, so no number formatting. */
+export function formatCell(v: unknown): string {
+  if (v === null || v === undefined || v === "") return DASH;
+  if (typeof v === "number") return Number.isFinite(v) ? String(v) : DASH;
+  if (typeof v === "string" || typeof v === "boolean") return String(v);
+  return JSON.stringify(v);
+}
 
 /**
  * Row and column errors or warnings (decision D-P: every issue names the offending row and
@@ -24,7 +32,7 @@ export function IssueList({
       className="flex flex-col gap-2"
     >
       <h3 className="text-body font-semibold text-text-1">
-        {label} ({formatCount(total)})
+        {label} ({formatCount(total).text})
       </h3>
       {kind === "error" ? (
         <p className="text-body-sm text-text-2">
@@ -64,7 +72,7 @@ export function IssueList({
                 className="border-t border-border"
               >
                 <td className="px-2 py-1 tabular-nums">{e.row === 0 ? "File" : e.row}</td>
-                <td className="px-2 py-1">{e.column || UNKNOWN}</td>
+                <td className="px-2 py-1">{e.column || DASH}</td>
                 <td className="px-2 py-1">{e.message}</td>
               </tr>
             ))}
@@ -73,7 +81,7 @@ export function IssueList({
       </div>
       {total > issues.length ? (
         <p className="text-caption text-text-2" data-testid={`import-${kind}s-cut`}>
-          Showing the first {formatCount(issues.length)} of {formatCount(total)}.
+          Showing the first {formatCount(issues.length).text} of {formatCount(total).text}.
         </p>
       ) : null}
     </section>

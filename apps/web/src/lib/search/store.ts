@@ -129,7 +129,9 @@ export async function loadStockIndex(deps: LoadDeps): Promise<LoadResult> {
 
   if (cached && age <= INDEX_MAX_AGE_MS) {
     const snapshot = { generatedAt: cached.generatedAt, items: cached.items, stale: false };
-    if (age <= INDEX_REVALIDATE_AFTER_MS) return { snapshot, refresh: null };
+    // "Cache < 1 h used with no call" (UI-22): exactly 1 h revalidates. A negative age (fetchedAt in
+    // the future after a clock change) is never fresh; it revalidates and the new stamp replaces it.
+    if (age >= 0 && age < INDEX_REVALIDATE_AFTER_MS) return { snapshot, refresh: null };
     const refresh = fetchAndStore().then(
       (s) => (s.generatedAt === cached.generatedAt ? null : s),
       () => null,
@@ -153,13 +155,24 @@ export async function loadStockIndex(deps: LoadDeps): Promise<LoadResult> {
 
 export const RECENT_KEY = "analyzer-recent-searches";
 
-export const recentSchema = z.object({
-  kind: z.enum(["stock", "fund"]),
-  /** Symbol for stocks, scheme code (as text) for funds. */
-  key: z.string(),
-  label: z.string(),
-  sub: z.string(),
-});
+/** Stock symbols as the API accepts them (`^[A-Z0-9][A-Z0-9&-]{0,29}$`); fund keys are scheme codes. */
+const STOCK_KEY = /^[A-Z0-9][A-Z0-9&-]{0,29}$/;
+const FUND_KEY = /^\d+$/;
+
+/** True when `key` is safe to put into a route for this kind of result (UI-21 review). */
+export function isValidRecentKey(kind: "stock" | "fund", key: string): boolean {
+  return (kind === "stock" ? STOCK_KEY : FUND_KEY).test(key);
+}
+
+export const recentSchema = z
+  .object({
+    kind: z.enum(["stock", "fund"]),
+    /** Symbol for stocks, scheme code (as text) for funds. */
+    key: z.string(),
+    label: z.string(),
+    sub: z.string(),
+  })
+  .refine((r) => isValidRecentKey(r.kind, r.key), { message: "invalid key" });
 export type RecentItem = z.infer<typeof recentSchema>;
 
 export function readRecents(
@@ -169,8 +182,15 @@ export function readRecents(
   try {
     const raw = storage.getItem(RECENT_KEY);
     if (!raw) return [];
-    const parsed = z.array(recentSchema).safeParse(JSON.parse(raw));
-    return parsed.success ? parsed.data.slice(0, RECENT_MAX) : [];
+    const list: unknown = JSON.parse(raw);
+    if (!Array.isArray(list)) return [];
+    // Tampered entries are dropped one by one; the valid ones survive.
+    const out: RecentItem[] = [];
+    for (const entry of list) {
+      const p = recentSchema.safeParse(entry);
+      if (p.success) out.push(p.data);
+    }
+    return out.slice(0, RECENT_MAX);
   } catch {
     return [];
   }

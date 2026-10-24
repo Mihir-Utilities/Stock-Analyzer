@@ -128,7 +128,7 @@ export function AddStockForm() {
             type="submit"
             data-testid="add-stock-submit"
             disabled={create.isPending}
-            className="h-9 rounded-control border border-accent px-3 text-body-sm font-medium hover:bg-surface-3 disabled:opacity-50"
+            className="touch-target h-9 rounded-control border border-accent px-3 text-body-sm font-medium hover:bg-surface-3 disabled:opacity-50"
           >
             {create.isPending ? "Adding" : "Add stock"}
           </button>

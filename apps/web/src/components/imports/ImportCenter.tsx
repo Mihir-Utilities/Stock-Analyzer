@@ -28,7 +28,7 @@ function TemplatesTab() {
               href={templateUrl(k)}
               download
               data-testid={`template-${k}`}
-              className="w-fit text-body text-accent underline"
+              className="touch-target inline-flex w-fit items-center text-body text-accent underline"
             >
               Download {k}.csv template
             </a>

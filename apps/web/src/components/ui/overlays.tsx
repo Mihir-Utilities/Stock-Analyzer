@@ -144,7 +144,13 @@ function useDialog(open: boolean, onClose: () => void) {
   return ref;
 }
 
-/** Modal confirmation. Destructive actions use the `danger` tone and the cancel button has focus. */
+const noop = () => {};
+
+/**
+ * Modal confirmation. Destructive actions use the `danger` tone and the cancel button has focus.
+ * While `busy` (the confirmed action is running) both buttons are disabled and Escape is ignored,
+ * so a double click cannot send the action twice.
+ */
 export function ConfirmDialog({
   open,
   title,
@@ -152,6 +158,7 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel = "Cancel",
   danger = false,
+  busy = false,
   onConfirm,
   onCancel,
 }: {
@@ -161,16 +168,18 @@ export function ConfirmDialog({
   confirmLabel: string;
   cancelLabel?: string;
   danger?: boolean;
+  busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  const ref = useDialog(open, onCancel);
+  const ref = useDialog(open, busy ? noop : onCancel);
   const titleId = useId();
   return (
     <dialog
       ref={ref}
       aria-labelledby={titleId}
       data-testid="confirm-dialog"
+      aria-busy={busy}
       className="m-auto w-full max-w-sm rounded-card border border-border bg-surface-1 p-4 text-text-1 backdrop:bg-black/50"
     >
       <h2 id={titleId} className="text-lead font-semibold">
@@ -182,17 +191,21 @@ export function ConfirmDialog({
           type="button"
           data-testid="confirm-cancel"
           autoFocus
+          disabled={busy}
           onClick={onCancel}
-          className="h-9 touch-target rounded-control border border-border px-3 text-body-sm hover:bg-surface-3"
+          className="h-9 touch-target rounded-control border border-border px-3 text-body-sm hover:bg-surface-3 disabled:opacity-50"
         >
           {cancelLabel}
         </button>
         <button
           type="button"
           data-testid="confirm-ok"
-          onClick={onConfirm}
+          disabled={busy}
+          onClick={() => {
+            if (!busy) onConfirm();
+          }}
           className={cx(
-            "h-9 touch-target rounded-control border px-3 text-body-sm font-medium hover:bg-surface-3",
+            "h-9 touch-target rounded-control border px-3 text-body-sm font-medium hover:bg-surface-3 disabled:opacity-50",
             danger ? "border-down text-text-1" : "border-accent text-text-1",
           )}
         >

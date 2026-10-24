@@ -265,3 +265,10 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 
 - Next.js was bumped from 16.4.0 to 16.4.1 (owner approved) because `next build` failed with `SecurityFatalError`: 16.0.0 to 16.4.0 are affected by GHSA-2464-fhr4-w9xw, GHSA-p3m5-59mp-jv5r and GHSA-673q-mjm6-r5xr. `eslint-config-next` moved to the same version.
 - The advisory gate runs inside `next build` (it queries the npm advisory service). Any future advisory against the installed Next.js version will fail the web CI job until it is bumped, so merge Renovate PRs for `next` promptly.
+
+## 33. F03/F13a review fixes in apps/web
+
+- Confirmations that start a write (Commit import, Trim history, Delete prices, Change setting) go through `ConfirmDialog` with `busy` and the `useSingleFlight` guard (`lib/imports/single-flight.ts`). If a commit ever shows "expired, upload again" right after a success, check the browser network log for two POSTs to `/imports/{kind}/commit` before suspecting the 1 hour upload TTL.
+- The Import center formats numbers and dates only through `lib/format` (`lib/imports/local-format.ts` is gone; a repo test keeps it gone). Unknown values show a dash with the reason as a tooltip (`components/imports/Fmt.tsx`).
+- The stock index cache treats a future `fetchedAt` (system clock moved back) as stale. If the palette seems to show an old list, clear the `analyzer-search` IndexedDB database in the browser.
+- Local e2e: `npm run build` bakes `API_BASE_URL` into the rewrites. Build with `API_BASE_URL=http://127.0.0.1:9` (as CI's closed-port intent) when another process answers on `localhost:8080`, otherwise the shell tests get a 401 from that process and are redirected to `/login`. Ports 3100 and 6100 are fixed in `playwright.config.ts`; two parallel runs on one machine collide.

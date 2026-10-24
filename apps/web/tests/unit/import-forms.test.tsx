@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,7 +9,8 @@ import { ImportCenter, RIGHTS_NOTICE } from "@/components/imports/ImportCenter";
 import { StorageMeter } from "@/components/imports/StorageMeter";
 import { TrimHistory } from "@/components/imports/TrimHistory";
 import { warnLevelFor } from "@/lib/imports/storage";
-import { formatCell, formatMb, UNKNOWN } from "@/lib/imports/local-format";
+import { formatCell } from "@/components/imports/IssueLists";
+import { DASH, formatMb } from "@/lib/format";
 import { dbStatus, fail, ok, stockIndex, trimPreview } from "../mocks/imports-fixtures";
 import { createMockFetch, type Handler } from "../mocks/mock-fetch";
 
@@ -264,14 +265,94 @@ describe("Import center (SAF-05, rights notice)", () => {
   });
 });
 
-describe("local formatting never shows unknown values as 0", () => {
-  it("renders the dash for null, NaN and Infinity", () => {
-    expect(formatMb(null)).toBe(UNKNOWN);
-    expect(formatMb(Number.NaN)).toBe(UNKNOWN);
-    expect(formatMb(Number.POSITIVE_INFINITY)).toBe(UNKNOWN);
-    expect(formatCell("")).toBe(UNKNOWN);
-    expect(formatCell(null)).toBe(UNKNOWN);
+describe("import screens format through lib/format (F03), never as 0 for unknown values", () => {
+  it("renders the dash with a reason for null, NaN and Infinity", () => {
+    for (const v of [null, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const f = formatMb(v);
+      expect(f.text).toBe(DASH);
+      expect(f.reason).not.toBeNull();
+    }
+    expect(formatCell("")).toBe(DASH);
+    expect(formatCell(null)).toBe(DASH);
     expect(formatCell(0)).toBe("0");
-    expect(formatMb(0.01)).toBe("0.01 MB");
+    expect(formatMb(0.01).text).toBe("0.01 MB");
+  });
+});
+
+describe("UI-32: a double click on a destructive confirmation sends one request", () => {
+  /** Holds DELETE/trim POSTs until released so the second click arrives while the first is in flight. */
+  function hold(mock: ReturnType<typeof renderWith>, match: (m: string, p: string) => boolean) {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), "http://localhost");
+      const method = (init?.method ?? "GET").toUpperCase();
+      return match(method, url.pathname)
+        ? gate.then(() => mock.impl(input, init))
+        : mock.impl(input, init);
+    });
+    return release;
+  }
+
+  it("Delete prices", async () => {
+    const user = userEvent.setup();
+    const mock = renderWith(<DeletePricesAction symbol="TCS" />, {
+      "POST /stocks/TCS/prices/delete-preview": ok({ rows: 120 }),
+      "DELETE /stocks/TCS/prices": ok({ deleted: 120, job_id: 14, batch_id: 31 }),
+    });
+    await user.type(screen.getByTestId("delete-from"), "2020-01-01");
+    await user.type(screen.getByTestId("delete-to"), "2020-12-31");
+    await user.click(screen.getByTestId("delete-preview"));
+    await user.click(await screen.findByTestId("delete-open-confirm"));
+    const release = hold(mock, (m) => m === "DELETE");
+    const okBtn = within(openDialog()).getByTestId("confirm-ok");
+    fireEvent.click(okBtn);
+    fireEvent.click(okBtn);
+    release();
+    await screen.findByTestId("delete-done");
+    expect(mock.calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
+  });
+
+  it("Trim history", async () => {
+    const user = userEvent.setup();
+    const mock = renderWith(<TrimHistory />, {
+      "GET /stocks/index": stockIndex,
+      "POST /prices/trim/preview": ok(trimPreview),
+      "POST /prices/trim": ok({
+        deleted: 200,
+        per_symbol: trimPreview.per_symbol,
+        batch_id: 32,
+        job_id: 15,
+      }),
+    });
+    await user.click(await screen.findByTestId("trim-stock-TCS"));
+    await user.type(screen.getByTestId("trim-before"), "2021-01-01");
+    await user.click(screen.getByTestId("trim-preview"));
+    await user.click(await screen.findByTestId("trim-open-confirm"));
+    const release = hold(mock, (m, p) => m === "POST" && p.endsWith("/prices/trim"));
+    const okBtn = within(openDialog()).getByTestId("confirm-ok");
+    fireEvent.click(okBtn);
+    fireEvent.click(okBtn);
+    release();
+    await screen.findByTestId("trim-done");
+    expect(mock.calls.filter((c) => c.path === "/prices/trim")).toHaveLength(1);
+  });
+});
+
+describe("UI-24: import screens show ISO dates through formatDate", () => {
+  it("the delete preview and the dialog show 1 Jan 2020, not 2020-01-01", async () => {
+    const user = userEvent.setup();
+    renderWith(<DeletePricesAction symbol="TCS" />, {
+      "POST /stocks/TCS/prices/delete-preview": ok({ rows: 120 }),
+    });
+    await user.type(screen.getByTestId("delete-from"), "2020-01-01");
+    await user.type(screen.getByTestId("delete-to"), "2020-12-31");
+    await user.click(screen.getByTestId("delete-preview"));
+    const text = (await screen.findByTestId("delete-preview-result")).textContent ?? "";
+    expect(text).toContain("1 Jan 2020");
+    expect(text).toContain("31 Dec 2020");
+    expect(text).not.toContain("2020-01-01");
+    await user.click(screen.getByTestId("delete-open-confirm"));
+    expect(openDialog().textContent).toContain("1 Jan 2020");
   });
 });

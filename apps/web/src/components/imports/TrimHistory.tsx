@@ -8,7 +8,9 @@ import { FormField, inputClass } from "@/components/ui/FormField";
 import { ConfirmDialog } from "@/components/ui/overlays";
 import { fetchStockIndex, previewTrim, trimHistory } from "@/lib/imports/api";
 import { describeError, fieldMessage } from "@/lib/imports/errors";
-import { formatCount, formatMb } from "@/lib/imports/local-format";
+import { formatCount, formatDate, formatMb } from "@/lib/format";
+import { useSingleFlight } from "@/lib/imports/single-flight";
+import { Fmt } from "./Fmt";
 import { DB_STATUS_KEY } from "./StorageMeter";
 
 const TRACKED_FLAG = 2;
@@ -27,6 +29,7 @@ export function TrimHistory() {
   const [local, setLocal] = useState<{ symbols?: string; before?: string }>({});
   const [confirmOpen, setConfirmOpen] = useState(false);
   const qc = useQueryClient();
+  const once = useSingleFlight();
 
   const index = useQuery({
     queryKey: ["stocks", "index"],
@@ -114,7 +117,12 @@ export function TrimHistory() {
         ) : index.isError ? (
           <Banner tone="error" testId="trim-index-error">
             The stock list could not be loaded: {describeError(index.error)}{" "}
-            <button type="button" className="underline" onClick={() => void index.refetch()}>
+            <button
+              type="button"
+              data-testid="trim-index-retry"
+              className="touch-target underline"
+              onClick={() => void index.refetch()}
+            >
               Retry
             </button>
           </Banner>
@@ -128,7 +136,7 @@ export function TrimHistory() {
             aria-describedby={symbolsErr ? "trim-symbols-err" : undefined}
           >
             <legend className="text-caption font-medium text-text-1">
-              Stocks ({formatCount(selected.length)} chosen)
+              Stocks ({formatCount(selected.length).text} chosen)
             </legend>
             <div
               tabIndex={0}
@@ -139,7 +147,7 @@ export function TrimHistory() {
               <ul className="flex flex-col gap-1">
                 {visible.slice(0, MAX_SHOWN).map(([id, symbol, name]) => (
                   <li key={id}>
-                    <label className="flex items-center gap-2 text-body-sm text-text-1">
+                    <label className="touch-target flex items-center gap-2 text-body-sm text-text-1">
                       <input
                         type="checkbox"
                         data-testid={`trim-stock-${symbol}`}
@@ -157,7 +165,8 @@ export function TrimHistory() {
               ) : null}
               {visible.length > MAX_SHOWN ? (
                 <p className="mt-1 text-caption text-text-2">
-                  Showing the first {MAX_SHOWN} of {formatCount(visible.length)}. Narrow the search.
+                  Showing the first {MAX_SHOWN} of {formatCount(visible.length).text}. Narrow the
+                  search.
                 </p>
               ) : null}
             </div>
@@ -199,7 +208,7 @@ export function TrimHistory() {
             type="submit"
             data-testid="trim-preview"
             disabled={preview.isPending}
-            className="h-9 rounded-control border border-border px-3 text-body-sm hover:bg-surface-3 disabled:opacity-50"
+            className="touch-target h-9 rounded-control border border-border px-3 text-body-sm hover:bg-surface-3 disabled:opacity-50"
           >
             {preview.isPending ? "Counting" : "Preview"}
           </button>
@@ -208,7 +217,7 @@ export function TrimHistory() {
               type="button"
               data-testid="trim-open-confirm"
               onClick={() => setConfirmOpen(true)}
-              className="h-9 rounded-control border border-down px-3 text-body-sm font-medium hover:bg-surface-3"
+              className="touch-target h-9 rounded-control border border-down px-3 text-body-sm font-medium hover:bg-surface-3"
             >
               Trim history
             </button>
@@ -217,9 +226,17 @@ export function TrimHistory() {
         {pv ? (
           <div role="status" data-testid="trim-preview-result" className="flex flex-col gap-2">
             <p className="text-body-sm text-text-1">
-              {pv.total_rows === 0
-                ? `No prices older than ${before} for the chosen stocks. Nothing to delete.`
-                : `${formatCount(pv.total_rows)} rows would be deleted, freeing about ${formatMb(pv.estimated_mb_freed)} (estimate, about 130 bytes per row).`}
+              {pv.total_rows === 0 ? (
+                <>
+                  No prices older than <Fmt f={formatDate(before)} /> for the chosen stocks. Nothing
+                  to delete.
+                </>
+              ) : (
+                <>
+                  <Fmt f={formatCount(pv.total_rows)} /> rows would be deleted, freeing about{" "}
+                  <Fmt f={formatMb(pv.estimated_mb_freed)} /> (estimate, about 130 bytes per row).
+                </>
+              )}
             </p>
             {pv.total_rows > 0 ? (
               <table className="w-full max-w-sm text-left text-body-sm">
@@ -238,7 +255,9 @@ export function TrimHistory() {
                   {pv.per_symbol.map((r) => (
                     <tr key={r.symbol} className="border-t border-border">
                       <td className="px-2 py-1">{r.symbol}</td>
-                      <td className="px-2 py-1 tabular-nums">{formatCount(r.rows)}</td>
+                      <td className="px-2 py-1 tabular-nums">
+                        <Fmt f={formatCount(r.rows)} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -250,18 +269,19 @@ export function TrimHistory() {
           <Banner tone="info" testId="trim-done">
             {trim.data.deleted === 0
               ? "Nothing was deleted."
-              : `Deleted ${formatCount(trim.data.deleted)} rows. Analytics are being recomputed.`}
+              : `Deleted ${formatCount(trim.data.deleted).text} rows. Analytics are being recomputed.`}
           </Banner>
         ) : null}
       </form>
       <ConfirmDialog
         open={confirmOpen}
-        title={`Delete ${formatCount(pv?.total_rows ?? null)} rows?`}
-        message={`Prices before ${before} are deleted for ${formatCount(selected.length)} stocks, freeing about ${formatMb(pv?.estimated_mb_freed ?? null)}. This cannot be undone; re-import the files to bring them back.`}
+        title={`Delete ${formatCount(pv?.total_rows ?? null).text} rows?`}
+        message={`Prices before ${formatDate(before).text} are deleted for ${formatCount(selected.length).text} stocks, freeing about ${formatMb(pv?.estimated_mb_freed ?? null).text}. This cannot be undone; re-import the files to bring them back.`}
         confirmLabel="Trim history"
         danger
+        busy={trim.isPending}
         onCancel={() => setConfirmOpen(false)}
-        onConfirm={() => trim.mutate()}
+        onConfirm={() => once(() => trim.mutateAsync())}
       />
     </Card>
   );

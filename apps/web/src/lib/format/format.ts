@@ -134,15 +134,48 @@ export function formatCrore(
   if (!isKnown(v)) return unknown(o.reason);
   const grouping = o.grouping ?? groupingPreference;
   const abs = Math.abs(v);
+  // The tier follows the ROUNDED value, so 99,999.6 is `₹1.00 L Cr`, not `₹100,000 Cr`.
   // Below 1,000 Cr two decimals keep small values from reading as 0 (assumption F03-2).
-  const r =
-    abs >= 100000 ? render(v / 100000, 2, grouping) : render(v, abs >= 1000 ? 0 : 2, grouping);
-  const unit = abs >= 100000 ? "L Cr" : "Cr";
-  return known(`${r.negative ? "-" : ""}${RUPEE}${r.body} ${unit}`, r.direction);
+  const roundedAbs = (decimals: number): number => {
+    const p = fixedParts(abs, decimals);
+    return Number(`${p.int}.${p.frac || "0"}`);
+  };
+  let decimals = abs >= 1000 ? 0 : 2;
+  let rounded = roundedAbs(decimals);
+  if (decimals === 2 && rounded >= 1000) {
+    decimals = 0;
+    rounded = roundedAbs(0);
+  }
+  const lakh = rounded >= 100000;
+  const r = lakh ? render(v / 100000, 2, grouping) : render(v, decimals, grouping);
+  return known(`${r.negative ? "-" : ""}${RUPEE}${r.body} ${lakh ? "L Cr" : "Cr"}`, r.direction);
+}
+
+/** Megabytes with a unit (`12.5 MB`); a value under 0.1 keeps two decimals so it is not read as 0. */
+export function formatMb(
+  v: number | null | undefined,
+  o: NullOpts & { grouping?: Grouping } = {},
+): Formatted {
+  if (!isKnown(v)) return unknown(o.reason);
+  const decimals = v !== 0 && Math.abs(v) < 0.1 ? 2 : 1;
+  const r = render(v, decimals, o.grouping ?? groupingPreference);
+  return known(`${r.negative ? "-" : ""}${r.body} MB`, r.direction);
+}
+
+/** A plain ratio such as an observed close ratio: `0.5002` (4 decimals unless told otherwise). */
+export function formatRatio(
+  v: number | null | undefined,
+  o: NullOpts & { decimals?: number; grouping?: Grouping } = {},
+): Formatted {
+  if (!isKnown(v)) return unknown(o.reason);
+  const r = render(v, o.decimals ?? 4, o.grouping ?? groupingPreference);
+  return known(`${r.negative ? "-" : ""}${r.body}`, r.direction);
 }
 
 export interface PercentOpts extends NullOpts {
   decimals?: number;
+  /** Defaults to the user preference (Indian). */
+  grouping?: Grouping;
   /** Explicit `+` for gains (changes). Zero stays unsigned. */
   signed?: boolean;
 }
@@ -150,9 +183,20 @@ export interface PercentOpts extends NullOpts {
 /** Input is a percent number (12.34 = 12.34%), as every API percent field is. */
 export function formatPercent(v: number | null | undefined, o: PercentOpts = {}): Formatted {
   if (!isKnown(v)) return unknown(o.reason);
-  const r = render(v, o.decimals ?? 2, "indian");
+  const r = render(v, o.decimals ?? 2, o.grouping ?? groupingPreference);
   const sign = r.negative ? "-" : o.signed && r.direction === "up" ? "+" : "";
   return known(`${sign}${r.body}%`, r.direction);
+}
+
+/** `part` as a percent of `whole` (1 decimal). An unknown or non-positive total is unknown. */
+export function formatPercentOf(
+  part: number | null | undefined,
+  whole: number | null | undefined,
+  o: PercentOpts = {},
+): Formatted {
+  if (!isKnown(part)) return unknown(o.reason);
+  if (!isKnown(whole) || whole <= 0) return unknown(o.reason ?? "no total to compare with");
+  return formatPercent((part / whole) * 100, { decimals: 1, ...o });
 }
 
 /** Input is a fraction (0.1234 = 12.34%): ML probabilities and `ret_q*` fields. */
@@ -163,10 +207,10 @@ export function formatFraction(v: number | null | undefined, o: PercentOpts = {}
 /** `23.45x` */
 export function formatMultiple(
   v: number | null | undefined,
-  o: NullOpts & { decimals?: number } = {},
+  o: NullOpts & { decimals?: number; grouping?: Grouping } = {},
 ) {
   if (!isKnown(v)) return unknown(o.reason);
-  const r = render(v, o.decimals ?? 2, "indian");
+  const r = render(v, o.decimals ?? 2, o.grouping ?? groupingPreference);
   return known(`${r.negative ? "-" : ""}${r.body}x`, r.direction);
 }
 
