@@ -19,7 +19,7 @@ import (
 	"github.com/india-analyzer/api/internal/jobs"
 )
 
-// Import kinds built in B06a. The other kinds of docs/03 section 14 arrive with B06b.
+// Import kinds of docs/03 section 14: prices and instruments (B06a); the rest are in periods.go (B06b).
 const (
 	KindPrices      = "prices"
 	KindInstruments = "instruments"
@@ -29,8 +29,13 @@ const (
 var AllKinds = []string{"prices", "instruments", "holidays", "results_quarterly", "results_annual",
 	"balance_cashflow", "fundamentals_long", "shareholding", "corporate_actions", "instrument_meta"}
 
-// Implemented reports whether the kind is built (B06a: prices and instruments).
-func Implemented(kind string) bool { return kind == KindPrices || kind == KindInstruments }
+// Implemented reports whether the kind is built (every kind of the contract since B06b).
+func Implemented(kind string) bool { return KnownKind(kind) }
+
+// isOwnerKind: the B06b kinds, committed by commitOwner with rows tagged by the batch id.
+func isOwnerKind(kind string) bool {
+	return kind != KindPrices && kind != KindInstruments && KnownKind(kind)
+}
 
 // KnownKind reports whether kind is one of the contract's import kinds.
 func KnownKind(kind string) bool {
@@ -74,6 +79,8 @@ var (
 	ErrNotUndoable     = errors.New("importers: batch kind cannot be undone")
 	ErrSymbolNotFound  = errors.New("importers: symbol not found")
 	ErrConfirmChange   = errors.New("importers: changing the setting needs confirm")
+	ErrUndoExpired     = errors.New("importers: the 30-day undo window has passed")
+	ErrDelisted        = errors.New("importers: instrument is delisted")
 )
 
 // HasErrorsError: the upload still has row errors; commit is refused (IMP-11).
@@ -239,11 +246,12 @@ type instrumentIndex struct {
 	byID     map[int32]string
 	alias    map[string]int32 // old symbol -> id
 	tracked  map[int32]bool
+	status   map[int32]string
 }
 
 func loadIndex(ctx context.Context, db dbq.DBTX) (*instrumentIndex, error) {
-	idx := &instrumentIndex{bySymbol: map[string]int32{}, byID: map[int32]string{}, alias: map[string]int32{}, tracked: map[int32]bool{}}
-	rows, err := db.Query(ctx, `SELECT id, symbol, is_tracked FROM instrument`)
+	idx := &instrumentIndex{bySymbol: map[string]int32{}, byID: map[int32]string{}, alias: map[string]int32{}, tracked: map[int32]bool{}, status: map[int32]string{}}
+	rows, err := db.Query(ctx, `SELECT id, symbol, is_tracked, status FROM instrument`)
 	if err != nil {
 		return nil, err
 	}
@@ -251,11 +259,12 @@ func loadIndex(ctx context.Context, db dbq.DBTX) (*instrumentIndex, error) {
 		var id int32
 		var sym string
 		var tr bool
-		if err := rows.Scan(&id, &sym, &tr); err != nil {
+		var st string
+		if err := rows.Scan(&id, &sym, &tr, &st); err != nil {
 			rows.Close()
 			return nil, err
 		}
-		idx.bySymbol[sym], idx.byID[id], idx.tracked[id] = id, sym, tr
+		idx.bySymbol[sym], idx.byID[id], idx.tracked[id], idx.status[id] = id, sym, tr, st
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -275,6 +284,32 @@ func loadIndex(ctx context.Context, db dbq.DBTX) (*instrumentIndex, error) {
 		idx.alias[old] = id
 	}
 	return idx, arows.Err()
+}
+
+// resolveData maps a symbol cell of an owner-data row to an instrument id. It returns a plain message
+// instead when the symbol is unknown (with a "did you mean"), was renamed (IMP-08, IMP-32 style) or
+// belongs to a delisted instrument (IMP-18). unknown caches messages so a bad symbol costs one search.
+func (x *instrumentIndex) resolveData(sym string, unknown map[string]string) (int32, string) {
+	if sym == "" {
+		return 0, "symbol is required"
+	}
+	if id, ok := x.bySymbol[sym]; ok && id > 0 {
+		if x.status[id] == "delisted" {
+			return 0, "symbol " + sym + " is delisted; data cannot be entered for a delisted instrument"
+		}
+		return id, ""
+	}
+	if msg, ok := unknown[sym]; ok {
+		return 0, msg
+	}
+	msg := "unknown symbol " + sym + ": add it with instruments.csv or the Add stock form first"
+	if aid, ok := x.alias[sym]; ok {
+		msg = fmt.Sprintf("symbol %s was renamed to %s; use the new symbol", sym, x.byID[aid])
+	} else if s := x.suggest(sym); s != "" {
+		msg = fmt.Sprintf("unknown symbol %s: did you mean %s?", sym, s)
+	}
+	unknown[sym] = msg
+	return 0, msg
 }
 
 // suggest returns the nearest known symbol (current or old) within a small edit distance, or "".

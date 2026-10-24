@@ -18,9 +18,18 @@ import (
 var templates = map[string]string{
 	KindPrices:      "symbol,date,open,high,low,close,volume\nDEMOCO,2026-01-05,100.00,102.50,99.20,101.30,1250000\n",
 	KindInstruments: "symbol,name,isin,series,kind,listing_date,face_value,previous_symbol,status\nDEMOCO,Demo Company Limited,INDEMO000001,EQ,equity,2010-05-17,2.00,,active\n",
+	// B06b. The holidays template is the header only: no example dates (docs/01 7.8, D-L).
+	KindHolidays:         "date,description,segment\n",
+	KindResultsQuarterly: "symbol,basis,period_end,revenue,ebitda,operating_income,other_income,interest,depreciation,pbt,tax,net_profit,eps\nDEMOCO,consolidated,2026-06-30,1200.50,310.20,280.00,15.30,20.10,45.40,230.00,58.00,172.00,8.60\n",
+	KindResultsAnnual:    "symbol,basis,period_end,revenue,ebitda,operating_income,other_income,interest,depreciation,pbt,tax,net_profit,eps\nDEMOCO,consolidated,2026-03-31,4800.00,1250.00,1120.00,60.00,80.00,180.00,920.00,230.00,690.00,34.50\n",
+	KindBalanceCashflow:  "symbol,basis,period_end,total_assets,total_liabilities,equity,borrowings,current_liabilities,cash,shares_outstanding,cfo,cfi,cff,capex\nDEMOCO,consolidated,2026-03-31,5200.00,3000.00,2200.00,600.00,900.00,350.00,200000000,800.00,-450.00,-300.00,420.00\n",
+	KindFundamentalsLong: "symbol,basis,period_type,period_end,metric_key,value,unit\nDEMOCO,consolidated,Q,2026-06-30,pnl.revenue,1200.50,INR_CR\n",
+	KindShareholding:     "symbol,quarter_end,promoter,fii,dii,mf,insurance,govt,public,pledged_of_promoter,shareholders_count,filed_on\nDEMOCO,2026-06-30,52.10,18.40,15.20,9.80,3.10,0.30,14.00,0.00,85000,2026-07-20\n",
+	KindCorporateActions: "symbol,ex_date,type,ratio_num,ratio_den,amount_per_share,purpose_text\nDEMOCO,2026-03-15,split,10,2,,Sub-division of face value from Rs 10 to Rs 2\n",
+	KindInstrumentMeta:   "symbol,sector,industry,company_type,index_tags\nDEMOCO,Information Technology,IT Services,general,NIFTY50|NIFTY100\n",
 }
 
-// Template returns the CSV template of a built kind.
+// Template returns the CSV template of a kind.
 func Template(kind string) (content []byte, filename string, err error) {
 	t, ok := templates[kind]
 	if !ok {
@@ -455,25 +464,4 @@ func (s *Service) ListBatches(ctx context.Context, limit int, beforeID int64) ([
 		out = append(out, b)
 	}
 	return out, rows.Err()
-}
-
-// Undo refuses the kinds that can never be undone (prices, instruments: 409). Undo of the other
-// kinds is part of B06b and answers 501 until then.
-func (s *Service) Undo(ctx context.Context, id int64) error {
-	var kind string
-	var undone *time.Time
-	err := s.pool.QueryRow(ctx, `SELECT kind, undone_at FROM import_batch WHERE id = $1`, id).Scan(&kind, &undone)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrBatchNotFound
-	}
-	if err != nil {
-		return err
-	}
-	if kind == KindPrices || kind == KindInstruments {
-		return ErrNotUndoable
-	}
-	if undone != nil {
-		return ErrConflict
-	}
-	return ErrKindNotBuilt
 }

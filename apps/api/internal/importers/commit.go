@@ -92,8 +92,13 @@ func (s *Service) Validate(ctx context.Context, kind string, content []byte, gro
 				return nil, err
 			}
 		}
-	default:
+	case KindInstruments:
 		rep, hdr, err = scanInstruments(content, idx, lim, nil)
+		if err != nil {
+			return nil, err
+		}
+	default: // the B06b kinds (ownerscan.go)
+		rep, hdr, err = scanOwner(kind, content, ownerEnv{idx: idx, today: s.today()}, lim, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -283,22 +288,15 @@ func (s *Service) Commit(ctx context.Context, kind string, req CommitRequest) (*
 	if len(req.Note) > 500 {
 		return nil, validation("note", "must be at most 500 characters")
 	}
+	if len(ids) > 1 && kind != KindPrices && kind != KindInstruments {
+		return nil, validation("upload_ids", "only prices (and instruments) files can be committed as a group of parts")
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	parts, stored, err := s.claimUploads(ctx, tx, kind, ids)
-	if err != nil {
-		return nil, err
-	}
-	var res *CommitResult
-	var symbols []string
-	if kind == KindPrices {
-		res, symbols, err = s.commitPrices(ctx, tx, parts, stored)
-	} else {
-		res, err = s.commitInstruments(ctx, tx, parts)
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -310,11 +308,40 @@ func (s *Service) Commit(ctx context.Context, kind string, req CommitRequest) (*
 	if req.UploadGroup != "" {
 		group = req.UploadGroup
 	}
-	rows := res.Inserted + res.Updated
-	if err := tx.QueryRow(ctx, `INSERT INTO import_batch (kind, upload_group, sha256, row_count, warning_count, note)
-		VALUES ($1, $2::uuid, $3, $4, $5, NULLIF($6, '')) RETURNING id`,
-		kind, group, h.Sum(nil), rows, len(res.Warnings), req.Note).Scan(&res.BatchID); err != nil {
-		return nil, err
+	var res *CommitResult
+	var symbols []string
+	var warnCount int
+	if isOwnerKind(kind) {
+		// The batch row comes first: every stored row is tagged with its id, which is what undo removes.
+		var batchID int64
+		if err := tx.QueryRow(ctx, `INSERT INTO import_batch (kind, upload_group, sha256, row_count, warning_count, note)
+			VALUES ($1, $2::uuid, $3, 0, 0, NULLIF($4, '')) RETURNING id`, kind, group, h.Sum(nil), req.Note).Scan(&batchID); err != nil {
+			return nil, err
+		}
+		res, symbols, warnCount, err = s.commitOwner(ctx, tx, kind, parts, batchID)
+		if err != nil {
+			return nil, err
+		}
+		res.BatchID = batchID
+		if _, err := tx.Exec(ctx, `UPDATE import_batch SET row_count = $2, warning_count = $3 WHERE id = $1`,
+			batchID, res.Inserted+res.Updated, warnCount); err != nil {
+			return nil, err
+		}
+	} else {
+		if kind == KindPrices {
+			res, symbols, err = s.commitPrices(ctx, tx, parts, stored)
+		} else {
+			res, err = s.commitInstruments(ctx, tx, parts)
+		}
+		if err != nil {
+			return nil, err
+		}
+		rows := res.Inserted + res.Updated
+		if err := tx.QueryRow(ctx, `INSERT INTO import_batch (kind, upload_group, sha256, row_count, warning_count, note)
+			VALUES ($1, $2::uuid, $3, $4, $5, NULLIF($6, '')) RETURNING id`,
+			kind, group, h.Sum(nil), rows, len(res.Warnings), req.Note).Scan(&res.BatchID); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err

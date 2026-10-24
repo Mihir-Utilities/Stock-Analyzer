@@ -188,7 +188,11 @@ type InstrumentFields struct {
 }
 
 // FieldIssue is an error or warning for one input field; Code is the stable machine code.
-type FieldIssue struct{ Field, Code, Message string }
+type FieldIssue struct {
+	Field   string `json:"field"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
 
 // NormalizedInstrument is the validated, normalised form (ISIN "" means NULL).
 type NormalizedInstrument struct{ Symbol, Name, ISIN string }

@@ -162,10 +162,10 @@ func TestInstrumentsImport(t *testing.T) {
 	// Not undoable (409 at the API).
 	var id int64
 	_ = e.pool.QueryRow(context.Background(), `SELECT max(id) FROM import_batch WHERE kind='instruments'`).Scan(&id)
-	if err := e.svc.Undo(context.Background(), id); !errors.Is(err, ErrNotUndoable) {
+	if _, err := e.svc.Undo(context.Background(), id); !errors.Is(err, ErrNotUndoable) {
 		t.Errorf("undo: %v", err)
 	}
-	if err := e.svc.Undo(context.Background(), 9999); !errors.Is(err, ErrBatchNotFound) {
+	if _, err := e.svc.Undo(context.Background(), 9999); !errors.Is(err, ErrBatchNotFound) {
 		t.Errorf("undo missing: %v", err)
 	}
 }
@@ -369,8 +369,11 @@ func TestUploadLifecycle(t *testing.T) {
 	if _, err := e.commit(KindPrices); !errors.As(err, &ve) {
 		t.Errorf("no upload id: %v", err)
 	}
-	if _, err := e.commit("results_quarterly", inst.UploadID); !errors.Is(err, ErrKindNotBuilt) {
-		t.Errorf("other kinds are B06b: %v", err)
+	if _, err := e.commit("results_quarterly", inst.UploadID); !errors.As(err, &ve) {
+		t.Errorf("an instruments upload cannot be committed as results: %v", err)
+	}
+	if _, err := e.commit("nonsense", inst.UploadID); !errors.Is(err, ErrKindNotBuilt) {
+		t.Errorf("unknown kind: %v", err)
 	}
 }
 

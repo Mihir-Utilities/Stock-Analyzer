@@ -23,6 +23,15 @@ Source of truth: `docs/OPEN_QUESTIONS.md` Decisions; updated specs: `docs/01` 7.
 - [x] SEC-05 (size/type/content checks), SAF-05 (`screener_xlsx` is not a kind: 404), IMP-28 (decimal commas rejected, offending row and column shown).
 - [ ] Not in B06a: the other kinds (501), manual-entry endpoints, undo of non-price batches, holidays, parity tests for the non-price kinds, the S9 decision (limit stays 5 MB until `IMPORT_PRICES_LARGE_ENABLED`). Assumptions: `docs/OPEN_QUESTIONS.md` B06a-1..17.
 
+### B06b status (2026-10-24, built and tested)
+- [x] Importers for results_quarterly, results_annual, balance_cashflow, fundamentals_long, shareholding, corporate_actions, instrument_meta and holidays (`internal/importers/ownerscan.go`, `ownersink.go`, `owner_commit.go`, validators in `periods.go`), all through the B06a stream, chunk, upload-store and commit machinery. Evidence: `go test ./internal/importers ./internal/httpx` against Postgres 16.
+- [x] IMP-05, 06, 07, 09, 14, 17, 18, 27 plus the shared rows IMP-01..04, 08, 10..13, 15, 16 re-run for these kinds (`owner_test.go`, `owner_integration_test.go`, `imports_b06b_integration_test.go`); new rows IMP-44..49, FND-15 (+FND-20), SHP-05 (+SHP-08), ACT-23, SEC-05 for the new kinds. SAF-05 unchanged (B06a).
+- [x] Manual entry: `POST /stocks/{symbol}/results|shareholding|actions`, `DELETE /stocks/{symbol}/results`, same validators as the CSV path (parity test `TestFormCSVParity`), `manual_form` batch with the note.
+- [x] Undo within 30 days for the six undoable kinds; 409 for prices, instruments, holidays, instrument_meta, manual batches, repeats and expiry; no partial writes (chunk-failure rollback test).
+- [x] Templates for every kind equal `fixtures/templates/*` (parity test); holidays template is the header only; seed leaves the empty 2026 list alone.
+- [x] `EnqueuePostImport` after every commit, manual write and undo of stock-scoped data (not holidays), B06b-1.
+- [ ] Not built by design: Screener import (D-5), manual balance/cash-flow form (B06b-10), `PATCH /stocks/{symbol}/actions/{id}` (B07). Assumptions: `docs/OPEN_QUESTIONS.md` B06b-1..15.
+
 ## Read first
 - docs/01-data-sources.md section 7
 - docs/03-api-spec.md section 14
