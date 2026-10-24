@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,6 +17,25 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
 )
+
+// syncBuffer is a bytes.Buffer safe for concurrent log writes (handlers run in parallel in the
+// concurrency tests while the test goroutine reads).
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
 
 type allowAll struct{}
 

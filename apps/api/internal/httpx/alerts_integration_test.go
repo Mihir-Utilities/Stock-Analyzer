@@ -61,7 +61,7 @@ type alrEnv struct {
 	svc    *alerts.Service
 	h      http.Handler
 	sender *alrFakeSender
-	logs   *bytes.Buffer
+	logs   *syncBuffer
 	now    time.Time
 	mu     sync.Mutex
 }
@@ -77,7 +77,7 @@ func newAlrEnv(t *testing.T) *alrEnv {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	e := &alrEnv{t: t, pool: pool, q: dbq.New(pool), sender: &alrFakeSender{}, logs: &bytes.Buffer{},
+	e := &alrEnv{t: t, pool: pool, q: dbq.New(pool), sender: &alrFakeSender{}, logs: &syncBuffer{},
 		now: time.Date(2026, 10, 12, 8, 0, 0, 0, time.UTC)}
 	if _, err := e.q.InsertAppUser(context.Background(), "hash"); err != nil {
 		t.Fatal(err)

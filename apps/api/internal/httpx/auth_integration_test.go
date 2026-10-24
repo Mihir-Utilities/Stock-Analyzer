@@ -1,7 +1,6 @@
 package httpx
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -46,7 +45,7 @@ type authEnv struct {
 	svc    *auth.Service
 	h      http.Handler
 	clk    *clock
-	logs   *bytes.Buffer
+	logs   *syncBuffer
 	delays []time.Duration
 	deps   Deps
 }
@@ -70,7 +69,7 @@ func newAuthEnv(t *testing.T) *authEnv {
 	if _, err := q.InsertAppUser(context.Background(), hash); err != nil {
 		t.Fatal(err)
 	}
-	e := &authEnv{t: t, pool: pool, q: q, logs: &bytes.Buffer{}, clk: &clock{t: time.Now().UTC().Truncate(time.Second)}}
+	e := &authEnv{t: t, pool: pool, q: q, logs: &syncBuffer{}, clk: &clock{t: time.Now().UTC().Truncate(time.Second)}}
 	log := zerolog.New(e.logs)
 	e.svc = auth.New(pool, auth.Config{SessionDays: 30, MaxFails: 5}, log)
 	e.svc.Now = e.clk.now
