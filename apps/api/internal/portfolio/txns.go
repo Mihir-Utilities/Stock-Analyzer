@@ -232,6 +232,9 @@ func (s *Service) CreateTxn(ctx context.Context, in TxnInput, key string) (TxnRe
 	if err := lockInstruments(ctx, tx, inst.ID); err != nil {
 		return TxnResult{}, err
 	}
+	// A stored sequence can already oversell (a confirmed action, B07). A new buy cannot worsen
+	// that, so it must not be blocked by it; a sell is still checked in full.
+	wasBroken := isInsufficient(validateSequence(ctx, tx, inst.ID, s.Now()))
 	row := tx.QueryRow(ctx, `WITH t AS (
 		INSERT INTO portfolio_txn (instrument_id, side, qty, price, fees, trade_date, note)
 		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')) RETURNING *)
@@ -241,7 +244,7 @@ func (s *Service) CreateTxn(ctx context.Context, in TxnInput, key string) (TxnRe
 	if err != nil {
 		return TxnResult{}, err
 	}
-	if err := validateSequence(ctx, tx, inst.ID, s.Now()); err != nil {
+	if err := validateSequence(ctx, tx, inst.ID, s.Now()); err != nil && (!wasBroken || v.Side != "buy") {
 		return TxnResult{}, err
 	}
 	if err := trackFor(ctx, tx, inst.ID, "portfolio"); err != nil {

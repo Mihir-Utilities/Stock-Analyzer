@@ -90,9 +90,15 @@ type InsufficientError struct {
 	Date   time.Time
 	Held   decimal.Decimal
 	Wanted decimal.Decimal
+	// Adjustment is the ex-date of the owner override whose creation caused this failure ("" otherwise).
+	Adjustment string
 }
 
 func (e *InsufficientError) Error() string {
+	if e.Adjustment != "" {
+		return fmt.Sprintf("the override on %s would make the sell of %s on %s exceed held quantity %s",
+			e.Adjustment, e.Wanted, e.Date.Format(time.DateOnly), e.Held)
+	}
 	return fmt.Sprintf("sell of %s on %s exceeds held quantity %s", e.Wanted, e.Date.Format(time.DateOnly), e.Held)
 }
 

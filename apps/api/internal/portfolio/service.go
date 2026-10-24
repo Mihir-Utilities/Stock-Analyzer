@@ -227,6 +227,12 @@ type AdjustmentInput struct {
 	Note              *string `json:"note"`
 }
 
+// isInsufficient reports whether err is a stored sequence that oversells (not an infrastructure error).
+func isInsufficient(err error) bool {
+	var ie *InsufficientError
+	return errors.As(err, &ie)
+}
+
 var maxMultiplier = decimal.NewFromInt(1_000_000)
 
 // CreateAdjustment stores an owner override (docs/05 section 8.2: it replaces the confirmed action
@@ -288,6 +294,9 @@ func (s *Service) CreateAdjustment(ctx context.Context, in AdjustmentInput) (Adj
 			return AdjustmentItem{}, &ValidationError{[]FieldError{{"effective_date", "must equal the action's ex-date " + ymd(ex)}}}
 		}
 	}
+	// An already-inconsistent stored sequence is not blamed on the new override (it is still
+	// rejected unless the override fixes it, so a bad override can never be stored).
+	wasBroken := isInsufficient(validateSequence(ctx, tx, inst.ID, s.Now()))
 	var id int64
 	err = tx.QueryRow(ctx, `INSERT INTO portfolio_adjustment (instrument_id, corporate_action_id, effective_date, qty_multiplier, note)
 		SELECT $1, $2, $3, $4, NULLIF($5, '')
@@ -300,6 +309,12 @@ func (s *Service) CreateAdjustment(ctx context.Context, in AdjustmentInput) (Adj
 		return AdjustmentItem{}, err
 	}
 	if err := validateSequence(ctx, tx, inst.ID, s.Now()); err != nil {
+		var ie *InsufficientError
+		if errors.As(err, &ie) && !wasBroken { // name the override so the owner knows what to change
+			named := *ie
+			named.Adjustment = ymd(date)
+			return AdjustmentItem{}, &named
+		}
 		return AdjustmentItem{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {

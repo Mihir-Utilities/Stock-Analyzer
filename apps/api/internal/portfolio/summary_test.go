@@ -231,3 +231,31 @@ func TestSummaryPrecision(t *testing.T) {
 		t.Fatalf("%+v", s.Holdings[0])
 	}
 }
+
+// Owner decision (supersedes B11-8): the benchmark always computes, units may go negative.
+func TestBenchmarkOutperformingSell(t *testing.T) {
+	in := oneStock("2021-06-01", []Txn{
+		buy(1, "2020-01-01", "1000", "100", "0"),  // 100k at NIFTY 20000 = 5 units
+		sell(2, "2021-01-01", "1000", "200", "0"), // 200k at 22000 needs 9.09 units: 5 - 9.09 < 0
+	}, nil)
+	in.Bench = []SeriesPoint{{dt("2019-12-31"), 20000}, {dt("2021-01-01"), 22000}, {dt("2021-06-01"), 23000}}
+	s := BuildSummary(in)
+	if s.Benchmark.XIRRPct == nil || s.Benchmark.Reason != nil {
+		t.Fatalf("benchmark must compute: %+v", s.Benchmark)
+	}
+}
+
+// docs/05 8.3: the 30-day rule uses the total span; for a closed position that is first flow to
+// last flow, not to the as-of date.
+func TestXIRRClosedShortRoundTrip(t *testing.T) {
+	txns := []Txn{buy(1, "2024-01-02", "10", "100", "0"), sell(2, "2024-01-06", "10", "110", "0")}
+	s := BuildSummary(oneStock("2025-01-06", txns, nil))
+	if s.Returns.XIRRPct != nil || s.Returns.XIRRReason == nil || *s.Returns.XIRRReason != ReasonShortPeriod {
+		t.Fatalf("4-day closed round trip must not be annualised: %+v", s.Returns)
+	}
+	long := []Txn{buy(1, "2024-01-02", "10", "100", "0"), sell(2, "2024-03-02", "10", "110", "0")}
+	s = BuildSummary(oneStock("2025-01-06", long, nil))
+	if s.Returns.XIRRPct == nil {
+		t.Fatalf("60-day closed round trip must compute: %+v", s.Returns)
+	}
+}

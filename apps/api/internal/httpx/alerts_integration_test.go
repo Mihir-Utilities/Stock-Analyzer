@@ -537,6 +537,10 @@ func TestALR12StartWithBadCode(t *testing.T) {
 	if id, _ := e.chatID(); id != 111 {
 		t.Fatalf("a used code changed the link to %d", id)
 	}
+	// Unlink (docs/03 section 13): the failure texts below are the plain "invalid" ones.
+	if rec := e.call(http.MethodDelete, "/telegram/link", "", nil); rec.Code != 200 {
+		t.Fatalf("unlink: %d %s", rec.Code, rec.Body)
+	}
 	// Expired.
 	code2 := e.linkCode()
 	e.advance(15*time.Minute + time.Second)
@@ -544,14 +548,17 @@ func TestALR12StartWithBadCode(t *testing.T) {
 	// Unknown but well-formed, and malformed.
 	e.webhook(alrSecret, alrUpdate("private", 444, "/start ZZZZ-ZZZZ"))
 	e.webhook(alrSecret, alrUpdate("private", 555, "/start not-a-code!"))
-	if id, _ := e.chatID(); id != 111 {
-		t.Fatalf("link changed to %d", id)
+	if id, linked := e.chatID(); linked {
+		t.Fatalf("a bad code linked chat %d", id)
 	}
 	msgs := e.sender.messages()
 	if len(msgs) != 5 {
 		t.Fatalf("messages: %+v", msgs)
 	}
-	for _, m := range msgs[1:] {
+	if msgs[1].text != alerts.MsgAlreadyLinked {
+		t.Errorf("used code from a second chat while linked = %q", msgs[1].text)
+	}
+	for _, m := range msgs[2:] {
 		if m.text != alerts.MsgInvalidCode {
 			t.Errorf("polite failure text = %q", m.text)
 		}
@@ -696,5 +703,73 @@ func TestALR66RoutesWithoutService(t *testing.T) {
 		if rec := do(h, method, "/api/v1"+p, "{}", map[string]string{"X-Requested-With": "fetch"}); rec.Code != http.StatusNotImplemented {
 			t.Errorf("%s: %d", p, rec.Code)
 		}
+	}
+}
+
+// ALR-13b: a valid code from a second chat must not rebind the owner's chat while one is linked;
+// the code is not consumed, so it works after the owner unlinks. The same chat may re-run /start.
+func TestALR13bSecondChatCannotRebindWhileLinked(t *testing.T) {
+	e := newAlrEnv(t)
+	e.webhook(alrSecret, alrUpdate("private", 111, "/start "+e.linkCode()))
+	code := e.linkCode()
+	e.webhook(alrSecret, alrUpdate("private", 222, "/start "+code))
+	if id, _ := e.chatID(); id != 111 {
+		t.Fatalf("second chat rebound the link to %d", id)
+	}
+	msgs := e.sender.messages()
+	if last := msgs[len(msgs)-1]; last.chat != 222 || last.text != alerts.MsgAlreadyLinked {
+		t.Fatalf("refusal reply: %+v", last)
+	}
+	var used int
+	if err := e.pool.QueryRow(context.Background(), `SELECT count(*) FROM telegram_link_code WHERE used_at IS NULL`).Scan(&used); err != nil || used != 1 {
+		t.Fatalf("refused attempt consumed the code (unused=%d, %v)", used, err)
+	}
+	e.webhook(alrSecret, alrUpdate("private", 111, "/start "+code)) // the owner's own chat re-links fine
+	if id, _ := e.chatID(); id != 111 {
+		t.Fatalf("same-chat relink: %d", id)
+	}
+	if rec := e.call(http.MethodDelete, "/telegram/link", "", nil); rec.Code != 200 {
+		t.Fatalf("unlink: %d", rec.Code)
+	}
+	e.webhook(alrSecret, alrUpdate("private", 222, "/start "+e.linkCode()))
+	if id, _ := e.chatID(); id != 222 {
+		t.Fatalf("after unlink the new chat must link: %d", id)
+	}
+}
+
+// B12 review: failed /start attempts are capped per 15 minutes; past the cap nothing is processed
+// (not even a valid code) and no reply is sent, until the window passes.
+func TestALR12bFailedLinkAttemptsAreCapped(t *testing.T) {
+	e := newAlrEnv(t)
+	for i := 0; i < alerts.MaxLinkFailures; i++ {
+		e.webhook(alrSecret, alrUpdate("private", 9, "/start ZZZZ-ZZZZ"))
+	}
+	before := len(e.sender.messages())
+	e.webhook(alrSecret, alrUpdate("private", 9, "/start "+e.linkCode()))
+	if _, linked := e.chatID(); linked || len(e.sender.messages()) != before {
+		t.Fatal("attempts past the cap must be ignored silently")
+	}
+	e.advance(alerts.LinkCodeTTL + time.Second)
+	e.webhook(alrSecret, alrUpdate("private", 9, "/start "+e.linkCode()))
+	if id, linked := e.chatID(); !linked || id != 9 {
+		t.Fatalf("window reset: %d %v", id, linked)
+	}
+}
+
+// B12 review: the public webhook has its own per-IP rate limit (429 RATE_LIMITED), and a rejected
+// secret is logged at Debug, with a Warn only every 100th.
+func TestWebhookRateLimitAndQuietRejects(t *testing.T) {
+	e := newAlrEnv(t)
+	e.h = NewRouter(Deps{Log: zerolog.New(e.logs), Auth: allowAll{}, WebhookLimiter: NewLimiter(3),
+		Alerts: AlertsDeps{Svc: e.svc, WebhookSecret: alrSecret, BotUsername: "AnalyzerTestBot"}})
+	var codes []int
+	for i := 0; i < 5; i++ {
+		codes = append(codes, e.webhook("wrong", alrUpdate("private", 1, "x")).Code)
+	}
+	if codes[0] != 401 || codes[2] != 401 || codes[3] != 429 || codes[4] != 429 {
+		t.Fatalf("codes = %v", codes)
+	}
+	if strings.Contains(e.logs.String(), `"level":"warn"`) {
+		t.Fatalf("a few rejected secrets must not log at Warn: %s", e.logs)
 	}
 }

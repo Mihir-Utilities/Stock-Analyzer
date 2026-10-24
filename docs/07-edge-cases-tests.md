@@ -269,6 +269,10 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | PF-17 | Same key with a different body; expired key (> 24 h); malformed key | 409 CONFLICT; treated as new; 422 | I |
 | PF-18 | Owner override of an ex-date multiplier | Replaces the confirmed action of that date; an override that would oversell a stored sell is rejected 422 and not stored; a second override for the same date 409 | I |
 | PF-19 | Watchlist add/remove tracking (docs/03 section 11) | Add sets tracked with reason watchlist (never downgrades portfolio); remove keeps imported prices and keeps the stock tracked while portfolio or imported prices justify it; nothing is deleted | I |
+| PF-22 | Benchmark when the owner's sales outperform NIFTY (B11-10) | Benchmark XIRR is computed (units may go negative), never `benchmark_units_negative` | U |
+| PF-23 | XIRR 30-day rule on a closed position (B11-11) | Opened and closed within 5 days, viewed a year later: `n/a (period too short)`; a 60-day round trip computes | U |
+| PF-24 | Buy on a stock whose stored sequence already oversells (B11-13) | The buy is accepted (201), `HOLDINGS_INCONSISTENT` still reported; a sell is 422 | I |
+| PF-25 | Override that would invalidate a stored sell (B11-12) | 422 `INSUFFICIENT_HOLDINGS` naming the override (`details.adjustment_date`); nothing stored | I |
 | PF-20 | Missing price or no open holding in the summary | Market value, unrealized and XIRR are null with a reason, warning MISSING_PRICE; never 0 | U/I |
 | PF-21 | Latest bar older than a confirmed split, or a split between the last two bars | LTP converted to current units so value stays invariant; day change null with reason `corporate_action_in_window` | U |
 
@@ -307,6 +311,12 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ALR-69 | Concurrent delivery runs (D06) | A claim leases events for 15 min and counts one attempt; four parallel runs send each event once | I |
 | ALR-70 | Telegram error mapping (D06) | 429 carries `retry_after` and stops the pass (unsent events released); 403/400 become `telegram_http_<status>: <description>`; network errors never include the URL or token | U |
 | ALR-71 | Recurring alert re-arm (D06) | After a fire the alert is disarmed; it re-arms only after the price moves 0.5% back across the threshold, and a fire inside the cooldown is swallowed | U |
+| ALR-72 | Owner links after events piled up (docs/04 3.9 step 5) | The first linked pass marks never-attempted events older than 24 h `failed(not_linked)` and sends only the younger ones | I |
+| ALR-73 | News imported between alert creation and first evaluation (D06-14) | `results_declared` / `holding_change` fire; with no news the first run stays silent | I |
+| ALR-74 | Valid link code from a second chat while linked (B12-11) | Not rebound, code not consumed, fixed reply; works after unlink; same chat may re-link | I |
+| ALR-75 | Repeated failed `/start` attempts (B12-11) | After 10 in 15 minutes nothing is processed or answered until the window passes | I |
+| ALR-76 | Webhook flood (B12-11) | Per-IP 429 `RATE_LIMITED`; a few rejected secrets log at Debug, not Warn | I |
+| ALR-77 | Price/NAV threshold already met at the boundary | Inclusive, compared in decimal (`thresholdMet`) | U |
 
 ## ML: predictions
 | ID | Scenario | Required behavior | Test |

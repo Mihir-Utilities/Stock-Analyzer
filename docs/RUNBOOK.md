@@ -281,3 +281,10 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - **Incremental NAV fetch** now re-fetches the last stored date, so a corrected NAV is picked up on the next `ingest_mf_navs` (D04R-2).
 - **Snapshots.** Rows with a zero, negative or non-finite price are dropped with a warning in `analysis_snapshot.indicators.warnings`; investigate the import if `dropped N bar(s)` appears. A NaN volume only nulls volume-based metrics. The snapshot and cache writers raise on NaN/Infinity instead of storing it.
 - Tests for all of this are in `apps/worker/tests/test_review_d01_d04_d05a.py` (MF-110..118, SYS-33..35, IND-93, RET-94..96).
+
+## 35. Review fixes for B11, B12 and D06
+
+- Delivery: every pass first expires never-attempted `pending` events older than 24 h as `failed(not_linked)`, linked or not, so linking late never floods old alerts. `expired` is part of the job summary.
+- `results_declared` / `holding_change`: the baseline of a first evaluation is the data present at alert creation (`fetched_at <= created_at`). If a re-imported old quarter fires unexpectedly, that is why (D06-14).
+- Telegram link: a second chat cannot take over while one is linked. To move to a new chat, call `DELETE /telegram/link` (Settings, Telegram), create a new code and send `/start <code>` from the new chat. After 10 failed `/start` attempts in 15 minutes the API ignores `/start` silently until the window passes (restart clears it). `POST /telegram/webhook` is limited to 60/min per IP; rejected secrets log at Debug and a Warn every 100th (`rejected_total`).
+- Portfolio: the benchmark XIRR may use negative NIFTY units (B11-10); a closed position uses first-to-last-flow for the 30-day rule; a buy is accepted on a stock whose sequence already reports `HOLDINGS_INCONSISTENT` (fix it with an override or by editing the offending sell); `POST /portfolio/adjustments` rejects an override that breaks the sequence.

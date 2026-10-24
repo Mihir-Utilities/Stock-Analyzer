@@ -359,6 +359,19 @@ async def test_alr05_events_older_than_24_hours_fail_as_not_linked(pg_full: asyn
     assert states == [("failed", "not_linked"), ("pending", "not_linked")]
 
 
+async def test_alr05_linked_run_expires_events_older_than_24h(pg_full: asyncpg.Pool) -> None:
+    await link_owner(pg_full, chat=None)
+    await make_events(pg_full, 1, fired_at=NOW - timedelta(hours=30))
+    await make_events(pg_full, 1, fired_at=NOW - timedelta(hours=1))
+    await pg_full.execute("UPDATE alert_event SET dedupe_key = 'n' || id")
+    await link_owner(pg_full)
+    sender = FakeSender()
+    out = await deliver(pg_full, sender, Clock())
+    assert out["sent"] == 1 and out["expired"] == 1 and len(sender.sent) == 1
+    states = sorted((e["delivery_status"], e["last_error"]) for e in await events(pg_full))
+    assert states == [("failed", "not_linked"), ("sent", None)]
+
+
 async def test_alr06_failure_is_retried_every_15_minutes_then_failed(pg_full: asyncpg.Pool) -> None:
     await link_owner(pg_full)
     await make_events(pg_full, 1)
@@ -442,3 +455,46 @@ async def test_post_import_hooks_evaluate_per_symbol_and_deliver_once_at_the_end
     await hooks.recompute_screener(["ONE"])  # no token in the test env: stays pending, no crash
     assert seen == ["ONE"]
     assert (await events(pg_full))[0]["delivery_status"] == "pending"
+
+
+async def test_declared_and_holding_fire_for_news_imported_between_create_and_first_run(
+    pg_full: asyncpg.Pool,
+) -> None:
+    iid = await add_stock(pg_full, "NEWSCO", [100.0, 101.0])
+    await pg_full.execute(
+        "INSERT INTO fundamental_value (instrument_id, basis, period_type, period_end, "
+        "metric_key, value, source) VALUES ($1, 'consolidated', 'Q', '2026-06-30', "
+        "'pnl.revenue', 1, 'manual')",
+        iid,
+    )
+    await pg_full.execute(
+        "INSERT INTO shareholding (instrument_id, quarter_end, fii_pct, source) VALUES "
+        "($1, '2026-03-31', 10, 'manual')",
+        iid,
+    )
+    await add_alert(pg_full, iid, "results_declared", {})
+    await add_alert(pg_full, iid, "holding_change", {"holder": "fii", "delta_pct": 1})
+    await alerts_db.evaluate_alerts(pg_full, now=Clock())  # nothing new yet: silent baseline
+    assert await events(pg_full) == []
+    iid2 = await add_stock(pg_full, "NEWSCO2", [100.0, 101.0])
+    await pg_full.execute(
+        "INSERT INTO shareholding (instrument_id, quarter_end, fii_pct, source) VALUES "
+        "($1, '2026-03-31', 10, 'manual')",
+        iid2,
+    )
+    await add_alert(pg_full, iid2, "results_declared", {})
+    await add_alert(pg_full, iid2, "holding_change", {"holder": "fii", "delta_pct": 1})
+    await pg_full.execute(  # imported after the alerts were created, before their first run
+        "INSERT INTO fundamental_value (instrument_id, basis, period_type, period_end, "
+        "metric_key, value, source) VALUES ($1, 'consolidated', 'Q', '2026-09-30', "
+        "'pnl.revenue', 1, 'manual')",
+        iid2,
+    )
+    await pg_full.execute(
+        "INSERT INTO shareholding (instrument_id, quarter_end, fii_pct, source) VALUES "
+        "($1, '2026-06-30', 12.5, 'manual')",
+        iid2,
+    )
+    await alerts_db.evaluate_alerts(pg_full, now=Clock())
+    kinds = sorted(str(payload(e)["kind"]) for e in await events(pg_full))
+    assert kinds == ["holding_change", "results_declared"]

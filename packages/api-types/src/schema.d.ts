@@ -4087,6 +4087,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+            429: components["responses"]["RateLimited"];
             /** @description Error envelope */
             default: {
                 headers: {

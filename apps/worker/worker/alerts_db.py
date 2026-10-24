@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable, Sequence
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -57,7 +58,7 @@ def _doc(raw: Any) -> dict[str, Any] | None:
 
 _ALERT_SQL = (
     "SELECT a.id, a.kind, a.status, a.params, a.one_shot, a.cooldown_minutes, a.expires_on, "
-    "a.last_fired_at, a.last_state, a.instrument_id, a.mf_scheme_code, "
+    "a.last_fired_at, a.last_state, a.created_at, a.instrument_id, a.mf_scheme_code, "
     "i.symbol, i.status AS inst_status, m.name AS scheme_name "
     "FROM alert a LEFT JOIN instrument i ON i.id = a.instrument_id "
     "LEFT JOIN mf_scheme m ON m.code = a.mf_scheme_code "
@@ -125,6 +126,8 @@ async def _evaluate_one(
         last_state=_doc(row["last_state"]),
     )
     iid = row["instrument_id"]
+    if kind in ("results_declared", "holding_change") and not alert.last_state:
+        alert = await _baselined(conn, alert, row)
     if kind in ("nav_above", "nav_below"):
         return evaluate_bar_alert(alert, await data.navs(int(row["mf_scheme_code"]), conn), now)
     if kind == "results_upcoming":
@@ -158,6 +161,36 @@ async def _evaluate_one(
         ]
         return evaluate_holding_change(alert, quarters)
     return evaluate_bar_alert(alert, await data.bars(int(iid), conn), now)
+
+
+async def _baselined(conn: asyncpg.Connection, alert: AlertRow, row: asyncpg.Record) -> AlertRow:
+    """First evaluation of a results/holding alert: the baseline is what existed when the alert was
+    created (``fetched_at <= created_at``), so news imported between creation and this run still
+    fires instead of being swallowed as "already there" (B12/D06 review)."""
+    if alert.kind == "results_declared":
+        key, base = (
+            "latest_period",
+            await conn.fetchval(
+                "SELECT max(period_end) FROM fundamental_value WHERE instrument_id = $1 "
+                "AND period_type = 'Q' AND fetched_at <= $2",
+                row["instrument_id"],
+                row["created_at"],
+            ),
+        )
+    else:
+        key, base = (
+            "latest_quarter",
+            await conn.fetchval(
+                "SELECT max(quarter_end) FROM shareholding WHERE instrument_id = $1 "
+                "AND fetched_at <= $2",
+                row["instrument_id"],
+                row["created_at"],
+            ),
+        )
+    state: dict[str, Any] = {"initialised": True}
+    if base is not None:
+        state[key] = base.isoformat()
+    return replace(alert, last_state=state)
 
 
 _HOLDER_KEYS = ("promoter_pct", "fii_pct", "dii_pct", "mf_pct")
@@ -291,7 +324,7 @@ class PgDeliveryStore:
     async def expire_unlinked(self, now: datetime) -> int:
         res = await self._pool.execute(
             "UPDATE alert_event SET delivery_status = 'failed', last_error = $1 "
-            "WHERE delivery_status = 'pending' AND fired_at < $2",
+            "WHERE delivery_status = 'pending' AND delivery_attempts = 0 AND fired_at < $2",
             NOT_LINKED,
             now - NOT_LINKED_AFTER,
         )

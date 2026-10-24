@@ -75,6 +75,8 @@ type Deps struct {
 	// 120/min) guards authenticated routes (docs/03 section 16).
 	LoginLimiter   *Limiter
 	GeneralLimiter *Limiter
+	// WebhookLimiter (default 60/min per IP) guards the public POST /telegram/webhook.
+	WebhookLimiter *Limiter
 
 	// ChangePwGate throttles wrong current-password guesses on POST /auth/change-password, per
 	// session and per IP (default 5 failures, 5 min block doubling to 1 h). Separate from the login lockout.
@@ -103,6 +105,9 @@ func (d *Deps) defaults() {
 	}
 	if d.LoginLimiter == nil {
 		d.LoginLimiter = NewLimiter(10)
+	}
+	if d.WebhookLimiter == nil {
+		d.WebhookLimiter = NewLimiter(60)
 	}
 	if d.GeneralLimiter == nil {
 		d.GeneralLimiter = NewLimiter(120)
@@ -137,6 +142,7 @@ func NewRouter(d Deps) chi.Router {
 	require := requireAuth(d.Auth)
 	general := RateLimit(d.GeneralLimiter, ClientIP)
 	login := RateLimit(d.LoginLimiter, ClientIP)
+	webhook := RateLimit(d.WebhookLimiter, ClientIP)
 
 	r.Route(BasePath, func(api chi.Router) {
 		for _, rt := range routes {
@@ -147,6 +153,9 @@ func NewRouter(d Deps) chi.Router {
 			}
 			if rt.Limit == limitLogin {
 				mws = append(mws, login)
+			}
+			if rt.Limit == limitWebhook {
+				mws = append(mws, webhook)
 			}
 			if !rt.Public {
 				mws = append(mws, require, general)

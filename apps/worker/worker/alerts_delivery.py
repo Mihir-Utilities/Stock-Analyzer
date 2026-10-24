@@ -137,14 +137,17 @@ async def deliver_pending(
         expired = await store.expire_unlinked(started)
         held = await store.note_pending(NOT_LINKED)
         return {"status": NOT_LINKED, "held": held, "expired": expired}
+    # linked later: events older than 24 h are not sent now (docs/04 3.9 step 5)
+    expired = await store.expire_unlinked(started)
     if not sender.configured:
         held = await store.note_pending(NOT_CONFIGURED)
-        return {"status": NOT_CONFIGURED, "held": held}
+        return {"status": NOT_CONFIGURED, "held": held, "expired": expired}
     if in_quiet_hours(started, quiet):
-        return {"status": "quiet_hours", "held": await store.note_pending("quiet_hours")}
+        held = await store.note_pending("quiet_hours")
+        return {"status": "quiet_hours", "held": held, "expired": expired}
     events = await store.claim_due(started, RETRY_SPACING)
     if not events:
-        return {"status": "ok", "sent": 0, "failed": 0}
+        return {"status": "ok", "sent": 0, "failed": 0, "expired": expired}
     messages = build_messages(events)
     sent = failed = 0
     for index, (ids, text) in enumerate(messages):
@@ -165,4 +168,4 @@ async def deliver_pending(
             if rest:
                 await store.release(rest)
             break
-    return {"status": "ok", "sent": sent, "failed": failed}
+    return {"status": "ok", "sent": sent, "failed": failed, "expired": expired}

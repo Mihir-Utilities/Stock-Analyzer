@@ -25,6 +25,7 @@ type limitKind int
 const (
 	limitNone limitKind = iota
 	limitLogin
+	limitWebhook // public Telegram webhook: per-IP bucket (default 60/min)
 )
 
 // route is one row of the contract. Path is relative to BasePath. Keep this table, openapi.yaml and
@@ -183,7 +184,7 @@ var routes = []route{
 	{Method: mPost, Path: "/telegram/link-code", Kind: kindTgLinkCode},
 	{Method: mDelete, Path: "/telegram/link", Kind: kindTgUnlink},
 	{Method: mPost, Path: "/telegram/test", Kind: kindTgTest},
-	{Method: mPost, Path: "/telegram/webhook", Public: true, NoCSRF: true, Body: WebhookBodyLimit, Kind: kindTgWebhook},
+	{Method: mPost, Path: "/telegram/webhook", Public: true, NoCSRF: true, Limit: limitWebhook, Body: WebhookBodyLimit, Kind: kindTgWebhook},
 
 	// Imports and owner-entered data (section 14)
 	{Method: mPost, Path: "/imports/{kind}/validate", Body: ImportBodyLimit},
