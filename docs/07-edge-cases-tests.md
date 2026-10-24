@@ -211,7 +211,7 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | MF-80 | Adapter calls `api.mfapi.in` and `www.amfiindia.com` | Both pass the egress allow-list; any other host is refused (D04-A1) | U |
 | MF-81 | mfapi list pagination | Pages of `limit=10000` until an empty page; codes repeated across pages are de-duplicated; bad items rejected and counted | U |
 | MF-82 | mfapi down for several tracked schemes | AMFI file downloaded once per run; a code missing from the file is an item error; run `partial` with `amfi_fallback` codes | I |
-| MF-83 | Incremental NAV fetch | `startDate = last_nav_date + 1`; no request when that date is after today; re-run never duplicates rows | I |
+| MF-83 | Incremental NAV fetch | `startDate = last stored date` (amended by D04R-2: the last date is re-fetched so a corrected NAV is refreshed); no request when that date is after today; re-run never duplicates rows | I |
 | MF-84 | Weekly-NAV scheme | Volatility and Sharpe-like both null (`weekly_nav`); drawdown and returns still computed | U |
 | MF-85 | `sync_mf_schemes` status rule | Stale or absent-with-no-NAV schemes become `inactive`, fresh ones (also with a value date after the file date) `active`; a failed or invalid AMFI file never changes status | I |
 | MF-86 | Flat or short NAV series in `mf_return_cache` | No NaN/Inf anywhere; zero volatility is 0 with Sharpe null (`n/m`); under 1Y volatility null | U |
@@ -233,6 +233,15 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | MF-102 | Compare with no shared NAV date | 422 `UNPROCESSABLE`, `details.reason = no_common_dates` (no private code) | Go: `TestMFCompareNoCommonDatesUsesDocumentedCode` |
 | MF-103 | NAV series above 2,000 points with one spike | LTTB keeps the spike; first and last kept | Go: `TestDownsampleKeepsNavPeak` |
 | MF-104 | XIRR with all flows on one date summing to zero, or no convergence in 200 iterations | `ErrNoSignChange` / `ErrNoConvergence` (never -0.9999 or a half-converged rate); SIP shows `xirr_pct` null with `no_solution` | Go: `TestXIRRSameDateZeroSum`, `TestXIRRNonConvergence` |
+| MF-110 | 3Y series without a leap day (1,095 days) (D04 review) | `returns.3y` and Sharpe both present (gate is the base NAV at or before end-36M, not year length); one day shorter: both null | `apps/worker/tests/test_review_d01_d04_d05a.py` `test_mf110_*` |
+| MF-111 | Hostile AMFI rows (code `²`, Arabic-Indic digits, 11-digit code, over-long NAV, Unicode date, 5,000-char line) (D04 review) | Each row is rejected and counted by reason, the parse continues, no exception | `apps/worker/tests/test_review_d01_d04_d05a.py` `test_mf111_*` |
+| MF-112 | NAV above 10,000,000 or with more than 12 digits (D04R-3) | Row rejected (AMFI and mfapi), never sent to the database | `apps/worker/tests/test_review_d01_d04_d05a.py` `test_mf112_*` |
+| MF-113 | AMFI file with 1 row, or under 50% of the previous applied file (D04R-1) | Statuses untouched, job `partial` with `status_skipped`, rows still upserted; first run uses only the 5,000 floor | `apps/worker/tests/test_review_d01_d04_d05a.py` `test_mf113_*` |
+| MF-114 | Response body above the cap (declared length or streamed without length) (D04R-3) | Aborted at the cap, `SchemaError`, no retry, breaker untouched | `apps/worker/tests/test_review_d01_d04_d05a.py` `test_mf114_*` |
+| MF-115 | NaN or Infinity in `mf_return_cache.metrics` | `save_cache` raises before any SQL (`allow_nan=False`) | `apps/worker/tests/test_review_d01_d04_d05a.py` `test_mf115_*` |
+| MF-116 | Source corrects the NAV of the last stored date (D04R-2; amends MF-83) | Next run requests `startDate = last stored date` and the corrected NAV replaces the old one without duplicates | `apps/worker/tests/test_review_d01_d04_d05a.py` `test_mf116_*` |
+| MF-117 | One shared `subtract_months` (returns and MF) | Same function object; month-end clamping (31 Mar - 1 = 28 Feb, 29 Feb - 12M = 28 Feb, 31 Oct - 4 = 30 Jun) | `apps/worker/tests/test_review_d01_d04_d05a.py` `test_mf117_*` |
+| MF-118 | Duplicate scheme codes in the AMFI file (D04R-6) | Last row wins, `duplicates` counted, `amfi_duplicates` in the job summary | `apps/worker/tests/test_review_d01_d04_d05a.py` `test_mf118_*` |
 
 ## PF: portfolio
 | ID | Scenario | Required behavior | Test |
@@ -413,6 +422,9 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | SYS-29 | Detected-action note from worker-http and `process_queued_jobs` (docs/04 3.2) | Production wiring sends exactly one Telegram note per new action (none on a re-run); without `TELEGRAM_BOT_TOKEN`, without a linked chat or when the send fails it is skipped with a status and the job still succeeds | I |
 | SYS-30 | Two batches with the same symbols run at once (worker-http plus `process_queued_jobs`) | One `corporate_action` and one note per symbol, both jobs `ok` | I |
 | SYS-31 | 3.5-minute stop with a symbol in flight | The symbol in flight completes and is counted, the next one is not started, `remaining` and the continuation row hold the rest | U |
+| SYS-32 | Concurrent jobs update one `source_health` row (D01 review) | All 20 concurrent failures are counted (row-locked read-modify-write, `SourceHealthStore.update`) | `apps/worker/tests/test_review_d01_d04_d05a.py` `test_sys32_*`; `test_db_integration.py::test_sys32_concurrent_breaker_failures_are_all_counted` |
+| SYS-33 | Probe-success counter after a restart (D01-A1) | The counter is in memory: a new process needs 3 fresh successes to close a half-open breaker | `apps/worker/tests/test_review_d01_d04_d05a.py` `test_sys33_*` |
+| SYS-34 | `Retry-After: inf` / `nan` / `-inf` / `1e999` | Parsed without error and the retry delay stays finite within 2..60 s | `apps/worker/tests/test_review_d01_d04_d05a.py` `test_sys34_*` |
 
 ## F01 additions (app shell, tokens, security headers)
 | ID | Scenario | Required behavior | Test |
@@ -463,6 +475,7 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | IND-90 | Support/resistance (D05a) | Swing levels clustered within 1.5%, nearest first, max 3 per side; the last 5 bars never form a swing | U |
 | IND-91 | Golden/death cross (D05a) | Detected only inside the last 20 bars; null without SMA200 | U |
 | IND-92 | Under 60 valid bars / suspect rows (D05a) | No snapshot; suspect rows are excluded before anything else, nothing forward-filled | U |
+| IND-93 | ADX warm-up (D05a review) | Exactly `2n` = 28 bars give the first ADX at index 27 (equal to the longer series); 27 bars are all NaN | `apps/worker/tests/test_review_d01_d04_d05a.py` `test_ind93_*` |
 | RET-81 | Trading-row returns (D05a) | `C_t/C_{t-N}-1` as percent; N+1 rows needed else null `insufficient_history` | U |
 | RET-82 | Calendar returns (D05a) | Base = last bar on or before end minus offset (month-end clamped); first bar later -> null | U |
 | RET-83 | CAGR (D05a) | Only for windows over one year, `365.25/days` exponent; others `not_applicable` | U |
@@ -476,3 +489,6 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | RET-91 | Stock warnings (D05a) | `UNCONFIRMED_ACTION` / `ADJUSTMENT_CONFLICT` come from `actions_db.stock_warnings()` | I |
 | RET-92 | screener_row price metrics (D05a) | Only whitelisted price keys replaced; D05b keys kept; nulls omitted | I |
 | RET-93 | post_import wiring (D05a) | Analysis per symbol, screener after the last symbol, resumable, no duplicates | I |
+| RET-94 | NaN volume in the bars (D05a review) | OBV null with a reason; ADV null when the NaN is inside its window; volume z-score unaffected outside its window; the snapshot dumps with `allow_nan=False` | `apps/worker/tests/test_review_d01_d04_d05a.py` `test_ret94_*` |
+| RET-95 | Zero, negative or non-finite price on a bar (D05a review) | The row is dropped with warning `dropped N bar(s)...`, no exception, no NaN; under 60 left means no snapshot | `apps/worker/tests/test_review_d01_d04_d05a.py` `test_ret95_*` |
+| RET-96 | Infinite return or NaN reaching the writers (D05a review) | Histogram and calendar series filter or null it; `compute_analysis` and `save_cache` raise instead of storing NaN | `apps/worker/tests/test_review_d01_d04_d05a.py` `test_ret96_*`; `test_analysis_db.py::test_ret96_snapshot_writer_refuses_nan` |

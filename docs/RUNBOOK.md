@@ -265,3 +265,12 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 
 - Next.js was bumped from 16.4.0 to 16.4.1 (owner approved) because `next build` failed with `SecurityFatalError`: 16.0.0 to 16.4.0 are affected by GHSA-2464-fhr4-w9xw, GHSA-p3m5-59mp-jv5r and GHSA-673q-mjm6-r5xr. `eslint-config-next` moved to the same version.
 - The advisory gate runs inside `next build` (it queries the npm advisory service). Any future advisory against the installed Next.js version will fail the web CI job until it is bumped, so merge Renovate PRs for `next` promptly.
+
+## 33. D01/D04/D05a review fixes (apps/worker)
+
+- **AMFI status floor.** `sync_mf_schemes` refuses status changes when the AMFI file has under 5,000 rows or under 50% of the previous applied file. The run ends `partial` with `details.status_skipped` (for example `amfi_rows_below_floor: 1 < 5000 (previous 38000)`); rows are still upserted. Check `details.amfi_rows`, `amfi_rejected`, `amfi_reject_reasons` and `amfi_duplicates`. After a legitimate large AMFI change (for example a merger wave) run it twice: the second run still compares with the last applied file, so lower `AMFI_MIN_FRACTION` temporarily only on the owner's instruction.
+- **Size caps.** A response over the cap (AMFI 10 MB, mfapi list page 30 MB, history 8 MB) fails the item with `SchemaError: ... response too large`. It is not retried and does not trip the breaker. If AMFI really grows past 10 MB, raise `adapters/amfi.MAX_BYTES` and record it here.
+- **Breaker.** `source_health` is updated under a row lock; concurrent jobs no longer lose failures. The probe-success counter is in memory: after a worker restart a half-open source needs 3 fresh successes (D01-A1).
+- **Incremental NAV fetch** now re-fetches the last stored date, so a corrected NAV is picked up on the next `ingest_mf_navs` (D04R-2).
+- **Snapshots.** Rows with a zero, negative or non-finite price are dropped with a warning in `analysis_snapshot.indicators.warnings`; investigate the import if `dropped N bar(s)` appears. A NaN volume only nulls volume-based metrics. The snapshot and cache writers raise on NaN/Infinity instead of storing it.
+- Tests for all of this are in `apps/worker/tests/test_review_d01_d04_d05a.py` (MF-110..118, SYS-32..34, IND-93, RET-94..96).
