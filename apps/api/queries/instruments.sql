@@ -11,7 +11,7 @@ SELECT i.id, i.symbol, i.name,
    | CASE WHEN EXISTS (SELECT 1 FROM index_constituent c WHERE c.instrument_id = i.id
                        AND upper(replace(c.index_name, ' ', '')) = 'NIFTY50') THEN 64 ELSE 0 END
    | CASE WHEN EXISTS (SELECT 1 FROM index_constituent c WHERE c.instrument_id = i.id
-                       AND upper(replace(c.index_name, ' ', '')) IN ('NIFTY50', 'NIFTY100', 'NIFTYNEXT50')) THEN 128 ELSE 0 END
+                       AND upper(replace(c.index_name, ' ', '')) IN ('NIFTY50', 'NIFTY100', 'NEXT50', 'NIFTYNEXT50')) THEN 128 ELSE 0 END
   )::int AS flags
 FROM instrument i
 ORDER BY i.symbol;
@@ -73,9 +73,10 @@ WHERE id = $1
 RETURNING id, symbol, name, isin, series, listing_date, sector, industry, company_type, status,
           instrument_kind, is_tracked;
 
+-- Valid (non-suspect) bars only, consistent with GetValidBarRange (BRK-07, BRK-08).
 -- name: GetPriceStats :one
 SELECT max(trade_date)::date AS last_bar, min(trade_date)::date AS first_bar, count(*)::int AS bars
-FROM price_daily WHERE instrument_id = $1;
+FROM price_daily WHERE instrument_id = $1 AND NOT suspect;
 
 -- name: GetQuoteLatest :one
 SELECT quote_ts, ltp, prev_close, day_high, day_low, volume, wk52_high, wk52_low, market_cap_cr, source

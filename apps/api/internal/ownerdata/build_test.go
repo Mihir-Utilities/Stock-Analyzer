@@ -143,6 +143,55 @@ func TestSourcePriorityAndSourceByMetric(t *testing.T) {
 	}
 }
 
+// source_by_metric names the latest period's source; metrics mixing sources are flagged.
+func TestSourceByMetricFlagsMixedSources(t *testing.T) {
+	bases := []BasisCount{{"consolidated", 2}}
+	rows := []FundRow{
+		row("2026-03-31", "pnl.revenue", 100, "csv_import", "2026-05-01"),
+		row("2026-06-30", "pnl.revenue", 110, "manual", "2026-08-01"),
+		row("2026-03-31", "pnl.net_profit", 10, "manual", "2026-05-01"),
+		row("2026-06-30", "pnl.net_profit", 11, "manual", "2026-08-01"),
+	}
+	got := build(t, "auto", "Q", bases, rows, "")
+	if got.SourceByMetric["pnl.revenue"] != "manual" {
+		t.Fatalf("latest source = %v", got.SourceByMetric)
+	}
+	if len(got.MixedSources) != 1 || got.MixedSources[0] != "pnl.revenue" {
+		t.Fatalf("mixed = %v", got.MixedSources)
+	}
+}
+
+// derived_as_of is the snapshot's as_of; it is flagged stale when a value was fetched on a later
+// IST day than the snapshot.
+func TestDerivedAsOfAndStale(t *testing.T) {
+	bases := []BasisCount{{"consolidated", 1}}
+	rows := []FundRow{row("2026-06-30", "pnl.revenue", 110, "manual", "2026-08-10")}
+	snap := `{"consolidated":{"Q":{"periods":["2026-06-30"],"derived":{},"ratios":{"roe":15.2},"valuation":{}}}}`
+	run := func(asOf string) Fundamentals {
+		a := day(asOf)
+		got, err := BuildFundamentals(FundamentalsInput{
+			Requested: "auto", PeriodType: "Q", CompanyType: "general", Bases: bases,
+			Snapshot: json.RawMessage(snap), SnapshotAsOf: &a, Rows: func(string) []FundRow { return rows },
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	old := run("2026-08-01")
+	if old.DerivedAsOf == nil || *old.DerivedAsOf != "2026-08-01" || !old.DerivedStale {
+		t.Fatalf("old snapshot: asOf=%v stale=%v", old.DerivedAsOf, old.DerivedStale)
+	}
+	fresh := run("2026-08-10")
+	if fresh.DerivedAsOf == nil || *fresh.DerivedAsOf != "2026-08-10" || fresh.DerivedStale {
+		t.Fatalf("fresh snapshot: asOf=%v stale=%v", fresh.DerivedAsOf, fresh.DerivedStale)
+	}
+	none := build(t, "auto", "Q", bases, rows, "")
+	if none.DerivedAsOf != nil {
+		t.Fatalf("no snapshot must give a null derived_as_of")
+	}
+}
+
 func TestDerivedAlignedFromSnapshot(t *testing.T) {
 	bases := []BasisCount{{"consolidated", 2}}
 	rows := []FundRow{

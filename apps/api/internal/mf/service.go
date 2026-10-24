@@ -14,6 +14,7 @@ import (
 
 	"github.com/india-analyzer/api/internal/dbq"
 	"github.com/india-analyzer/api/internal/pagination"
+	"github.com/india-analyzer/api/internal/validate"
 )
 
 // Backfiller enqueues the mf_refresh job for a scheme that has no NAV rows (docs/03 section 10).
@@ -114,6 +115,8 @@ type SearchResult struct {
 	Items       any     `json:"items"`
 	NextCursor  *string `json:"next_cursor"`
 	Attribution string  `json:"attribution"`
+	// Freshness is the newest NAV date on the page (meta.as_of); now when the page has none.
+	Freshness Freshness `json:"-"`
 }
 
 type searchCursor struct {
@@ -156,7 +159,9 @@ func buildSearch(p SearchParams, cur *searchCursor) (string, []any) {
 	if cur != nil {
 		where = append(where, "(s.name, s.code) > ("+arg(cur.Name)+", "+arg(cur.Code)+")")
 	}
-	sql := `SELECT s.code, s.name, s.fund_house, s.category, s.plan, s.option_type, s.status, s.last_nav_date,
+	sql := `SELECT s.code, s.name, s.fund_house, s.category, s.plan, s.option_type, s.status,
+       CASE WHEN c.metrics->>'end_nav' IS NOT NULL AND c.metrics->>'end_date' IS NOT NULL
+            THEN (c.metrics->>'end_date')::date ELSE s.last_nav_date END,
        (c.metrics->>'end_nav')::float8, (c.metrics->'returns'->>'1y')::float8, c.as_of
 FROM mf_scheme s LEFT JOIN mf_return_cache c ON c.scheme_code = s.code`
 	if len(where) > 0 {
@@ -177,7 +182,7 @@ func (s *Service) Search(ctx context.Context, p SearchParams) (SearchResult, err
 			return SearchResult{}, ErrInvalidCursor
 		}
 		var c searchCursor
-		if json.Unmarshal(raw[0], &c.Name) != nil || json.Unmarshal(raw[1], &c.Code) != nil {
+		if json.Unmarshal(raw[0], &c.Name) != nil || json.Unmarshal(raw[1], &c.Code) != nil || !validate.Text(c.Name) {
 			return SearchResult{}, ErrInvalidCursor
 		}
 		cur = &c
@@ -220,7 +225,19 @@ func (s *Service) Search(ctx context.Context, p SearchParams) (SearchResult, err
 	if err != nil {
 		return SearchResult{}, err
 	}
-	res := SearchResult{NextCursor: page.NextCursor, Attribution: Attribution}
+	res := SearchResult{NextCursor: page.NextCursor, Attribution: Attribution, Freshness: s.freshness(nil)}
+	var newest time.Time
+	for _, it := range page.Items {
+		if it.LastNavDate == nil {
+			continue
+		}
+		if t, perr := time.Parse(time.DateOnly, *it.LastNavDate); perr == nil && t.After(newest) {
+			newest = t
+		}
+	}
+	if !newest.IsZero() {
+		res.Freshness = s.freshness(&newest)
+	}
 	if p.Group {
 		res.Items = GroupItems(page.Items)
 	} else {
@@ -260,6 +277,9 @@ type cachedMetrics struct {
 	Rolling1Y       json.RawMessage     `json:"rolling_1y"`
 	NavJumps        json.RawMessage     `json:"nav_jumps"`
 }
+
+// ReasonNoNavYet is the null reason for every figure of a scheme with no NAV rows.
+const ReasonNoNavYet = "no_nav_yet"
 
 var returnKeys = []string{"1m", "3m", "6m", "ytd", "1y", "3y", "5y", "since"}
 
@@ -374,6 +394,10 @@ func (s *Service) Detail(ctx context.Context, code int32) (DetailResult, error) 
 			if bf, err := s.Backfill.EnqueueMFRefresh(ctx, code); err == nil {
 				d.Backfill = &bf
 			}
+		}
+		for _, k := range returnKeys {
+			d.Returns["r_"+k] = nil
+			d.ReturnReasons["r_"+k] = ReasonNoNavYet
 		}
 		warns = append(warns, Warning{"NO_NAV_DATA", "No NAV history is stored for this scheme yet; a refresh has been requested."})
 		return DetailResult{Detail: d, Warnings: warns, Freshness: s.freshness(nil)}, nil
@@ -596,7 +620,7 @@ func (s *Service) SIP(ctx context.Context, code int32, p SIPParams) (SIPResponse
 		})
 	}
 	if res.Skipped > 0 {
-		warns = append(warns, Warning{"INSTALLMENTS_SKIPPED", fmt.Sprintf("%d installment(s) fall before the first NAV (%s) and were skipped.", res.Skipped, navs[0].Date.Format(time.DateOnly))})
+		warns = append(warns, Warning{"INSTALLMENTS_SKIPPED", fmt.Sprintf("%d installment(s) fall before the first NAV (%s) or have no NAV on or before the end date to execute at, and were skipped.", res.Skipped, navs[0].Date.Format(time.DateOnly))})
 	}
 	if len(res.Installments) == 0 {
 		warns = append(warns, Warning{"NO_INSTALLMENTS", "No installment could be executed in this period."})

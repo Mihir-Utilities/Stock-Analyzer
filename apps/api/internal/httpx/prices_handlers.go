@@ -5,10 +5,12 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/india-analyzer/api/internal/prices"
+	"github.com/india-analyzer/api/internal/validate"
 )
 
 // PriceService is the price/indicator read surface (B04); *prices.Service implements it.
@@ -33,13 +35,23 @@ func priceHandler(rt route, d Deps) http.Handler {
 	return nil
 }
 
+// pathSymbol returns the {symbol} path segment. chi hands over the still percent-encoded segment
+// only when the request carries a RawPath (e.g. `M%26M`); otherwise the value is already decoded
+// and decoding again would corrupt a literal `%` (`A%2541` names the symbol `A%41`). A malformed
+// escape, a NUL byte or invalid UTF-8 cannot name an instrument (404, never a 500).
 func pathSymbol(r *http.Request) (string, error) {
 	sym := chi.URLParam(r, "symbol")
-	dec, err := url.PathUnescape(sym)
-	if err != nil {
-		return "", ErrNotFound("Instrument not found", map[string]any{"symbol": sym})
+	if r.URL.RawPath != "" {
+		dec, err := url.PathUnescape(sym)
+		if err != nil {
+			return "", ErrNotFound("Instrument not found", map[string]any{"symbol": sym})
+		}
+		sym = dec
 	}
-	return dec, nil
+	if !validate.Text(sym) {
+		return "", ErrNotFound("Instrument not found", map[string]any{"symbol": strings.ToValidUTF8(strings.ReplaceAll(sym, "\x00", ""), "?")})
+	}
+	return sym, nil
 }
 
 func stockPrices(svc PriceService, w http.ResponseWriter, r *http.Request) error {

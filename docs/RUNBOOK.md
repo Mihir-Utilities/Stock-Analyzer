@@ -184,3 +184,12 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Failure mode: if the Playwright web server fails with "already used", a previous run left `next start` (port 3100) or `scripts/serve-static.mjs` (port 6100) running; stop that process and re-run.
 - Failure mode: a chart shows a red "could not be drawn" banner when ECharts throws on an option; the data table (Show data) and CSV still work, so no data is lost while it is fixed.
 - Licences checked for S15: echarts 6.1.0 Apache-2.0, zrender BSD-3-Clause, lucide-react ISC, Inter OFL-1.1, @tanstack/react-table and react-virtual MIT.
+
+## 23. Read-API review fixes (B03, B04, B05, B10)
+- **Profile says no prices but the owner imported some.** The profile counts valid bars only (the rows `/prices` serves). Bars flagged `suspect` by the import checks are hidden everywhere (BRK-08); fix or re-import them (section 20).
+- **Fundamentals show old ratios.** `data.derived_as_of` is the date of the `analysis_snapshot` behind derived values, ratios and valuation. The warning `DERIVED_STALE` means values were entered after that snapshot: run `compute_analysis` (worker) or wait for the nightly run. `MIXED_SOURCES` only informs that a metric mixes manual and imported periods.
+- **MF search shows an older NAV than the detail page.** Search takes the NAV and its date from `mf_return_cache`; after `ingest_mf_navs` the cache is rebuilt and both move together. A scheme without a cache row shows no NAV in search.
+- **A request with `%00` or invalid UTF-8 returns 422 or 404.** This is intended: Postgres cannot store NUL bytes. A 500 for such input would be a regression (tests `TestNulAndInvalidUTF8AreRejected`, `TestMFParamsRejectNulAndInvalidUTF8`).
+- **SIP shows fewer installments than months.** Installments dated before the first NAV, or whose next NAV is after `end`, are skipped and counted (`skipped_installments`).
+- **XIRR is null with `no_solution`.** All flows on one date summing to zero, no sign change in [-0.9999, 100], or no convergence in 200 iterations; never a made-up rate.
+- **Local tests:** `go test ./internal/finmath ./internal/mf ./internal/prices ./internal/ownerdata ./internal/httpx -race` (Docker or `TEST_DATABASE_URL`).

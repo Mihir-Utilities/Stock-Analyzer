@@ -40,6 +40,16 @@ func TestRenderLinksEncodes(t *testing.T) {
 	}
 }
 
+// A path placeholder must not turn a space into `+` (a literal plus in a path).
+func TestRenderLinksPathPlaceholderUsesPathEscape(t *testing.T) {
+	tpl := []LinkTemplate{{Label: "p", URL: "https://example.test/company/{name}/overview?q={name}"}}
+	got := RenderLinks(tpl, "X", "Tata Motors Ltd")
+	want := "https://example.test/company/Tata%20Motors%20Ltd/overview?q=Tata+Motors+Ltd"
+	if got[0].URL != want {
+		t.Fatalf("got %s, want %s", got[0].URL, want)
+	}
+}
+
 func TestParseLinksRejects(t *testing.T) {
 	for name, raw := range map[string]string{
 		"http":        `{"links":[{"label":"a","url":"http://x.test/{symbol}"}]}`,

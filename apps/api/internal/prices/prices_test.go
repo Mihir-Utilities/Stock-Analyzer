@@ -134,6 +134,37 @@ func TestExpandIndicators(t *testing.T) {
 	}
 }
 
+// docs/03 section 4: series are limited to the last 750 trading days; the most recent are kept.
+func TestIndicatorsSeriesCap750(t *testing.T) {
+	const n = 900
+	dates, vals := make([]string, n), make([]float64, n)
+	for i := range dates {
+		dates[i] = day("2020-01-01").AddDate(0, 0, i).Format(time.DateOnly)
+		vals[i] = float64(i)
+	}
+	ind := map[string]any{
+		"series":   map[string]any{"format": "columnar", "dates": dates, "sma50": vals, "macd": map[string]any{"macd": vals}},
+		"analysis": map[string]any{"drawdown": vals},
+	}
+	raw, _ := json.Marshal(ind)
+	got, err := ExpandIndicators(raw, []byte(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := got["series"].(map[string]any)
+	for name, v := range map[string]any{
+		"sma50": s["sma50"], "macd": s["macd"].(map[string]any)["macd"], "drawdown": got["analysis"].(map[string]any)["drawdown"],
+	} {
+		p := v.([][2]any)
+		if len(p) != MaxSeriesPoints {
+			t.Fatalf("%s has %d points, want %d", name, len(p), MaxSeriesPoints)
+		}
+		if p[len(p)-1][0] != dates[n-1] || p[len(p)-1][1] != float64(n-1) || p[0][0] != dates[n-MaxSeriesPoints] {
+			t.Fatalf("%s must keep the most recent points: first=%v last=%v", name, p[0], p[len(p)-1])
+		}
+	}
+}
+
 func TestParseParams(t *testing.T) {
 	p, err := ParseParams(map[string][]string{})
 	if err != nil || p.Range != "1Y" || !p.Adjusted {

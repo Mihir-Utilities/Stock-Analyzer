@@ -58,13 +58,23 @@ func LoadLinks(path string) ([]LinkTemplate, error) {
 	return ParseLinks(raw)
 }
 
-// RenderLinks substitutes {symbol} and {name}, URL-encoding both (M&M -> M%26M, spaces -> +).
-// It always returns a non-nil slice.
+// pathEscape encodes a value for a URL path: the conservative query-style escaping (M&M -> M%26M)
+// but with spaces as %20, because `+` is a literal plus in a path.
+func pathEscape(v string) string { return strings.ReplaceAll(url.QueryEscape(v), "+", "%20") }
+
+// RenderLinks substitutes {symbol} and {name}, URL-encoding both: placeholders in the path part
+// of a template use path escaping (spaces -> %20), those after `?` or `#` use query escaping
+// (M&M -> M%26M, spaces -> +). It always returns a non-nil slice.
 func RenderLinks(tpl []LinkTemplate, symbol, name string) []Link {
-	r := strings.NewReplacer("{symbol}", url.QueryEscape(symbol), "{name}", url.QueryEscape(name))
+	path := strings.NewReplacer("{symbol}", pathEscape(symbol), "{name}", pathEscape(name))
+	query := strings.NewReplacer("{symbol}", url.QueryEscape(symbol), "{name}", url.QueryEscape(name))
 	out := make([]Link, 0, len(tpl))
 	for _, t := range tpl {
-		out = append(out, Link{Label: t.Label, URL: r.Replace(t.URL)})
+		head, tail := t.URL, ""
+		if i := strings.IndexAny(t.URL, "?#"); i >= 0 {
+			head, tail = t.URL[:i], t.URL[i:]
+		}
+		out = append(out, Link{Label: t.Label, URL: path.Replace(head) + query.Replace(tail)})
 	}
 	return out
 }

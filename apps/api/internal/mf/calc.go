@@ -10,6 +10,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/india-analyzer/api/internal/finmath"
+	"github.com/india-analyzer/api/internal/prices"
 )
 
 // Attribution is the text every MF response carries (docs/00 section 1, item 6).
@@ -52,16 +53,25 @@ func RangeStart(rng string, end time.Time) (time.Time, bool) {
 	return SubtractMonths(end, m), true
 }
 
-// Downsample keeps at most max points, always including the first and last, by even index
-// stride. Series at or under the cap are returned unchanged.
+// Downsample keeps at most max points, always including the first and last, with LTTB
+// (Largest-Triangle-Three-Buckets, shared with the price series) so NAV peaks and troughs survive.
+// Every kept point is a real NAV. Series at or under the cap are returned unchanged.
 func Downsample(p []NavPoint, max int) []NavPoint {
 	n := len(p)
 	if max < 2 || n <= max {
 		return p
 	}
-	out := make([]NavPoint, 0, max)
-	for i := 0; i < max; i++ {
-		out = append(out, p[int(math.Round(float64(i)*float64(n-1)/float64(max-1)))])
+	if max == 2 {
+		return []NavPoint{p[0], p[n-1]}
+	}
+	bars := make([]prices.Bar, n)
+	for i, x := range p {
+		bars[i] = prices.Bar{Date: x.Date, Close: x.NAV}
+	}
+	kept := prices.LTTB(bars, max)
+	out := make([]NavPoint, len(kept))
+	for i, k := range kept {
+		out[i] = NavPoint{Date: k.Date, NAV: k.Close}
 	}
 	return out
 }
@@ -97,7 +107,7 @@ type Installment struct {
 // SIPResult is the simulation outcome. Value/Return/XIRR are nil when no installment executed.
 type SIPResult struct {
 	Installments []Installment
-	Skipped      int // installments dated before the first NAV (MF-10)
+	Skipped      int // installments with no NAV to execute at inside [first NAV, End] (MF-10)
 	Invested     decimal.Decimal
 	Units        decimal.Decimal
 	Value        *decimal.Decimal
@@ -129,7 +139,9 @@ func SimulateSIP(navs []NavPoint, in SIPInput) SIPResult {
 		}
 		if !d.Before(in.Start) {
 			idx := onOrAfter(navs, d)
-			if d.Before(first) || idx >= len(navs) {
+			// An installment whose executing NAV falls after End is not executed: it would be
+			// bought at a post-End NAV but valued at the End NAV (OQ-B03B10-4).
+			if d.Before(first) || idx >= len(navs) || navs[idx].Date.After(in.End) {
 				res.Skipped++
 			} else {
 				p := navs[idx]

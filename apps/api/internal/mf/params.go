@@ -11,6 +11,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/india-analyzer/api/internal/pagination"
+	"github.com/india-analyzer/api/internal/validate"
 )
 
 // Errors the handlers map onto the envelope.
@@ -95,7 +96,9 @@ func ParseSearch(v url.Values) (SearchParams, error) {
 	var fe []FieldError
 	p := SearchParams{}
 	if q, ok := get(v, "q"); ok {
-		if utf8.RuneCountInString(q) > maxFilterLen {
+		if !validate.Text(q) {
+			fe = append(fe, FieldError{"q", "must be valid text without NUL bytes"})
+		} else if utf8.RuneCountInString(q) > maxFilterLen {
 			fe = append(fe, FieldError{"q", "must be at most 100 characters"})
 		}
 		p.Tokens = strings.Fields(strings.ToLower(q))
@@ -108,7 +111,9 @@ func ParseSearch(v url.Values) (SearchParams, error) {
 		dst *string
 	}{{"category", &p.Category}, {"fund_house", &p.FundHouse}} {
 		if x, ok := get(v, f.key); ok {
-			if utf8.RuneCountInString(x) > maxFilterLen {
+			if !validate.Text(x) {
+				fe = append(fe, FieldError{f.key, "must be valid text without NUL bytes"})
+			} else if utf8.RuneCountInString(x) > maxFilterLen {
 				fe = append(fe, FieldError{f.key, "must be at most 100 characters"})
 			}
 			*f.dst = x

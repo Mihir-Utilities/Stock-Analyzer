@@ -27,6 +27,8 @@ const (
 var (
 	ErrNoFlows      = errors.New("finmath: need at least one outflow and one inflow")
 	ErrNoSignChange = errors.New("finmath: no sign change in [-0.9999, 100]")
+	// ErrNoConvergence: the iteration limit was hit before the bracket shrank below the tolerance.
+	ErrNoConvergence = errors.New("finmath: solver did not converge")
 )
 
 // XIRR returns the annual rate r (a fraction) with sum(cf_i / (1+r)^t_i) = 0 and
@@ -61,21 +63,17 @@ func XIRR(flows []CashFlow) (float64, error) {
 		}
 		return s
 	}
-	return brent(npv, lowRate, highRate)
+	return brent(npv, lowRate, highRate, maxIter)
 }
 
-func brent(f func(float64) float64, a, b float64) (float64, error) {
+func brent(f func(float64) float64, a, b float64, iters int) (float64, error) {
 	fa, fb := f(a), f(b)
 	if math.IsNaN(fa) || math.IsNaN(fb) || math.IsInf(fa, 0) || math.IsInf(fb, 0) {
 		return 0, ErrNoSignChange
 	}
-	if fa == 0 {
-		return a, nil
-	}
-	if fb == 0 {
-		return b, nil
-	}
-	if fa*fb > 0 {
+	// A zero at a bracket end is not a rate: it means NPV is identically zero (all flows on one
+	// date summing to zero), where every rate "solves" the equation.
+	if fa == 0 || fb == 0 || fa*fb > 0 {
 		return 0, ErrNoSignChange
 	}
 	if math.Abs(fa) < math.Abs(fb) {
@@ -84,7 +82,7 @@ func brent(f func(float64) float64, a, b float64) (float64, error) {
 	c, fc := a, fa
 	d := b - a
 	mflag := true
-	for i := 0; i < maxIter; i++ {
+	for i := 0; i < iters; i++ {
 		if fb == 0 || math.Abs(b-a) < tolerance {
 			return b, nil
 		}
@@ -119,5 +117,5 @@ func brent(f func(float64) float64, a, b float64) (float64, error) {
 			a, b, fa, fb = b, a, fb, fa
 		}
 	}
-	return b, nil
+	return 0, ErrNoConvergence
 }
