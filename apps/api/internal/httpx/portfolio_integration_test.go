@@ -570,11 +570,11 @@ func TestAdjustmentOverrides(t *testing.T) { // docs/05 8.2 owner override prece
 		t.Errorf("override must win: qty %s", s.Holdings[0].Qty)
 	}
 	// An override that would make a stored sell exceed holdings is rejected and not stored.
-	e.post(txnBody("TCS", "sell", "40", "300", "2026-10-01"), nil)
 	e.exec(`DELETE FROM portfolio_adjustment`)
 	e.exec(`DELETE FROM corporate_action`)
-	if r, b := e.req(http.MethodPost, "/portfolio/adjustments", `{"symbol":"TCS","effective_date":"2026-09-01","qty_multiplier":"2"}`, nil); r.Code != 422 || b.Error.Code != "INSUFFICIENT_HOLDINGS" {
-		t.Fatalf("breaking override: %d %s", r.Code, r.Body.String())
+	e.post(txnBody("TCS", "sell", "10", "300", "2026-10-01"), nil) // valid: 10 held without any action
+	if r, b := e.req(http.MethodPost, "/portfolio/adjustments", `{"symbol":"TCS","effective_date":"2026-09-01","qty_multiplier":"0.5"}`, nil); r.Code != 422 || b.Error.Code != "INSUFFICIENT_HOLDINGS" || b.Error.Details["adjustment_date"] != "2026-09-01" {
+		t.Fatalf("breaking override must be rejected naming the override: %d %s", r.Code, r.Body.String())
 	}
 	if e.count(`SELECT count(*) FROM portfolio_adjustment`) != 0 {
 		t.Error("rejected override must not be stored")
@@ -701,5 +701,27 @@ func TestWatchlistRemoveKeepsPortfolioAndUntracksBare(t *testing.T) {
 	}
 	if e.count(`SELECT count(*) FROM instrument WHERE id=$1 AND NOT is_tracked`, bare) != 1 {
 		t.Error("a stock with nothing keeping it becomes untracked")
+	}
+}
+
+// A stored sequence can already oversell (a confirmed action, B07): Summary reports it, and a new
+// buy that cannot worsen it must still be accepted; a sell is still rejected.
+func TestCreateBuyWhenSequenceAlreadyInconsistent(t *testing.T) {
+	e := newPFEnv(t)
+	id := e.instrument("TCS", "")
+	e.post(txnBody("TCS", "buy", "10", "100", "2026-09-01"), nil)
+	e.post(txnBody("TCS", "sell", "10", "110", "2026-09-10"), nil)
+	e.exec(`INSERT INTO portfolio_txn (instrument_id, side, qty, price, trade_date) VALUES ($1, 'sell', 5, 120, '2026-09-20')`, id)
+	if _, b := e.summary(""); !b.warned("HOLDINGS_INCONSISTENT") {
+		t.Fatalf("summary must report the inconsistency: %+v", b.Warnings)
+	}
+	if r, _ := e.post(txnBody("TCS", "buy", "3", "100", "2026-09-25"), nil); r.Code != 201 {
+		t.Fatalf("buy on an already inconsistent stock: %d %s", r.Code, r.Body.String())
+	}
+	if r, b := e.post(txnBody("TCS", "sell", "1", "100", "2026-09-26"), nil); r.Code != 422 || b.Error.Code != "INSUFFICIENT_HOLDINGS" {
+		t.Fatalf("sell on an inconsistent stock: %d %s", r.Code, r.Body.String())
+	}
+	if e.count(`SELECT count(*) FROM portfolio_txn`) != 4 {
+		t.Error("only the buy may have been stored")
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
@@ -165,8 +166,9 @@ func alertsHandler(d Deps, k handlerKind) http.Handler {
 			return nil
 		})
 	default: // kindTgWebhook
+		var rejected atomic.Int64
 		return Adapt(func(w http.ResponseWriter, r *http.Request) error {
-			return telegramWebhook(d.Alerts, w, r)
+			return telegramWebhook(d.Alerts, &rejected, w, r)
 		})
 	}
 }
@@ -174,9 +176,15 @@ func alertsHandler(d Deps, k handlerKind) http.Handler {
 // telegramWebhook authenticates with the secret header (constant-time, fail closed), then handles
 // `/start <code>` in a private chat and nothing else: every other update is acknowledged and
 // ignored. Nothing is stored for a request with a wrong secret (ALR-11).
-func telegramWebhook(d AlertsDeps, w http.ResponseWriter, r *http.Request) error {
+func telegramWebhook(d AlertsDeps, rejected *atomic.Int64, w http.ResponseWriter, r *http.Request) error {
 	if !telegram.SecretMatches(r.Header.Get(WebhookSecretHeader), d.WebhookSecret) {
-		zerolog.Ctx(r.Context()).Warn().Msg("telegram webhook: secret header rejected")
+		// Debug per request, a Warn only every 100th so scanners cannot flood the log.
+		n := rejected.Add(1)
+		ev := zerolog.Ctx(r.Context()).Debug()
+		if n%100 == 0 {
+			ev = zerolog.Ctx(r.Context()).Warn()
+		}
+		ev.Int64("rejected_total", n).Msg("telegram webhook: secret header rejected")
 		return ErrUnauthenticated("Invalid webhook secret")
 	}
 	body, err := io.ReadAll(r.Body)

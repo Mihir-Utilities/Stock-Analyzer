@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog"
+	"github.com/shopspring/decimal"
 
 	"github.com/india-analyzer/api/internal/dbq"
 	"github.com/india-analyzer/api/internal/pagination"
@@ -102,6 +103,10 @@ type Service struct {
 
 	testMu   sync.Mutex
 	lastTest time.Time
+
+	linkMu     sync.Mutex // failed /start attempts in the current window (link.go)
+	linkWindow time.Time
+	linkFails  int
 }
 
 // New builds a Service.
@@ -259,6 +264,16 @@ func (s *Service) validateCreate(in *CreateInput) (params []byte, expires pgtype
 	return params, expires, cooldown, oneShot, errs
 }
 
+// thresholdMet compares in decimal (shortest float representation, no binary noise at the
+// boundary): above is value >= threshold, below is value <= threshold.
+func thresholdMet(above bool, value, threshold float64) bool {
+	v, t := decimal.NewFromFloat(value), decimal.NewFromFloat(threshold)
+	if above {
+		return v.GreaterThanOrEqual(t)
+	}
+	return v.LessThanOrEqual(t)
+}
+
 // checkThreshold is the creation-time THRESHOLD_ALREADY_MET rule (ALR-01, D-D): price_above/below
 // against the last imported bar close, nav_above/below against the latest imported NAV. With no
 // bar or NAV yet nothing can be said, so the alert is accepted.
@@ -279,7 +294,7 @@ func (s *Service) checkThreshold(ctx context.Context, q *dbq.Queries, kind strin
 		if err != nil {
 			return err
 		}
-		if (kind == "price_above" && bar.Close >= p.Price) || (kind == "price_below" && bar.Close <= p.Price) {
+		if thresholdMet(kind == "price_above", bar.Close, p.Price) {
 			return &ThresholdMetError{Kind: kind, Threshold: p.Price, Value: bar.Close, AsOf: bar.TradeDate.Time.Format("2006-01-02")}
 		}
 	case "nav_above", "nav_below":
@@ -293,7 +308,7 @@ func (s *Service) checkThreshold(ctx context.Context, q *dbq.Queries, kind strin
 		if err != nil {
 			return err
 		}
-		if (kind == "nav_above" && nav.Nav >= p.NAV) || (kind == "nav_below" && nav.Nav <= p.NAV) {
+		if thresholdMet(kind == "nav_above", nav.Nav, p.NAV) {
 			return &ThresholdMetError{Kind: kind, Threshold: p.NAV, Value: nav.Nav, AsOf: nav.NavDate.Time.Format("2006-01-02"), IsNAV: true}
 		}
 	}

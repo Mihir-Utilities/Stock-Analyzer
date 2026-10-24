@@ -97,3 +97,19 @@ func TestEveryKindHasSchema(t *testing.T) {
 		t.Fatalf("expected the 13 kinds of docs/03 section 13, have %d", len(kindTarget))
 	}
 }
+
+// thresholdMet is inclusive at the boundary and exact in decimal (0.1+0.2 style noise cannot flip it).
+func TestThresholdMet(t *testing.T) {
+	for _, c := range []struct {
+		above        bool
+		value, limit float64
+		want         bool
+	}{
+		{true, 100, 100, true}, {true, 99.99, 100, false}, {false, 100, 100, true}, {false, 100.01, 100, false},
+		{true, 0.1 + 0.2, 0.3, true}, {false, 0.3, 0.1 + 0.2, true},
+	} {
+		if got := thresholdMet(c.above, c.value, c.limit); got != c.want {
+			t.Errorf("thresholdMet(%v, %v, %v) = %v", c.above, c.value, c.limit, got)
+		}
+	}
+}

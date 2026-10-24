@@ -23,6 +23,7 @@ type LinkCode struct {
 const (
 	MsgLinked      = "Telegram is linked. Alert messages will arrive in this chat."
 	MsgInvalidCode = "That link code is invalid, expired or already used. Create a new one in the app (Settings, Telegram)."
+	MsgAlreadyLinked = "Another chat is already linked. Unlink it in the app first (Settings, Telegram), then create a new code."
 	MsgTest        = "Test message from India Stock & MF Analyzer. If you can read this, alerts will reach you."
 )
 
@@ -52,13 +53,50 @@ func (s *Service) NewLinkCode(ctx context.Context) (LinkCode, error) {
 // Unlink clears the chat id (docs/03 section 13).
 func (s *Service) Unlink(ctx context.Context) error { return s.q.ClearTelegramChat(ctx) }
 
+// MaxLinkFailures is how many unsuccessful `/start` attempts are processed per LinkCodeTTL window;
+// further ones are ignored silently (no database work, no reply). Interim assumption (B12-11).
+const MaxLinkFailures = 10
+
+// linkAllowed reports whether another attempt may be processed in the current window.
+func (s *Service) linkAllowed(now time.Time) bool {
+	s.linkMu.Lock()
+	defer s.linkMu.Unlock()
+	if now.Sub(s.linkWindow) >= LinkCodeTTL {
+		s.linkWindow, s.linkFails = now, 0
+	}
+	return s.linkFails < MaxLinkFailures
+}
+
+func (s *Service) linkResult(ok bool) {
+	s.linkMu.Lock()
+	defer s.linkMu.Unlock()
+	if ok {
+		s.linkFails = 0
+	} else {
+		s.linkFails++
+	}
+}
+
 // LinkChat is the webhook's `/start <code>`: it consumes a valid unused unexpired code and stores
 // the chat id, atomically. It returns false for unknown, used, expired or malformed codes (ALR-12).
-// The chat then gets a short fixed reply; a failed reply is logged without any secret.
+// While a different chat is linked the request is refused without consuming the code (the owner
+// unlinks first, docs/03 section 13: DELETE /telegram/link). The chat gets a short fixed reply; a
+// failed reply is logged without any secret.
 func (s *Service) LinkChat(ctx context.Context, chatID int64, rawCode string) (bool, error) {
-	linked := false
+	if !s.linkAllowed(s.Now()) {
+		return false, nil
+	}
+	linked, refused := false, false
 	if norm, ok := NormalizeCode(rawCode); ok {
 		err := s.inTx(ctx, func(q *dbq.Queries) error {
+			bound, err := q.GetTelegramChat(ctx)
+			if err != nil {
+				return err
+			}
+			if bound.Valid && bound.Int64 != chatID {
+				refused = true
+				return nil
+			}
 			n, err := q.ConsumeLinkCode(ctx, dbq.ConsumeLinkCodeParams{
 				Now: pgtype.Timestamptz{Time: s.Now(), Valid: true}, CodeHash: HashCode(norm),
 			})
@@ -72,10 +110,14 @@ func (s *Service) LinkChat(ctx context.Context, chatID int64, rawCode string) (b
 			return false, err
 		}
 	}
+	s.linkResult(linked)
 	if s.Sender != nil {
 		msg := MsgInvalidCode
-		if linked {
+		switch {
+		case linked:
 			msg = MsgLinked
+		case refused:
+			msg = MsgAlreadyLinked
 		}
 		if err := s.Sender.SendMessage(ctx, chatID, telegram.Escape(msg)); err != nil {
 			s.log.Warn().Err(err).Bool("linked", linked).Msg("telegram: reply to /start failed")

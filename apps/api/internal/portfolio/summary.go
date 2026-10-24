@@ -3,6 +3,7 @@ package portfolio
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -24,7 +25,6 @@ const (
 	ReasonNoFlows       = "insufficient_flows"
 	ReasonNoBenchmark   = "benchmark_unavailable"
 	ReasonBenchLate     = "benchmark_series_starts_after_first_transaction"
-	ReasonBenchOversold = "benchmark_units_negative"
 	ReasonNoOutflow     = "no_outflow"
 )
 
@@ -376,7 +376,9 @@ func fillPrice(h *Holding, it InstrumentInput, adjs []Adj, qty, cost decimal.Dec
 		for _, a := range adjs {
 			if a.Date.After(p.Date) && !a.Date.After(in.AsOf) {
 				ltp = ltp.DivRound(a.Multiplier, 8)
-				h.Flags = append(h.Flags, "price_before_action")
+				if !slices.Contains(h.Flags, "price_before_action") {
+					h.Flags = append(h.Flags, "price_before_action")
+				}
 			}
 		}
 	}
@@ -500,7 +502,16 @@ func (s *Summary) returns(in SummaryInput, flows []finmath.CashFlow, first time.
 		f, _ := mv.Float64()
 		all = append(all, finmath.CashFlow{Date: in.AsOf, Amount: f})
 	}
-	if in.AsOf.Sub(first).Hours()/24 < minXIRRDays {
+	end := in.AsOf // total span: first flow to the terminal value, or to the last flow once closed
+	if open == 0 {
+		end = first
+		for _, f := range flows {
+			if f.Date.After(end) {
+				end = f.Date
+			}
+		}
+	}
+	if end.Sub(first).Hours()/24 < minXIRRDays {
 		reason(ReasonShortPeriod)
 		s.Benchmark.Reason = strp(ReasonShortPeriod)
 		return
@@ -549,10 +560,9 @@ func (s *Summary) benchmark(in SummaryInput, flows []finmath.CashFlow, open bool
 			return
 		}
 		units -= f.Amount / p.Value // a buy (negative amount) buys units
-		if units < -1e-9 {
-			s.Benchmark.Reason = strp(ReasonBenchOversold)
-			return
-		}
+		// units may go negative when the owner's sales outperformed the index: the benchmark is a
+		// hypothetical "same cash flows in NIFTY" comparison, so it always computes (owner decision,
+		// supersedes B11-8).
 		bf = append(bf, finmath.CashFlow{Date: f.Date, Amount: f.Amount})
 	}
 	if open {

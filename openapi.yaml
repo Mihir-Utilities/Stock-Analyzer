@@ -2406,6 +2406,8 @@ paths:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/ErrorEnvelope"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
         default:
           description: "Error envelope"
           content:

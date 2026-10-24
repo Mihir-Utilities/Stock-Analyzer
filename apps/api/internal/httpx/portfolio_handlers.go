@@ -237,10 +237,15 @@ func mapPortfolioError(err error) error {
 	case errors.As(err, &cf):
 		return ErrConflict(cf.Message)
 	case errors.As(err, &ie):
-		return NewError(http.StatusUnprocessableEntity, "INSUFFICIENT_HOLDINGS",
-			"A sell would exceed the quantity held on its date", map[string]any{
-				"transaction_id": ie.TxnID, "date": ie.Date.Format(time.DateOnly),
-				"held_qty": ie.Held.StringFixed(4), "sell_qty": ie.Wanted.StringFixed(4)})
+		msg := "A sell would exceed the quantity held on its date"
+		details := map[string]any{
+			"transaction_id": ie.TxnID, "date": ie.Date.Format(time.DateOnly),
+			"held_qty": ie.Held.StringFixed(4), "sell_qty": ie.Wanted.StringFixed(4)}
+		if ie.Adjustment != "" {
+			msg = "The override on " + ie.Adjustment + " would make a stored sell exceed the quantity held on its date"
+			details["adjustment_date"] = ie.Adjustment
+		}
+		return NewError(http.StatusUnprocessableEntity, "INSUFFICIENT_HOLDINGS", msg, details)
 	case errors.Is(err, pagination.ErrInvalidCursor):
 		return ErrValidation(FieldError{Field: "cursor", Message: "is not valid"})
 	case errors.Is(err, pagination.ErrInvalidLimit):

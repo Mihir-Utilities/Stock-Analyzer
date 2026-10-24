@@ -265,3 +265,10 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 
 - Next.js was bumped from 16.4.0 to 16.4.1 (owner approved) because `next build` failed with `SecurityFatalError`: 16.0.0 to 16.4.0 are affected by GHSA-2464-fhr4-w9xw, GHSA-p3m5-59mp-jv5r and GHSA-673q-mjm6-r5xr. `eslint-config-next` moved to the same version.
 - The advisory gate runs inside `next build` (it queries the npm advisory service). Any future advisory against the installed Next.js version will fail the web CI job until it is bumped, so merge Renovate PRs for `next` promptly.
+
+## 33. Review fixes for B11, B12 and D06
+
+- Delivery: every pass first expires never-attempted `pending` events older than 24 h as `failed(not_linked)`, linked or not, so linking late never floods old alerts. `expired` is part of the job summary.
+- `results_declared` / `holding_change`: the baseline of a first evaluation is the data present at alert creation (`fetched_at <= created_at`). If a re-imported old quarter fires unexpectedly, that is why (D06-14).
+- Telegram link: a second chat cannot take over while one is linked. To move to a new chat, call `DELETE /telegram/link` (Settings, Telegram), create a new code and send `/start <code>` from the new chat. After 10 failed `/start` attempts in 15 minutes the API ignores `/start` silently until the window passes (restart clears it). `POST /telegram/webhook` is limited to 60/min per IP; rejected secrets log at Debug and a Warn every 100th (`rejected_total`).
+- Portfolio: the benchmark XIRR may use negative NIFTY units (B11-10); a closed position uses first-to-last-flow for the 30-day rule; a buy is accepted on a stock whose sequence already reports `HOLDINGS_INCONSISTENT` (fix it with an override or by editing the offending sell); `POST /portfolio/adjustments` rejects an override that breaks the sequence.
