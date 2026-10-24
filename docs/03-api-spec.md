@@ -89,6 +89,10 @@ Implementation notes (B03):
 - `adjusted=true` returns `adj_close` as close and scales open/high/low by the same factor (`adj_close/close`).
 - Empty -> `DATA_UNAVAILABLE` with `reason: "backfill_pending"|"broker_unavailable|broker_session_missing"|"no_history"|"no_prices_imported"` (manual mode: `no_prices_imported`).
 
+Implementation notes (B04):
+- Prices: `range` counts calendar months back from the last valid bar; `downsample` accepts only `auto`. Over 2,000 daily points the server returns ISO-week candles (dated with the week's last trading day, `meta.interval` = `1w`) and applies LTTB only if weekly candles still exceed 2,000. Prices are rounded to 4 decimals. `data` also carries `range`, `limited_history` and `depth{first_bar,last_bar,bars}`. `actions[]` holds confirmed split/bonus markers (`label` = `ratio_num:ratio_den type`); detected ones only raise `UNCONFIRMED_ACTION`. Empty: 404 `DATA_UNAVAILABLE` reason `no_prices_imported`.
+- Indicators: the stored columnar series (D05a-A6) are expanded to `[[date, value]]` pairs; the arrays of `analysis` aligned to the series dates (drawdown, rolling_vol_21/63, rolling_beta_252) too. No snapshot: reason `no_prices_imported`, or `no_history` when bars exist (fewer than 60 valid bars or not yet computed). See OPEN_QUESTIONS B04-1..B04-8.
+
 ### DELETE `/stocks/{symbol}/prices?from=YYYY-MM-DD&to=YYYY-MM-DD`
 Owner-initiated delete of imported prices for one stock between two dates (inclusive); both required, `from <= to`. Body `{ "confirm": true }` required (the UI shows a ConfirmDialog with the row count from `POST /stocks/{symbol}/prices/delete-preview?from=&to=`, which returns `{ "rows": 120 }`). Writes an audit row (`import_batch` with `kind='manual_form'`, note "deleted prices {symbol} {from}..{to}, {n} rows") and enqueues `post_import` target `batch:<id>` to recompute analytics (and detection) for that symbol. Returns `{ "deleted": 120, "job_id": 14 }`. Shown on the stock's Data tab.
 

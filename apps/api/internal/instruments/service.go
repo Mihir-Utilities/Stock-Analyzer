@@ -410,6 +410,21 @@ func (s *Service) limitedHistory(ctx context.Context, now time.Time, first *time
 	return first.After(want.AddDate(0, 0, 7))
 }
 
+// Staleness applies the prices freshness rule to a last bar date (B04 reuses it for meta.stale).
+func (s *Service) Staleness(ctx context.Context, lastBar *time.Time) (Staleness, error) {
+	now := s.Now()
+	cal, holidaysForYear, err := s.calendar(ctx, now)
+	if err != nil {
+		return Staleness{}, err
+	}
+	return cal.PricesStaleness(now, lastBar, holidaysForYear), nil
+}
+
+// LimitedHistory reports whether the first imported bar starts clearly later than expected (BRK-06).
+func (s *Service) LimitedHistory(ctx context.Context, first *time.Time, listing pgtype.Date) bool {
+	return s.limitedHistory(ctx, s.Now(), first, listing)
+}
+
 func (s *Service) historyYears(ctx context.Context) int {
 	row, err := s.q.GetSetting(ctx, "PRICE_HISTORY_YEARS_TRACKED")
 	if err != nil {

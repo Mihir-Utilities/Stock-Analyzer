@@ -507,13 +507,15 @@ paths:
             default: "auto"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success. data = {bars: [[date, open, high, low, close, volume]], adjusted, actions[], range, limited_history, depth{first_bar,last_bar,bars}}; meta.interval is 1d or 1w (weekly candles when more than 2,000 daily points, then LTTB); suspect rows excluded; UNCONFIRMED_ACTION warnings for detected splits. An alias answers data = {redirect_symbol}. 404 DATA_UNAVAILABLE reason no_prices_imported when nothing is imported."
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         "422":
           "$ref": "#/components/responses/Unprocessable"
         "429":
@@ -710,13 +712,15 @@ paths:
             type: "string"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success. Latest analysis_snapshot: returns, technicals, scores, null_reasons, units and series/analysis arrays as [[date, value]] pairs (nulls at warm-up positions, last 750 rows). 404 DATA_UNAVAILABLE reason no_prices_imported or no_history (fewer than 60 valid bars or snapshot not computed yet). An alias answers data = {redirect_symbol}."
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         "429":
           "$ref": "#/components/responses/RateLimited"
         "501":
