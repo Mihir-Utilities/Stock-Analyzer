@@ -4,7 +4,7 @@ Rule: ONE task per session. Each session does: Execute -> Review -> Fix -> Commi
 A new session starts with: "Resume. Read CLAUDE.md, PROGRESS.md, OPEN_QUESTIONS.md; continue at CURRENT."
 
 ## Pointer
-- LAST UPDATED: 2026-10-17 (end of day). `main` = 5449fe9, GitHub CI green on every job (guards, api, worker, web, api-types).
+- LAST UPDATED: 2026-10-24. `main` = ee280f9, GitHub CI green on every job (guards, api, worker, web, api-types).
 - CURRENT: no task in progress. The backend/worker foundation is built; the design-system and screens work (F02+) and the product APIs (B04..B07) are next. **D05b is deliberately NOT started (owner instruction 2026-10-17: "don't start 5b").**
 - MODE: manual price mode (no broker). Each affected task file starts with an "Amendment: manual price mode" block that overrides the text below it.
 - WHAT "DONE" MEANS TODAY: tasks marked DONE below completed phases 1 EXEC and 4 COMMIT (merged, CI green). **None except T00 has had phase 2 REVIEW (Prompt 3) or 3 FIX yet.** Recommended: run Prompt 3 on a batch (B01+B02 security first, then D01, D03, B09, B12) before building more on top.
@@ -59,21 +59,21 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 | 1 | D01 | DONE (review pending) | | 345fbbd | worker scaffold, egress allow-list, worker-http HMAC; CI green |
 | 1 | F01 | DONE (review pending); Lighthouse a11y run is an owner item | | 8a108c6 / merge db1e19c | OQ-16 contrast open; set API_BASE_URL on Vercel; CI green |
 | 1 | B02 | DONE (review pending) | | 26d90fc | auth, sessions, CSRF; CI green; owner must run the seed |
-| 1 | F02 | TODO | | | |
+| 1 | F02 | DONE (review pending) | | merge ee280f9 | components + ChartFrame, OQ-16 second encoding; F02-1..8; contrast fix awaits owner |
 | 2 | B03 | DONE (review pending) | | 2d738f5 / merge 5b66efc | stock index/search/profile; CI green |
 | 2 | F03 | TODO | | | |
 | 2 | D02 | REMOVED | | | manual price mode (D-1, D-2); stub file kept |
 | 3 | D03 | DONE except S8 real-data criterion (review pending) | | 349fc5d / merge 3e89353 | detector, post_import, flag_dismissals 0011; needs owner price files for S8 |
-| 1 | B08 (reduced) | TODO | |  | status endpoint only; unblocked |
+| 1 | B08 (reduced) | DONE (review pending) | | 65c1c43 | GET /broker/status only |
 | 3 | B09 | DONE (review pending) | | 2dcb811 / merge 53390e7 | job endpoints + signed worker caller; B06/B07 must call EnqueuePostImport after commit |
-| 3 | B04 | TODO | | | |
-| 3 | B06a | TODO | | | instruments + prices importers, adjustment choice/check, trim/delete; needs B03, B09 |
+| 3 | B04 | DONE (review pending) | | merge 0f3ce35 | prices + indicators read APIs; assumptions B04-1..8; CI green |
+| 3 | B06a | DONE (review pending) | | merge 0f3ce35 | instruments+prices importers, trim/delete; IMPORT_PRICES_LARGE_ENABLED off until S9; B06a-1..17 |
 | 4 | D05a (indicators/returns) | DONE (review pending) | | 345559f / merge 388284f | compute_analysis hook live; B04 must expand columnar series (D05a-A6) |
 | 4 | F04 | TODO | | | |
 | 4 | F05 | TODO | | | |
 | 4 | F06 | TODO | | | |
 | 4 | F13a | TODO | | | instruments/prices wizard, Add stock, Storage tab; needs B06a |
-| 5 | B05 | TODO | | | |
+| 5 | B05 | DONE (review pending) | | merge 0f3ce35 | fundamentals/shareholding/events/links reads; derived metrics null until D05b; B05-1..9 |
 | 5 | B06b | TODO | | | rest of B06 incl. holidays importer; needs B05, B06a |
 | 5 | B07 | TODO | | | |
 | 5 | F07 | TODO | | | |
@@ -83,7 +83,7 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 | 6 | B13 | TODO | | | |
 | 6 | F10 | TODO | | | |
 | 7 | D04 | DONE except live smoke check (review pending) | | 8d38fea / merge ae7ad5c | owner: confirm api.mfapi.in (D04-A1); run sync_mf_schemes --dry-run |
-| 7 | B10 | TODO | | | |
+| 7 | B10 | DONE (review pending) | | merge 0f3ce35 | 6 /mf routes, XIRR; scheme search index note in RUNBOOK 19; B10-1..9 |
 | 7 | F14 | TODO | | | |
 | 8 | B11 | TODO | | | |
 | 8 | B12 | DONE (review pending) | | bc54d1d / merge 542b4f6 | owner: Telegram bot (D-9); D06 treats alert.last_state NULL as no bar evaluated |
@@ -126,3 +126,4 @@ Frontend and backend tasks may run in separate git worktrees/sessions. Frontend 
 - Migration files must stay contiguous (T02 test); parallel agents that need one use the next free number and the coordinator renumbers.
 - Windows: Python text-mode writes CRLF; git normalises on commit (.gitattributes eol=lf), but run `gofmt -w` after scripted edits. A running editor can lock `node_modules`: verify web in a clean export.
 - Merge one branch at a time, run guards plus the relevant suite against Postgres 16, then push and check CI before the next big merge.
+- 2026-10-24: Parallel batch merged: B04, B05, B08, B10, B06a (backend) and F02 (web). B01/B02 strict review done; all findings fixed (cookie renewal, TRUSTED_PROXY_HOPS, change-password throttle, login row lock, timing, docs). CI had one failure (go test -race): a test-only data race on a shared log buffer in the httpx auth tests, fixed in ef59495; production code was not involved. Owner items added: determine proxy hop count for TRUSTED_PROXY_HOPS (B02-R3), re-measure MF scheme search on Neon, confirm attribution wording (AMFI, via mfapi.in), approve OQ-16, generate Linux Playwright baselines before enabling VISUAL=1. Next unblocked: F03, B06b, B07, B11, B12 follow-ups per tasks/README.md waves; D05b still held. Reviews (Prompt 3) still pending for everything except T00 and B01/B02.
