@@ -162,14 +162,41 @@ func MaxBody(limit int64) func(http.Handler) http.Handler {
 	}
 }
 
-// ClientIP returns the caller address used as the rate-limit key. Behind the hosting proxy the
-// rightmost X-Forwarded-For entry (appended by the nearest proxy, not by the client) is used,
-// otherwise the socket peer address.
+type clientIPKey struct{}
+
+// ClientIPMiddleware resolves the caller address once (see ResolveClientIP) and stores it on the
+// request context for ClientIP.
+func ClientIPMiddleware(hops int) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := context.WithValue(r.Context(), clientIPKey{}, ResolveClientIP(r, hops))
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// ClientIP returns the caller address used as the rate-limit key: the value resolved by
+// ClientIPMiddleware, or the socket address when the middleware did not run.
 func ClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		if ip := strings.TrimSpace(parts[len(parts)-1]); net.ParseIP(ip) != nil {
-			return ip
+	if ip, ok := r.Context().Value(clientIPKey{}).(string); ok {
+		return ip
+	}
+	return ResolveClientIP(r, 0)
+}
+
+// ResolveClientIP implements TRUSTED_PROXY_HOPS. With hops <= 0 X-Forwarded-For is ignored and the
+// socket peer address is used (a client can forge the header). With hops = N the Nth entry from the
+// right (appended by the Nth trusted proxy) is used; if the header is shorter than N or the entry is
+// not an IP, the socket address is used.
+func ResolveClientIP(r *http.Request, hops int) string {
+	if hops > 0 {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			if len(parts) >= hops {
+				if ip := strings.TrimSpace(parts[len(parts)-hops]); net.ParseIP(ip) != nil {
+					return ip
+				}
+			}
 		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)

@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -46,6 +48,7 @@ type authEnv struct {
 	clk    *clock
 	logs   *bytes.Buffer
 	delays []time.Duration
+	deps   Deps
 }
 
 func newAuthEnv(t *testing.T) *authEnv {
@@ -72,9 +75,13 @@ func newAuthEnv(t *testing.T) *authEnv {
 	e.svc = auth.New(pool, auth.Config{SessionDays: 30, MaxFails: 5}, log)
 	e.svc.Now = e.clk.now
 	e.svc.Sleep = func(_ context.Context, d time.Duration) { e.delays = append(e.delays, d) }
-	e.h = NewRouter(Deps{Log: log, Accounts: e.svc, Pinger: &fakePinger{}})
+	// Generous login limiter: tests that exercise the lockout must not trip SEC-10 from one address.
+	e.deps = Deps{Log: log, Accounts: e.svc, Pinger: &fakePinger{}, LoginLimiter: NewLimiter(1000)}
+	e.rebuild()
 	return e
 }
+
+func (e *authEnv) rebuild() { e.h = NewRouter(e.deps) }
 
 type resp struct {
 	*httptest.ResponseRecorder
@@ -140,7 +147,7 @@ func TestLoginLockoutAndDelay(t *testing.T) {
 	e := newAuthEnv(t)
 	var firstBody string
 	for i := 1; i <= 5; i++ {
-		rec := e.do(http.MethodPost, "/api/v1/auth/login", pw("wrong password "+string(rune('a'+i))), "", map[string]string{"X-Forwarded-For": "203.0.113." + string(rune('0'+i))})
+		rec := e.do(http.MethodPost, "/api/v1/auth/login", pw("wrong password "+string(rune('a'+i))), "", nil)
 		if rec.Code != 401 {
 			t.Fatalf("attempt %d: %d", i, rec.Code)
 		}
@@ -167,7 +174,7 @@ func TestLoginLockoutAndDelay(t *testing.T) {
 
 	// While locked the correct password is refused with the identical response, the counter does
 	// not move, and the delay still applies.
-	rec := e.do(http.MethodPost, "/api/v1/auth/login", pw(ownerPassword), "", map[string]string{"X-Forwarded-For": "203.0.113.50"})
+	rec := e.do(http.MethodPost, "/api/v1/auth/login", pw(ownerPassword), "", nil)
 	if rec.Code != 401 || rec.Body.String() != firstBody {
 		t.Fatalf("locked login: %d %s", rec.Code, rec.Body.String())
 	}
@@ -186,7 +193,7 @@ func TestLoginLockoutAndDelay(t *testing.T) {
 	// After the lock expires, five more failures lock for 30 minutes (doubling).
 	e.clk.add(15*time.Minute + time.Second)
 	for i := 0; i < 5; i++ {
-		e.do(http.MethodPost, "/api/v1/auth/login", pw("still wrong password"), "", map[string]string{"X-Forwarded-For": "198.51.100." + string(rune('1'+i))})
+		e.do(http.MethodPost, "/api/v1/auth/login", pw("still wrong password"), "", nil)
 	}
 	u = e.user()
 	if u.FailedLogins != 10 {
@@ -508,6 +515,8 @@ func TestSlidingExpiryAtMostHourly(t *testing.T) {
 // SEC-10: the real login route is limited to 10 per minute per IP (429 + Retry-After).
 func TestLoginRateLimitWithRealService(t *testing.T) {
 	e := newAuthEnv(t)
+	e.deps.LoginLimiter = nil // default 10/min
+	e.rebuild()
 	for i := 1; i <= 10; i++ {
 		if got := e.code(http.MethodPost, "/api/v1/auth/login", pw("nope nope nope"), ""); got != 401 {
 			t.Fatalf("request %d: %d", i, got)
@@ -516,6 +525,147 @@ func TestLoginRateLimitWithRealService(t *testing.T) {
 	rec := e.do(http.MethodPost, "/api/v1/auth/login", pw(ownerPassword), "", nil)
 	if rec.Code != 429 || rec.Header().Get("Retry-After") == "" || decodeErr(t, rec.ResponseRecorder).Error.Code != CodeRateLimited {
 		t.Fatalf("11th request: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// SEC-02: a sliding extension re-issues the cookie so the browser keeps it as long as the row.
+func TestSlidingExpiryReissuesCookie(t *testing.T) {
+	e := newAuthEnv(t)
+	tok := e.login(ownerPassword)
+	row, err := e.q.GetSessionByHash(context.Background(), auth.HashToken(tok))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.clk.t = row.LastSeenAt.Time.UTC()
+	e.clk.add(30 * time.Minute)
+	if rec := e.do(http.MethodGet, "/api/v1/auth/me", "", tok, nil); rec.Code != 200 || rec.cookie(SessionCookie) != nil {
+		t.Fatalf("within the hour must not re-issue: %d", rec.Code)
+	}
+	e.clk.add(29 * 24 * time.Hour)
+	rec := e.do(http.MethodGet, "/api/v1/auth/me", "", tok, nil)
+	c := rec.cookie(SessionCookie)
+	if rec.Code != 200 || c == nil || c.Value != tok || !c.HttpOnly || !c.Secure {
+		t.Fatalf("cookie not re-issued after sliding: %d %+v", rec.Code, c)
+	}
+	want := e.clk.now().Add(30 * 24 * time.Hour)
+	if d := c.Expires.Sub(want); d < -2*time.Second || d > 2*time.Second {
+		t.Fatalf("new cookie expiry %v, want %v", c.Expires, want)
+	}
+}
+
+// SEC-02/N5: after change-password every other session fails (also asserted with revoked_at set).
+func TestRevokedSessionFailsAfterChangePassword(t *testing.T) {
+	e := newAuthEnv(t)
+	keep, other := e.login(ownerPassword), e.login(ownerPassword)
+	body := `{"current":"` + ownerPassword + `","new":"` + otherPassword + `"}`
+	if rec := e.do(http.MethodPost, "/api/v1/auth/change-password", body, keep, nil); rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	row, err := e.q.GetSessionByHash(context.Background(), auth.HashToken(other))
+	if err != nil || !row.RevokedAt.Valid {
+		t.Fatalf("other session not revoked: %v %+v", err, row.RevokedAt)
+	}
+	if e.code(http.MethodGet, "/api/v1/auth/me", "", other) != 401 || e.code(http.MethodGet, "/api/v1/auth/me", "", keep) != 200 {
+		t.Fatal("revoked session must fail, current must survive")
+	}
+}
+
+// Wrong current passwords are throttled (429 + Retry-After) without touching the login lockout.
+func TestChangePasswordFailureThrottle(t *testing.T) {
+	e := newAuthEnv(t)
+	tok, tok2 := e.login(ownerPassword), e.login(ownerPassword)
+	bad := `{"current":"not the password","new":"` + otherPassword + `"}`
+	for i := 1; i <= 5; i++ {
+		if got := e.code(http.MethodPost, "/api/v1/auth/change-password", bad, tok); got != 422 {
+			t.Fatalf("guess %d: %d", i, got)
+		}
+	}
+	good := `{"current":"` + ownerPassword + `","new":"` + otherPassword + `"}`
+	rec := e.do(http.MethodPost, "/api/v1/auth/change-password", good, tok, nil)
+	if rec.Code != 429 || rec.Header().Get("Retry-After") == "" || decodeErr(t, rec.ResponseRecorder).Error.Code != CodeRateLimited {
+		t.Fatalf("6th attempt must be blocked even with the right password: %d %s", rec.Code, rec.Body.String())
+	}
+	// The per-IP gate also blocks a second session from the same address.
+	if got := e.code(http.MethodPost, "/api/v1/auth/change-password", good, tok2); got != 429 {
+		t.Fatalf("other session from same IP: %d", got)
+	}
+	u := e.user()
+	if u.FailedLogins != 0 || u.LockedUntil.Valid {
+		t.Fatalf("change-password failures must not count toward login lockout: %d %v", u.FailedLogins, u.LockedUntil)
+	}
+	e.login(ownerPassword) // login unaffected; password unchanged
+}
+
+// SEC-01: the 24 h cap, locked_until stable during a lock, and constant work while locked.
+func TestLockoutCapAndStableLock(t *testing.T) {
+	e := newAuthEnv(t)
+	// 39 prior failures = lock 7 was the last; the next failure is the 40th -> lock 8 = 32 h -> capped.
+	if _, err := e.pool.Exec(context.Background(), `UPDATE app_user SET failed_logins = 39 WHERE id = 1`); err != nil {
+		t.Fatal(err)
+	}
+	e.do(http.MethodPost, "/api/v1/auth/login", pw("wrong again"), "", nil)
+	u := e.user()
+	if u.FailedLogins != 40 || !u.LockedUntil.Valid {
+		t.Fatalf("failed=%d locked=%v", u.FailedLogins, u.LockedUntil)
+	}
+	if got := u.LockedUntil.Time.Sub(e.clk.now()); got != 24*time.Hour {
+		t.Fatalf("lock = %v, want the 24h cap", got)
+	}
+	// Attempts during the lock (right or wrong) leave counter and locked_until untouched.
+	for i := 0; i < 3; i++ {
+		e.do(http.MethodPost, "/api/v1/auth/login", pw("wrong during lock"), "", nil)
+		e.do(http.MethodPost, "/api/v1/auth/login", pw(ownerPassword), "", nil)
+	}
+	u2 := e.user()
+	if u2.FailedLogins != 40 || !u2.LockedUntil.Time.Equal(u.LockedUntil.Time) {
+		t.Fatalf("lock changed: failed=%d until %v -> %v", u2.FailedLogins, u.LockedUntil.Time, u2.LockedUntil.Time)
+	}
+}
+
+// N1: a locked attempt does the same argon2 work as an unlocked failure (timing hides the lock).
+func TestLockedAttemptCostsAVerification(t *testing.T) {
+	e := newAuthEnv(t)
+	start := time.Now()
+	e.do(http.MethodPost, "/api/v1/auth/login", pw("wrong one"), "", nil)
+	unlocked := time.Since(start)
+	if _, err := e.pool.Exec(context.Background(), `UPDATE app_user SET locked_until = now() + interval '1 hour' WHERE id = 1`); err != nil {
+		t.Fatal(err)
+	}
+	e.clk.t = time.Now().UTC()
+	start = time.Now()
+	e.do(http.MethodPost, "/api/v1/auth/login", pw("wrong two"), "", nil)
+	locked := time.Since(start)
+	if locked < unlocked/2 {
+		t.Fatalf("locked attempt too cheap: %v vs %v", locked, unlocked)
+	}
+}
+
+// S4: parallel guesses are serialised on the owner row; once the threshold is hit no further
+// guess is verified (exactly MaxFails verifications), and the lock is in place afterwards.
+func TestConcurrentLoginsRespectLockout(t *testing.T) {
+	e := newAuthEnv(t)
+	var verifies atomic.Int32
+	e.svc.OnVerify = func() { verifies.Add(1) }
+	e.svc.Sleep = func(context.Context, time.Duration) {} // e.delays is not goroutine safe
+	var wg sync.WaitGroup
+	var created atomic.Int32
+	for i := 0; i < 30; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			rec := e.do(http.MethodPost, "/api/v1/auth/login", pw("wrong guess "+strconv.Itoa(i)), "", nil)
+			if rec.Code == 200 {
+				created.Add(1)
+			}
+		}(i)
+	}
+	wg.Wait()
+	if v := verifies.Load(); v != 5 {
+		t.Fatalf("verifications that counted = %d, want exactly MaxFails=5", v)
+	}
+	u := e.user()
+	if u.FailedLogins != 5 || !u.LockedUntil.Valid || created.Load() != 0 {
+		t.Fatalf("failed=%d locked=%v created=%d", u.FailedLogins, u.LockedUntil, created.Load())
 	}
 }
 

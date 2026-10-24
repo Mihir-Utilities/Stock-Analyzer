@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -291,7 +292,9 @@ func TestReadyzRetriesOnce(t *testing.T) {
 
 // SEC-10: per-IP login limit answers 429 with Retry-After and the envelope.
 func TestLoginRateLimit(t *testing.T) {
-	h := NewRouter(testDeps(&bytes.Buffer{}))
+	d := testDeps(&bytes.Buffer{})
+	d.TrustedProxyHops = 1 // the "other IP" check below needs X-Forwarded-For to be honoured
+	h := NewRouter(d)
 	for i := 1; i <= 10; i++ {
 		if rec := do(h, http.MethodPost, "/api/v1/auth/login", `{}`, nil); rec.Code != http.StatusNotImplemented {
 			t.Fatalf("request %d: %d", i, rec.Code)
@@ -417,13 +420,66 @@ func TestClientIP(t *testing.T) {
 	if ClientIP(r) != "10.0.0.5" {
 		t.Fatalf("peer: %s", ClientIP(r))
 	}
+	// SEC-10: hops 0 (default) ignores a forged X-Forwarded-For.
 	r.Header.Set("X-Forwarded-For", "1.2.3.4, 203.0.113.7")
-	if ClientIP(r) != "203.0.113.7" {
-		t.Fatalf("rightmost xff: %s", ClientIP(r))
+	if got := ResolveClientIP(r, 0); got != "10.0.0.5" {
+		t.Fatalf("hops 0 must ignore xff: %s", got)
+	}
+	if got := ResolveClientIP(r, 1); got != "203.0.113.7" {
+		t.Fatalf("hops 1: %s", got)
+	}
+	r.Header.Set("X-Forwarded-For", "9.9.9.9, 1.2.3.4, 203.0.113.7")
+	if got := ResolveClientIP(r, 2); got != "1.2.3.4" {
+		t.Fatalf("hops 2: %s", got)
+	}
+	if got := ResolveClientIP(r, 4); got != "10.0.0.5" {
+		t.Fatalf("header shorter than hops: %s", got)
 	}
 	r.Header.Set("X-Forwarded-For", "not-an-ip")
-	if ClientIP(r) != "10.0.0.5" {
-		t.Fatalf("garbage xff: %s", ClientIP(r))
+	if got := ResolveClientIP(r, 1); got != "10.0.0.5" {
+		t.Fatalf("garbage xff: %s", got)
+	}
+
+	// Through the router: rotating the header must not mint new login buckets at hops 0.
+	d := testDeps(&bytes.Buffer{})
+	h := NewRouter(d)
+	var last int
+	for i := 1; i <= 11; i++ {
+		last = do(h, http.MethodPost, "/api/v1/auth/login", `{}`, map[string]string{"X-Forwarded-For": "203.0.113." + strconv.Itoa(i)}).Code
+	}
+	if last != 429 {
+		t.Fatalf("rotating X-Forwarded-For dodged the limiter: %d", last)
+	}
+}
+
+func TestFailureGate(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	g := newFailureGate(3, time.Minute, 4*time.Minute, func() time.Time { return now })
+	for i := 0; i < 2; i++ {
+		g.Fail("k")
+	}
+	if b, _ := g.Blocked("k"); b {
+		t.Fatal("blocked before threshold")
+	}
+	g.Fail("k")
+	if b, w := g.Blocked("k"); !b || w != 60 {
+		t.Fatalf("block 1: %v %d", b, w)
+	}
+	now = now.Add(61 * time.Second)
+	for i := 0; i < 3; i++ {
+		g.Fail("k")
+	}
+	if b, w := g.Blocked("k"); !b || w != 120 {
+		t.Fatalf("block 2 should double: %v %d", b, w)
+	}
+	g.Fail("k") // during a block: does not extend it
+	if _, w := g.Blocked("k"); w != 120 {
+		t.Fatalf("extended during block: %d", w)
+	}
+	now = now.Add(121 * time.Second)
+	g.Reset("k")
+	if b, _ := g.Blocked("k"); b {
+		t.Fatal("reset must clear")
 	}
 }
 

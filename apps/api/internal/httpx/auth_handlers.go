@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"time"
 	"unicode/utf8"
 
@@ -127,7 +128,7 @@ func authHandler(d Deps, k handlerKind) http.Handler {
 			return nil
 		})
 	default: // kindAuthChangePassword
-		return Adapt(func(w http.ResponseWriter, r *http.Request) error { return changePassword(svc, w, r) })
+		return Adapt(func(w http.ResponseWriter, r *http.Request) error { return changePassword(svc, d.ChangePwGate, w, r) })
 	}
 }
 
@@ -168,10 +169,18 @@ type changePasswordBody struct {
 	New     string `json:"new"`
 }
 
-func changePassword(svc AccountService, w http.ResponseWriter, r *http.Request) error {
+func changePassword(svc AccountService, gate *FailureGate, w http.ResponseWriter, r *http.Request) error {
 	s, err := currentSession(r)
 	if err != nil {
 		return err
+	}
+	// Wrong-current-password guesses are throttled per session and per IP (they do not count toward
+	// the login lockout). A blocked caller is refused before any verification.
+	sessKey, ipKey := "session:"+strconv.FormatInt(s.ID, 10), "ip:"+ClientIP(r)
+	for _, k := range []string{sessKey, ipKey} {
+		if blocked, wait := gate.Blocked(k); blocked {
+			return ErrRateLimited(wait)
+		}
 	}
 	var b changePasswordBody
 	if err := DecodeJSON(r, &b); err != nil {
@@ -187,12 +196,16 @@ func changePassword(svc AccountService, w http.ResponseWriter, r *http.Request) 
 	var pv *auth.PolicyViolation
 	switch {
 	case errors.Is(err, auth.ErrCurrentPassword):
+		gate.Fail(sessKey)
+		gate.Fail(ipKey)
 		return ErrValidation(FieldError{Field: "current", Message: "is incorrect"})
 	case errors.As(err, &pv):
 		return ErrValidation(FieldError{Field: pv.Field, Message: pv.Message})
 	case err != nil:
 		return err
 	}
+	gate.Reset(sessKey)
+	gate.Reset(ipKey)
 	WriteData(w, http.StatusOK, map[string]bool{"ok": true})
 	return nil
 }

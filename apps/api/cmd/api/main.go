@@ -77,7 +77,8 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts, Jobs: jobSvc, Alerts: alertDeps, Stocks: instSvc,
 		Prices: prices.New(pool, instSvc), OwnerData: ownerSvc,
 		MF: mfService(pool, jobSvc),
-		Imports: importService(cfg, pool, jobSvc, log)})
+		Imports: importService(cfg, pool, jobSvc, log),
+		TrustedProxyHops: cfg.TrustedProxyHops})
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
 		Handler:           router,

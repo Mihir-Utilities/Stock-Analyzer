@@ -223,3 +223,11 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | B06a-15 | Duplicates | An identical duplicate `(symbol, date)` row warns and the later wins; different values are an error. A duplicate symbol in `instruments.csv` is an error. Duplicates across browser-split parts are plain upserts (later part wins) | `prices.go` |
 | B06a-16 | sqlc | The importers use hand-written parameterised pgx SQL (bulk `unnest` upserts, `pgx.Batch`) in `internal/importers` instead of sqlc queries: dynamic bulk statements do not fit sqlc, and no generated `dbq` file changes (parallel tasks edit it) | `internal/importers` |
 | B06a-17 | Spike S9 and upload limits through Vercel | Unchanged: the API default stays 5 MB for `prices` until the owner reports S9; B06a does not decide the browser-split fallback (the API supports it) | docs/08 S9 |
+
+## B01/B02 review fixes (Claude, 2026-10-24; owner approved the items, values below are mine)
+| # | Question | Choice made | Where |
+|---|---|---|---|
+| B02-R1 | `/broker/callback` is public in code and B02 but was missing from the public-routes list | Added to docs/03 section 1 (list is in section 1, not 2) | docs/03 |
+| B02-R2 | Throttle values for wrong `current` password on change-password are not in the spec | 5 failures per session and per IP, then a 5 min block doubling to 1 h, in memory (reset on restart); separate from the login lockout | `internal/httpx/failuregate.go` |
+| B02-R3 | **Owner check:** how many proxies sit in front of the API? | `TRUSTED_PROXY_HOPS` default 0 (safe, but then all users share one rate-limit bucket behind a proxy). Render alone is expected to be 1; if Vercel rewrites to the API the value may be 2. Determine it with the RUNBOOK section 21 procedure and set it on Render | docs/RUNBOOK.md 17 |
+| B02-R4 | CSP at the Next.js layer (docs/03 section 16) | Confirmed present: `apps/web/src/middleware.ts` sets `Content-Security-Policy` on requests and responses; the API sends none by design | apps/web |

@@ -32,6 +32,7 @@ type Config struct {
 	// Tunables (MASTER_PLAN section 5); an env var overrides the stored default.
 	SessionDays          int
 	LoginMaxFails        int
+	TrustedProxyHops     int
 	RefreshCooldownMin   int
 	RefreshGlobalPerHour int
 	DBSoftLimitMB        int
@@ -60,6 +61,7 @@ func Load(getenv func(string) string) (Config, error) {
 		BrokerTokenKey:        get("BROKER_TOKEN_KEY"),
 		SessionDays:           p.intIn(get("SESSION_DAYS"), "SESSION_DAYS", 30, 1, 365),
 		LoginMaxFails:         p.intIn(get("LOGIN_MAX_FAILS"), "LOGIN_MAX_FAILS", 5, 1, 100),
+		TrustedProxyHops:      p.intIn(get("TRUSTED_PROXY_HOPS"), "TRUSTED_PROXY_HOPS", 0, 0, 5),
 		RefreshCooldownMin:    p.intIn(get("REFRESH_COOLDOWN_MIN"), "REFRESH_COOLDOWN_MIN", 15, 1, 1440),
 		RefreshGlobalPerHour:  p.intIn(get("REFRESH_GLOBAL_PER_HOUR"), "REFRESH_GLOBAL_PER_HOUR", 30, 1, 1000),
 		DBSoftLimitMB:         p.intIn(get("DB_SOFT_LIMIT_MB"), "DB_SOFT_LIMIT_MB", 380, 1, 100000),
