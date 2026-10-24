@@ -1,13 +1,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
+import { STORY_ORIGIN } from "./ports";
 
 // Component checks against the static Storybook build (docs/06a section 10):
 //  - axe (wcag2a/aa, 2.1, including colour contrast) on every F02 story in both themes
 //  - ChartFrame behaviour in a real browser (SVG draw, PNG export, fullscreen, theme sync)
 //  - screenshot baselines for key components in both themes (VISUAL=1; baselines are per OS)
 
-const SB = "http://127.0.0.1:6100";
+const SB = STORY_ORIGIN;
 const axeSource = readFileSync(join(process.cwd(), "node_modules/axe-core/axe.min.js"), "utf8");
 const indexPath = join(process.cwd(), "storybook-static/index.json");
 

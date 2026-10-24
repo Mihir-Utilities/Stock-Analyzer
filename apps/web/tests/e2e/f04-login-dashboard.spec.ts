@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { WEB_ORIGIN } from "./ports";
 
 const axeSource = readFileSync(join(process.cwd(), "node_modules/axe-core/axe.min.js"), "utf8");
-const ORIGIN = "http://127.0.0.1:3100";
+const ORIGIN = WEB_ORIGIN;
 
 const json = (status: number, body: unknown, headers: Record<string, string> = {}) => ({
   status,

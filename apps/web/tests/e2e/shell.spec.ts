@@ -1,13 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { WEB_ORIGIN } from "./ports";
 
 const axeSource = readFileSync(join(process.cwd(), "node_modules/axe-core/axe.min.js"), "utf8");
 
 async function signIn(page: Page) {
   await page
     .context()
-    .addCookies([{ name: "session", value: "e2e-placeholder", url: "http://127.0.0.1:3100" }]);
+    .addCookies([{ name: "session", value: "e2e-placeholder", url: WEB_ORIGIN }]);
 }
 
 async function setTheme(page: Page, theme: "dark" | "light") {
@@ -119,7 +120,7 @@ test.describe("no external network, CSP, headers", () => {
     page.on("request", (req) => {
       const url = new URL(req.url());
       if (!["http:", "https:"].includes(url.protocol)) return; // data: and blob: stay in the page
-      if (url.origin !== "http://127.0.0.1:3100") external.push(req.url());
+      if (url.origin !== WEB_ORIGIN) external.push(req.url());
     });
     page.on("console", (m) => {
       if (/content security policy/i.test(m.text())) cspErrors.push(m.text());
@@ -173,10 +174,10 @@ test.describe("auth gate and safe next (SEC-06)", () => {
   });
 
   test("a protocol-relative path never produces an off-origin redirect", async ({ request }) => {
-    const res = await request.get("http://127.0.0.1:3100//evil.example/x", { maxRedirects: 0 });
+    const res = await request.get(`${WEB_ORIGIN}//evil.example/x`, { maxRedirects: 0 });
     const location = res.headers()["location"];
     if (location !== undefined) {
-      expect(new URL(location, "http://127.0.0.1:3100").origin).toBe("http://127.0.0.1:3100");
+      expect(new URL(location, WEB_ORIGIN).origin).toBe(WEB_ORIGIN);
     }
   });
 

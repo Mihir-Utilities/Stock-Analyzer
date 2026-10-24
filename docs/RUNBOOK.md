@@ -318,3 +318,8 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Failure modes: KPI, gauges and scores show a dash with `not computed yet` until D05b writes the snapshot (not a bug). A card that errors shows Retry; the rest of the page stays. `DATA_UNAVAILABLE` (`no_prices_imported`, `no_history`) shows the reason, never 0.
 - Notices that wait for B07: Confirm / Reject on the UNCONFIRMED_ACTION banner and Dismiss on the soft-flag notice are disabled with a reason; the soft flag is derived in the browser (20% one-day drop, assumption F05-5). When B07 ships, fill `apps/web/src/lib/stock/soft-flag-adapter.ts`.
 - Tests: `npm test` (`stock-page.test.tsx`, `stock-derive.test.ts` incl. the UI-09 field map in `docs/field-map.json`); `npx playwright test tests/e2e/stock.spec.ts` after `npm run build` (port 3100 must be free).
+
+## 40. Playwright ports and the e2e build
+
+- `playwright.config.ts` serves the production build on port 3100 and Storybook on 6100. If another process holds them, set `PW_PORT` / `PW_STORY_PORT` (defaults unchanged); the specs read the same variables through `apps/web/tests/e2e/ports.ts`.
+- The `/api` rewrite is baked in at `next build`. Locally use `npm run build:e2e` (builds with `API_BASE_URL=http://127.0.0.1:9`) so a Go API on localhost:8080 cannot answer e2e requests. CI has no API running, so plain `npm run build` is fine there.

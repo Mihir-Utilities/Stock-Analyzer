@@ -1,12 +1,13 @@
 import { defineConfig } from "@playwright/test";
+import { STORY_PORT, WEB_PORT } from "./tests/e2e/ports";
 
 // Browser tests run against a production build (`npm run build` first) served by `next start`,
 // and against the static Storybook build (`npm run build-storybook` first) for component axe and
 // visual checks. They use a system-installed Chrome (CI: google-chrome on ubuntu-latest) or Edge
 // locally, so no browser download is needed. Override with PW_CHANNEL=msedge|chrome.
 const channel = process.env.PW_CHANNEL ?? (process.env.CI ? "chrome" : "msedge");
-const port = 3100;
-const storybookPort = 6100;
+const port = WEB_PORT;
+const storybookPort = STORY_PORT;
 
 export default defineConfig({
   testDir: "tests/e2e",

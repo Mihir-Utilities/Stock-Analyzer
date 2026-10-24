@@ -1,11 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { STORY_ORIGIN, WEB_ORIGIN } from "./ports";
 
 // Review findings for F01/F02 (docs/07 UI-26..UI-29): touch targets, dialog focus, forwarded host,
 // reduced motion. Component checks run against the static Storybook build.
 
-const SB = "http://127.0.0.1:6100";
+const SB = STORY_ORIGIN;
 const indexPath = join(process.cwd(), "storybook-static/index.json");
 interface Entry {
   id: string;
@@ -50,8 +51,8 @@ test.describe("UI-26 touch targets are at least 44 px at 375 px width", () => {
     test(`shell page ${path}`, async ({ page }) => {
       await page
         .context()
-        .addCookies([{ name: "session", value: "e2e-placeholder", url: "http://127.0.0.1:3100" }]);
-      await page.goto(`http://127.0.0.1:3100${path}`);
+        .addCookies([{ name: "session", value: "e2e-placeholder", url: WEB_ORIGIN }]);
+      await page.goto(`${WEB_ORIGIN}${path}`);
       expect(await measure(page)).toEqual([]);
     });
   }
@@ -148,7 +149,7 @@ test.describe("UI-27 dialog and drawer focus", () => {
 test("UI-28 login redirect Location is host-free even with forwarded host headers", async ({
   request,
 }) => {
-  const res = await request.get("http://127.0.0.1:3100/stocks/M%26M", {
+  const res = await request.get(`${WEB_ORIGIN}/stocks/M%26M`, {
     maxRedirects: 0,
     headers: { "x-forwarded-host": "app.example.com", "x-forwarded-proto": "https" },
   });
