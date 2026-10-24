@@ -138,6 +138,14 @@ type FundamentalValue struct {
 	FetchedAt     pgtype.Timestamptz
 }
 
+type IdempotencyKey struct {
+	Key         pgtype.UUID
+	Scope       string
+	RequestHash string
+	Response    []byte
+	CreatedAt   pgtype.Timestamptz
+}
+
 type ImportBatch struct {
 	ID           int64
 	Kind         string
