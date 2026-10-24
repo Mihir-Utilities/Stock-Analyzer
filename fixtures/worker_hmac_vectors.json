@@ -1,0 +1,109 @@
+{
+ "_comment": "Golden vectors for the worker-http HMAC (docs/04 section 4), generated with worker.http.sign. Consumed by apps/worker/tests/test_http.py and apps/api/internal/httpx/job_integration_test.go. Each 'rejected' entry carries the signature of signed[0] but changed inputs (or a clock skew) and must not verify.",
+ "signed": [
+  {
+   "name": "run_job_12",
+   "key": "k-0123456789abcdef0123456789abcdef",
+   "ts": 1790000000,
+   "method": "POST",
+   "path": "/run",
+   "body": "{\"job_id\":12}",
+   "signature": "0c38f644ed5abdc7a33dbad8c06e36d97358a54614bafb3f527786d21a228c90"
+  },
+  {
+   "name": "big_job_id",
+   "key": "k-0123456789abcdef0123456789abcdef",
+   "ts": 1790000001,
+   "method": "POST",
+   "path": "/run",
+   "body": "{\"job_id\":9007199254740991}",
+   "signature": "69b29e3f3b9300a0aa0d9575d08033a0604bd0008b4b8ee401212df247cfde18"
+  },
+  {
+   "name": "other_key",
+   "key": "fedcba9876543210fedcba9876543210-k",
+   "ts": 1790000007,
+   "method": "POST",
+   "path": "/run",
+   "body": "{\"job_id\":12}",
+   "signature": "6c6e8efc2568a4a8aa5fa79dee2bdee03f3e510d64d07d858b43827360a4d9a7"
+  },
+  {
+   "name": "empty_body",
+   "key": "k-0123456789abcdef0123456789abcdef",
+   "ts": 1790000000,
+   "method": "POST",
+   "path": "/run",
+   "body": "",
+   "signature": "35fd979735a1a447ab0711399fc8faabb320c52ee0368459d68065bef9be270a"
+  }
+ ],
+ "rejected": [
+  {
+   "name": "body_tamper",
+   "key": "k-0123456789abcdef0123456789abcdef",
+   "ts": 1790000000,
+   "method": "POST",
+   "path": "/run",
+   "body": "{\"job_id\":13}",
+   "signature": "0c38f644ed5abdc7a33dbad8c06e36d97358a54614bafb3f527786d21a228c90",
+   "now": 1790000000,
+   "skew_case": false
+  },
+  {
+   "name": "path_change",
+   "key": "k-0123456789abcdef0123456789abcdef",
+   "ts": 1790000000,
+   "method": "POST",
+   "path": "/other",
+   "body": "{\"job_id\":12}",
+   "signature": "0c38f644ed5abdc7a33dbad8c06e36d97358a54614bafb3f527786d21a228c90",
+   "now": 1790000000,
+   "skew_case": false
+  },
+  {
+   "name": "method_change",
+   "key": "k-0123456789abcdef0123456789abcdef",
+   "ts": 1790000000,
+   "method": "PUT",
+   "path": "/run",
+   "body": "{\"job_id\":12}",
+   "signature": "0c38f644ed5abdc7a33dbad8c06e36d97358a54614bafb3f527786d21a228c90",
+   "now": 1790000000,
+   "skew_case": false
+  },
+  {
+   "name": "skew_future",
+   "key": "k-0123456789abcdef0123456789abcdef",
+   "ts": 1790000000,
+   "method": "POST",
+   "path": "/run",
+   "body": "{\"job_id\":12}",
+   "signature": "0c38f644ed5abdc7a33dbad8c06e36d97358a54614bafb3f527786d21a228c90",
+   "now": 1789999879,
+   "skew_case": true
+  },
+  {
+   "name": "skew_past",
+   "key": "k-0123456789abcdef0123456789abcdef",
+   "ts": 1790000000,
+   "method": "POST",
+   "path": "/run",
+   "body": "{\"job_id\":12}",
+   "signature": "0c38f644ed5abdc7a33dbad8c06e36d97358a54614bafb3f527786d21a228c90",
+   "now": 1790000121,
+   "skew_case": true
+  },
+  {
+   "name": "wrong_key",
+   "key": "another-key",
+   "ts": 1790000000,
+   "method": "POST",
+   "path": "/run",
+   "body": "{\"job_id\":12}",
+   "signature": "0c38f644ed5abdc7a33dbad8c06e36d97358a54614bafb3f527786d21a228c90",
+   "now": 1790000000,
+   "skew_case": false
+  }
+ ]
+}
