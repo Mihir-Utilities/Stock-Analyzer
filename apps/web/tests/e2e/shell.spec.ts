@@ -6,9 +6,7 @@ import { WEB_ORIGIN } from "./ports";
 const axeSource = readFileSync(join(process.cwd(), "node_modules/axe-core/axe.min.js"), "utf8");
 
 async function signIn(page: Page) {
-  await page
-    .context()
-    .addCookies([{ name: "session", value: "e2e-placeholder", url: WEB_ORIGIN }]);
+  await page.context().addCookies([{ name: "session", value: "e2e-placeholder", url: WEB_ORIGIN }]);
 }
 
 async function setTheme(page: Page, theme: "dark" | "light") {
@@ -21,7 +19,9 @@ async function setTheme(page: Page, theme: "dark" | "light") {
 // Real-browser axe (colour contrast needs layout). Run with bypassCSP so the library can be
 // injected; the CSP itself is exercised in the next tests.
 test.describe("axe in a real browser (UI-04, Lighthouse a11y proxy)", () => {
-  test.use({ bypassCSP: true });
+  // Reduced motion switches off the 120 ms colour transition, so axe never samples a colour that
+  // is half way between the old and the new theme (that made "More" flaky at 375 px).
+  test.use({ bypassCSP: true, reducedMotion: "reduce" });
   for (const theme of ["dark", "light"] as const) {
     for (const path of ["/", "/login"]) {
       for (const vp of [

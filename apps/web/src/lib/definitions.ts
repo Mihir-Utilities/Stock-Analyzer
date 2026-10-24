@@ -198,7 +198,7 @@ export const definitions = {
   "xirr": {
     label: "XIRR",
     section: "8.3",
-    text: "Cash flows: buy -(qty*price + fees) at trade_date; sell +(qty*price - fees); plus a terminal inflow of current market value (sum(qty*LTP) using latest price as of as_of) dated as_of (only for open holdings). t_i = (date_i - date_0)/365. Solve sum(cf_i/(1+r)^t_i) = 0. Method: bracket on r in [-0.9999, 100] and use Brent's method (bisection fallback), tolerance 1e-7, max 200 iterations. Return null if no sign change or fewer than one outflow and one inflow. If total span < 30 days, display absolute return only and mark XIRR n/a (period too short). Test vector: flows -1000 on 2020-01-01 and +1100 on 2021-01-01 -> r = 0.09973 (leap-year day count: 366/365; tolerance 1e-4).",
+    text: "Cash flows: buy -(qty*price + fees) at trade_date; sell +(qty*price - fees); plus a terminal inflow of current market value (sum(qty*LTP) using latest price as of as_of) dated as_of (only for open holdings). t_i = (date_i - date_0)/365. Solve sum(cf_i/(1+r)^t_i) = 0. Method: bracket on r in [-0.9999, 100] and use Brent's method (bisection fallback), tolerance 1e-7, max 200 iterations. Return null if no sign change or fewer than one outflow and one inflow. If total span < 30 days (first flow to the terminal value dated as_of, or to the last flow when no holding is open), display absolute return only and mark XIRR n/a (period too short). Test vector: flows -1000 on 2020-01-01 and +1100 on 2021-01-01 -> r = 0.09973 (leap-year day count: 366/365; tolerance 1e-4).",
   },
   "day_change": {
     label: "Day change",
