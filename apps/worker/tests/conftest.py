@@ -154,6 +154,7 @@ class MemoryRunStore:
 class MemoryQueue:
     def __init__(self, rows: dict[int, tuple[str, str, str]] | None = None) -> None:
         self.rows = dict(rows or {})
+        self.results: dict[int, dict[str, Any] | None] = {}  # stored result per job (checkpoints)
         self.finished: dict[int, dict[str, Any]] = {}
 
     async def get(self, job_id: int) -> tuple[str, str, str] | None:
@@ -171,7 +172,13 @@ class MemoryQueue:
     ) -> None:
         kind, target, _ = self.rows[job_id]
         self.rows[job_id] = (kind, target, status)
-        self.finished[job_id] = {"status": status, "result": result, "error": error}
+        if result is not None:  # None keeps the stored result, like COALESCE in PgJobQueue
+            self.results[job_id] = result
+        self.finished[job_id] = {
+            "status": status,
+            "result": self.results.get(job_id),
+            "error": error,
+        }
 
 
 @pytest.fixture

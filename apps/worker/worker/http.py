@@ -5,7 +5,9 @@ Auth: ``X-Timestamp`` (unix seconds) and
 Rejected when the timestamp is more than 120 s off, the signature mismatches (constant-time), the
 key is not configured, or the job row is not ``queued``. One job at a time; hard cap 4 minutes; the
 target comes from the DB row, never from request input. ``POST /run`` answers 202 and runs the job
-in the background (assumption D01-A3).
+in the background (assumption D01-A3). The replay guard (``seen``) is in memory: a restart
+reopens the 120 s window for a captured request; the queued-status check (a replayed job is no
+longer ``queued``) bounds the impact.
 """
 
 from __future__ import annotations
@@ -31,6 +33,7 @@ log = logging.getLogger("worker.http")
 
 MAX_SKEW_S = 120
 HARD_CAP_S = 240.0
+MAX_BODY_BYTES = 4096  # the only valid body is {"job_id": <int>}; larger is refused before auth
 
 
 class JobQueue(Protocol):
@@ -44,7 +47,9 @@ class JobQueue(Protocol):
 
     async def finish(
         self, job_id: int, *, status: str, result: dict[str, Any] | None, error: str | None
-    ) -> None: ...
+    ) -> None:
+        """``result=None`` keeps the stored result (progress is never overwritten with NULL)."""
+        ...
 
 
 class RunRequest(BaseModel):
@@ -78,7 +83,9 @@ def verify(
         return False
     if abs(now - int(ts_header)) > MAX_SKEW_S:
         return False
-    return hmac.compare_digest(sign(key, ts_header, method.upper(), path, body), sig_header.lower())
+    # bytes, not str: compare_digest raises TypeError on a non-ASCII str (headers are latin-1)
+    expected = sign(key, ts_header, method.upper(), path, body).encode()
+    return hmac.compare_digest(expected, sig_header.lower().encode("utf-8", "replace"))
 
 
 def _error(status: int, code: str, message: str) -> JSONResponse:
@@ -124,7 +131,17 @@ def create_app(
 
     @app.post("/run", status_code=202)
     async def run(request: Request, background: BackgroundTasks) -> JSONResponse:
-        body = await request.body()
+        declared = request.headers.get("Content-Length", "")
+        if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
+            return _error(413, "PAYLOAD_TOO_LARGE", "request body too large")
+        chunks: list[bytes] = []
+        size = 0
+        async for chunk in request.stream():  # cap enforced while reading, before auth
+            size += len(chunk)
+            if size > MAX_BODY_BYTES:
+                return _error(413, "PAYLOAD_TOO_LARGE", "request body too large")
+            chunks.append(chunk)
+        body = b"".join(chunks)
         now = clock()
         sig = request.headers.get("X-Signature") or ""
         if not verify(
@@ -185,7 +202,14 @@ def create_app(
                     error=scrub(result.error) if result.error else None,
                 )
             except TimeoutError:
-                await queue.finish(job.job_id, status="failed", result=None, error="hard_timeout")
+                # result=None keeps the checkpointed progress; a resumable kind (post_import) goes
+                # to `partial` so process_queued_jobs continues it (docs/04 3.12).
+                await queue.finish(
+                    job.job_id,
+                    status="partial" if job.kind in jobs.RESUMABLE_KINDS else "failed",
+                    result=None,
+                    error="hard_timeout",
+                )
             except Exception as exc:
                 log.error("http job failed", extra={"job_id": job.job_id, "kind": job.kind})
                 await queue.finish(

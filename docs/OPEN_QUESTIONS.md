@@ -240,3 +240,13 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | F02-6 | Visual-regression baselines are OS specific | Baselines committed for win32 only and the check runs with `VISUAL=1`; axe and behaviour specs run everywhere. Owner action: generate Linux baselines once in CI (`VISUAL=1 npx playwright test stories --update-snapshots`) before enabling `VISUAL=1` there | `tests/e2e/stories.spec.ts` |
 | F02-7 | Storybook shows system fonts (Inter comes from `next/font` which the Storybook preview does not load) | Left as is; contrast and layout are checked with the fallback font. Add the font to the Storybook preview if pixel-exact snapshots are wanted | `.storybook/preview.tsx` |
 | F02-8 | `@tanstack/react-table` latest major is v9 with a different API | Pinned to v8 (`^8.21.3`), the documented stable API | `package.json` |
+
+## B09/D03 review fixes (Claude, 2026-10-24; owner approved the items)
+| # | Question | Choice made | Where |
+|---|---|---|---|
+| D03R-1 | **Owner check:** docs/01 3.7 has no rule for a multi-month hole between two stored bars (a gap can look like a 35% move) | Spec trigger unchanged. Interim: a candidate whose two compared bars are more than 14 calendar days apart (about 10 trading days) is listed as `low_confidence` in the `detect_actions` job summary only; nothing is stored or hidden and no column was added. Decide whether the stock page should show it or the detector should skip such pairs | `analytics/actions.py`, `actions_db.py` |
+| D03R-2 | docs/05 says suspect bars are excluded from analytics; docs/01 3.5 marks a >50% jump bar itself `suspect` and says that also triggers split detection | Suspect bars stay in the price series for detection (otherwise 1/3, 1/4, 1/5, 1/10, 1/20 splits could never be found) but are excluded from the volume average: the average uses the prior 20 non-suspect bars, and fewer than 20 means no detection | `analytics/actions.py` |
+| D03R-3 | Reaper threshold for `running` refresh_job rows | 40 minutes for every kind (2x the 20-minute `process_queued_jobs` timeout, since a row does not record which runner owns it); a `post_import` with symbols left becomes `partial` instead of `failed` so it resumes | `post_import.py` |
+| D03R-4 | Request body cap for worker-http | 4 KiB (the only valid body is `{"job_id": n}`), `413 PAYLOAD_TOO_LARGE` before authentication | `http.py` |
+| D03R-5 | Telegram chat id source for the worker note | `app_user.telegram_chat_id` (set by the link flow), token from `TELEGRAM_BOT_TOKEN`; D06 may reuse `worker.notify.TelegramNotifier` | `notify.py` |
+

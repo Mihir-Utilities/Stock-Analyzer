@@ -69,6 +69,8 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ACT-17 | The ex-date already has a split/bonus row (owner-entered, detected or rejected) (D03) | The detector adds no second candidate; a rejected date is never re-detected (ACT-04); the soft flag is not shown for that date | I |
 | ACT-18 | Ratio 2/3 and the trigger (D03, pins ACT-14) | Exactly 0.667 is not detected; only the sliver r in [0.6467, 0.65) of the 2/3 tolerance band passes the 0.35 trigger and is matched as 2/3 | U |
 | ACT-19 | Soft-flag dismissal lifecycle (D-U, D03) | Dismiss inserts one `flag_dismissals` row (repeat is a no-op); Undo deletes it; per bar date (a later drop still shows); survives a prices re-import; the flag disappears once an action exists on that date | I |
+| ACT-20 | Suspect bars and the volume average (D03 review) | Suspect bars are excluded from the prior-20 average (the next clean bars fill the window; fewer than 20 clean bars means no detection); the suspect split-day bar itself (>50% jump rule) is still detected | U/I |
+| ACT-21 | A multi-month hole between the two compared bars (D03 review, OPEN_QUESTIONS D03R-1) | The candidate is still produced (trigger unchanged) but reported as `low_confidence` in the job summary when the bars are more than 14 calendar days apart | U |
 | ACT-20 | Confirmed `rights`/`buyback`/`merger`/`demerger` or an untyped `split_or_bonus` (D03) | `adj_close` is never changed; the stock is listed in `review_needed` of the re-adjust result | I |
 | ACT-21 | Events read API (B05) | Actions include `detected` and `rejected` with `status`; default window last 5 years (no upper bound), calendar next 90 days; `from`/`to` override both; bad dates or `to < from` -> 422; detected rows add `UNCONFIRMED_ACTION` warnings; nothing entered -> `reason = no_data_entered` | I |
 | ACT-22 | Old symbol on fundamentals/shareholding/events/links (B05) | HTTP 200 with `data.redirect_symbol`; unknown symbol -> 404 | I |
@@ -351,6 +353,13 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | SYS-22 | worker-http concurrency and kinds (D01) | A second `POST /run` while a job runs answers 409 `BUSY` and leaves its row `queued`; kinds outside `post_import`/`mf_refresh` answer 422; unknown job 404; hard cap 4 min marks the job `failed` (`hard_timeout`) | I |
 | SYS-23 | One symbol of a `post_import` batch fails (D03) | Recorded in `result.failed` (first 50), the rest still run and finish, status `ok`; a missing or malformed `result.remaining` fails the job cleanly | I |
 | SYS-24 | `process_queued_jobs` selection (D03) | Picks `queued` rows older than 15 minutes and `partial` rows with remaining work and no successor; ignores younger `queued` rows; stops at the job deadline and re-enqueues the rest | I |
+| SYS-25 | Stale `queued` job of any kind (docs/04 3.13, B09 review) | `process_queued_jobs` runs a `queued` > 15 min `mf_refresh` through its handler; younger rows and kinds without a handler are left alone; a failing handler marks the row `failed` and frees the active-job index | I |
+| SYS-26 | Crash leftovers (docs/04 3.13) | A `refresh_job` `running` longer than 40 minutes is reaped at the start of `process_queued_jobs`: `failed` with a reason, or `partial` for a `post_import` with symbols left; a younger `running` row is untouched | I |
+| SYS-27 | Hard cap mid-symbol (docs/04 4) | The 4-minute cap keeps `refresh_job.result` (never NULL); a `post_import` becomes `partial` with `hard_timeout`, keeps `remaining`, and the next `process_queued_jobs` resumes it without redoing finished symbols; other kinds become `failed` | I |
+| SYS-28 | `post_import` stage (docs/03 section 7) | `result.stage` is `detect_actions`, `compute_analysis`, `alerts` while a symbol runs and is visible in `GET /jobs/{id}` | I |
+| SYS-29 | Detected-action note from worker-http and `process_queued_jobs` (docs/04 3.2) | Production wiring sends exactly one Telegram note per new action (none on a re-run); without `TELEGRAM_BOT_TOKEN`, without a linked chat or when the send fails it is skipped with a status and the job still succeeds | I |
+| SYS-30 | Two batches with the same symbols run at once (worker-http plus `process_queued_jobs`) | One `corporate_action` and one note per symbol, both jobs `ok` | I |
+| SYS-31 | 3.5-minute stop with a symbol in flight | The symbol in flight completes and is counted, the next one is not started, `remaining` and the continuation row hold the rest | U |
 
 ## F01 additions (app shell, tokens, security headers)
 | ID | Scenario | Required behavior | Test |
@@ -375,6 +384,8 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | API-35 | `POST /mf/schemes/{code}/refresh` input (B09) | Non-numeric, zero, negative or out-of-range code 422 with `details.fields`; unknown scheme 404; missing CSRF header 403 | I |
 | SEC-40 | Go signer golden vector (B09) | `jobs.Sign` for fixed key/ts/method/path/body equals the value produced by `worker.http.sign` (Python) | U |
 | SEC-41 | Worker signature checks as the Go caller meets them (B09) | A fake worker mirroring `worker/http.py` accepts the Go call (unix-second `X-Timestamp`, path `/run`), and rejects a timestamp 121 s old or ahead, a wrong signature, a tampered body and an exact replay | I |
+| SEC-42 | worker-http request hardening (B09 review) | A non-ASCII `X-Signature` is 401 (not 500); a body over 4 KiB is 413 before authentication (declared and streamed); a valid signature for another path/method/body/key is rejected; the Go caller and the Python verifier agree on `fixtures/worker_hmac_vectors.json` | I |
+| API-38 | Global refresh limit under parallel clicks (B09 review) | 40 parallel enqueues on different targets with `REFRESH_GLOBAL_PER_HOUR=7` create exactly 7 rows, the rest are 429 (advisory-locked transaction) | I |
 ## IND/RET: indicators, returns and risk (D05a)
 | ID | Case | Expected | Type |
 |---|---|---|---|

@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import httpx  # noqa: TID251 - ASGI test transport
@@ -14,6 +15,8 @@ import pytest
 from worker import jobs
 from worker.http import create_app, sign, verify
 from worker.jobs import HttpJob, HttpJobResult
+
+REPO = Path(__file__).resolve().parents[3]
 
 pytestmark = pytest.mark.anyio
 
@@ -282,8 +285,105 @@ async def test_hard_cap_marks_job_failed(make_queue) -> None:  # type: ignore[no
         await asyncio.sleep(30)
         return HttpJobResult("ok")
 
-    jobs.register_http_handler("post_import", hang)
-    q = make_queue({1: ("post_import", "batch:1", "queued")})
+    jobs.register_http_handler("mf_refresh", hang)
+    q = make_queue({1: ("mf_refresh", "119551", "queued")})
+    q.results[1] = {"rows_written": 7}  # progress already stored on the row
     async with _client(q, hard_cap_s=0.05) as c:
         assert (await _post(c, {"job_id": 1})).status_code == 202
-    assert q.finished[1] == {"status": "failed", "result": None, "error": "hard_timeout"}
+    # the stored result is kept (result=None never overwrites it with NULL)
+    assert q.finished[1] == {
+        "status": "failed",
+        "result": {"rows_written": 7},
+        "error": "hard_timeout",
+    }
+
+
+async def test_hard_cap_post_import_is_partial_and_keeps_progress(make_queue) -> None:  # type: ignore[no-untyped-def]
+    async def hang(job: HttpJob) -> HttpJobResult:
+        await asyncio.sleep(30)
+        return HttpJobResult("ok")
+
+    jobs.register_http_handler("post_import", hang)
+    q = make_queue({1: ("post_import", "batch:1", "queued")})
+    progress = {"symbols_total": 3, "symbols_done": 1, "remaining": ["B", "C"]}
+    q.results[1] = progress
+    async with _client(q, hard_cap_s=0.05) as c:
+        assert (await _post(c, {"job_id": 1})).status_code == 202
+    assert q.finished[1]["status"] == "partial" and q.finished[1]["result"] == progress
+
+
+async def test_sec07_non_ascii_signature_is_401_not_500(make_queue) -> None:  # type: ignore[no-untyped-def]
+    calls = _ok_handler()
+    q = make_queue({5: ("post_import", "batch:1", "queued")})
+    body = json.dumps({"job_id": 5}).encode()
+    headers = [
+        (b"X-Timestamp", str(int(NOW)).encode()),
+        (b"X-Signature", b"ab\xe9\xff"),  # latin-1 decoded by the server: non-ASCII str
+        (b"Content-Type", b"application/json"),
+    ]
+    async with _client(q) as c:
+        r = await c.post("/run", content=body, headers=headers)
+    assert r.status_code == 401 and calls == []
+
+
+def test_signature_for_another_path_or_method_is_rejected() -> None:
+    body = b'{"job_id": 5}'
+    ts = str(int(NOW))
+    ok = sign(KEY, ts, "POST", "/run", body)
+    kw: dict[str, Any] = {"ts_header": ts, "body": body, "now": NOW}
+    assert verify(KEY, sig_header=ok, method="POST", path="/run", **kw)
+    assert not verify(KEY, sig_header=ok, method="POST", path="/other", **kw)
+    assert not verify(KEY, sig_header=ok, method="PUT", path="/run", **kw)
+    assert not verify(KEY, sig_header="é" * 64, method="POST", path="/run", **kw)
+
+
+async def test_oversized_body_is_413_before_authentication(make_queue) -> None:  # type: ignore[no-untyped-def]
+    calls = _ok_handler()
+    q = make_queue({5: ("post_import", "batch:1", "queued")})
+    big = b'{"job_id": 5, "pad": "' + b"x" * 10_000 + b'"}'
+
+    async def chunks() -> Any:
+        yield b"x" * 3000
+        yield b"y" * 3000
+
+    async with _client(q) as c:
+        r = await c.post("/run", content=big)  # unauthenticated and too large
+        streamed = await c.post("/run", content=chunks())  # no Content-Length
+    assert r.status_code == 413 and r.json()["error"]["code"] == "PAYLOAD_TOO_LARGE"
+    assert streamed.status_code == 413
+    assert calls == [] and q.rows[5][2] == "queued"
+
+
+# ------------------------------------------------------------------ shared golden vectors (Go caller)
+VECTORS = json.loads((REPO / "fixtures" / "worker_hmac_vectors.json").read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("case", VECTORS["signed"], ids=lambda c: c["name"])
+def test_golden_vectors_signed_by_the_go_caller_verify(case: dict[str, Any]) -> None:
+    """apps/api/internal/jobs.Sign must reproduce these signatures (Go test of the same file)."""
+    body = case["body"].encode()
+    assert (
+        sign(case["key"], str(case["ts"]), case["method"], case["path"], body) == case["signature"]
+    )
+    assert verify(
+        case["key"],
+        ts_header=str(case["ts"]),
+        sig_header=case["signature"],
+        method=case["method"],
+        path=case["path"],
+        body=body,
+        now=float(case["ts"]),
+    )
+
+
+@pytest.mark.parametrize("case", VECTORS["rejected"], ids=lambda c: c["name"])
+def test_golden_vectors_tamper_path_method_key_and_skew_are_rejected(case: dict[str, Any]) -> None:
+    assert not verify(
+        case["key"],
+        ts_header=str(case["ts"]),
+        sig_header=case["signature"],
+        method=case["method"],
+        path=case["path"],
+        body=case["body"].encode(),
+        now=float(case["now"]),
+    )

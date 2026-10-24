@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from worker import actions_db, analysis_db, jobs, mf_jobs
 from worker.db import create_pool
+from worker.notify import TelegramNotifier
 from worker.post_import import (
     PgPostImportStore,
     SymbolProcessor,
@@ -69,7 +70,10 @@ async def process_queued_jobs_job(ctx: JobContext) -> None:
     hooks = analysis_db.production_hooks(pool)
     try:
         summaries = await process_queued_work(
-            PgPostImportStore(pool), SymbolProcessor(pool, hooks=hooks), ctx, hooks=hooks
+            PgPostImportStore(pool),
+            SymbolProcessor(pool, notifier=TelegramNotifier(pool), hooks=hooks),
+            ctx,
+            hooks=hooks,
         )
         ctx.extra["jobs"] = summaries
         # docs/04 3.13: `predict` runs here once models exist (Phase 7, deferred by D-4).

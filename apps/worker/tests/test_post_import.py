@@ -39,6 +39,12 @@ class MemStore:
     async def mark_partial(self, job_id: int, result: dict[str, Any]) -> None:
         self.rows[job_id - 1].update(status="partial", result=result)
 
+    async def checkpoint(self, job_id: int, result: dict[str, Any]) -> None:
+        self.rows[job_id - 1]["result"] = result
+
+    async def set_stage(self, job_id: int, stage: str) -> None:
+        self.rows[job_id - 1].setdefault("stages", []).append(stage)
+
     async def enqueue_continuation(self, target: str, result: dict[str, Any]) -> int | None:
         if any(r["status"] in ("queued", "running") for r in self.rows):
             raise AssertionError("continuation inserted while the job is still active")
@@ -242,7 +248,7 @@ async def test_sys12_postgres_partial_continuation_and_process_queued_jobs(
     assert await process_queued_work(store, step, ctx, hooks=rec.hooks()) == []
     await pg_full.execute("UPDATE refresh_job SET requested_at = now() - interval '16 minutes'")
     summaries = await process_queued_work(store, step, JobContext(job="pq"), hooks=rec.hooks())
-    assert summaries == [{"job_id": rows[1]["id"], "status": "ok"}]
+    assert summaries == [{"job_id": rows[1]["id"], "kind": "post_import", "status": "ok"}]
     final = await pg_full.fetch("SELECT status, result FROM refresh_job ORDER BY id")
     assert [r["status"] for r in final] == ["partial", "ok"]
     assert json.loads(final[1]["result"])["symbols_done"] == 3
@@ -310,7 +316,7 @@ async def test_process_queued_jobs_stops_at_the_job_deadline_and_requeues(
 
     store = PgPostImportStore(pg_full)
     summaries = await process_queued_work(store, slow, ctx, hooks=Recorder().hooks())
-    assert summaries == [{"job_id": summaries[0]["job_id"], "status": "partial"}]
+    assert [(x["kind"], x["status"]) for x in summaries] == [("post_import", "partial")]
     rows = await pg_full.fetch("SELECT status, result FROM refresh_job ORDER BY id")
     assert [r["status"] for r in rows] == ["partial", "queued"]
     assert json.loads(rows[1]["result"])["remaining"] == ["CCC"]

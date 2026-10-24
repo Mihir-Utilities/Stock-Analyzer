@@ -150,7 +150,7 @@ class PgJobQueue:
     ) -> None:
         await self._pool.execute(
             "UPDATE refresh_job SET status = $2, finished_at = now(), error = $3, "
-            "result = $4::jsonb WHERE id = $1",
+            "result = COALESCE($4::jsonb, result) WHERE id = $1",
             job_id,
             status,
             error,
