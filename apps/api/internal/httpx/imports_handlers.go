@@ -102,6 +102,7 @@ func mapImportError(err error) error {
 		he   *importers.HasErrorsError
 		sl   *importers.SizeLimitError
 		uc   *importers.UploadCapError
+		dep  *importers.DependentsError
 		ve   *importers.ValidationError
 		mbe  *http.MaxBytesError
 		file = func(msg string) error { return ErrValidation(FieldError{Field: "file", Message: msg}) }
@@ -144,6 +145,9 @@ func mapImportError(err error) error {
 		return ErrNotFound("Import batch not found", nil)
 	case errors.Is(err, importers.ErrNotUndoable):
 		return ErrConflict("This batch cannot be undone: prices, instruments, holidays, instrument metadata and manual entries are corrected by importing again")
+	case errors.As(err, &dep):
+		details := map[string]any{"dependents": map[string]any{dep.Table: dep.Count}}
+		return NewError(http.StatusConflict, "UNDO_HAS_DEPENDENTS", "This batch cannot be undone: its rows are used by "+dep.Table+" (for example a portfolio adjustment of an imported corporate action). Remove the dependent rows first; nothing was changed", details)
 	case errors.Is(err, importers.ErrUndoExpired):
 		return ErrConflict("The 30-day undo window for this batch has passed")
 	case errors.Is(err, importers.ErrNoManualPeriod):

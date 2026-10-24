@@ -12,7 +12,7 @@ import (
 )
 
 const countHolidaysForYear = `-- name: CountHolidaysForYear :one
-SELECT count(*) FROM market_holiday WHERE holiday_date >= make_date($1::int, 1, 1) AND holiday_date < make_date($1::int + 1, 1, 1)
+SELECT count(*) FROM market_holiday WHERE segment = 'trading' AND holiday_date >= make_date($1::int, 1, 1) AND holiday_date < make_date($1::int + 1, 1, 1)
 `
 
 func (q *Queries) CountHolidaysForYear(ctx context.Context, year int32) (int64, error) {

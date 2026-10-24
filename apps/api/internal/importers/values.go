@@ -24,6 +24,7 @@ type RowIssue struct {
 }
 
 var (
+	reExponent  = regexp.MustCompile(`^[0-9]+(\.[0-9]+)?[eE][+-]?[0-9]+$`)
 	reISODate   = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 	reDMYDate   = regexp.MustCompile(`^(\d{1,2})-(\d{1,2})-(\d{4})$`)
 	reDMonYDate = regexp.MustCompile(`^(\d{1,2})-([A-Za-z]{3})-(\d{4})$`)
@@ -112,6 +113,8 @@ func CleanNumber(raw string) (string, error) {
 			hint = " (looks like a decimal comma)"
 		}
 		return "", fmt.Errorf("%q is ambiguous%s: a comma is only accepted as a thousands separator (1,234.56 or 1,23,456.78); write the decimal point as '.'", raw, hint)
+	case reExponent.MatchString(s):
+		return "", fmt.Errorf("%q: exponent notation not accepted; write the number in full (for example 100000)", raw)
 	default:
 		return "", fmt.Errorf("%q is not a number", raw)
 	}

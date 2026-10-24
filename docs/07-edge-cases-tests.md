@@ -132,6 +132,10 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | IMP-47 | `instrument_meta` semantics (B06b-9) | Sector/industry/company_type update, empty cell keeps the stored value, non-empty `index_tags` replace that stock's memberships, unknown or delisted symbol is a row error, batch not undoable | I |
 | IMP-48 | Manual-entry endpoints (B06b-10) | Numbers or numeric strings accepted, boolean cell 400, unknown field 400; 422 `details.fields` name the form field (`values.revenue`); unknown/old symbol 404; delisted 422 on `symbol`; each write leaves a `manual_form` batch with the note and queues `post_import`; 201 on insert, 200 on restatement | I |
 | IMP-49 | `fundamentals_long` rules (B06b-15) | Unknown `metric_key`, a unit that differs from the key's, `period_type` not Q/A, a non-quarter-end Q period and `shares_outstanding <= 0` are row errors; cross-metric warnings (net profit vs revenue) are reported once per period | F |
+| IMP-53 | Undo of corporate actions with dependents (B08-1) | A confirmed imported action with a `portfolio_adjustment` -> undo is 409 `UNDO_HAS_DEPENDENTS`, nothing deleted and the batch not marked undone; after the adjustment is removed the undo works; a stray FK violation (23503) maps to the same 409, never a 500 | I |
+| IMP-54 | Queue failure warning on every write (B06b-1) | With a failing enqueuer manual POST, manual DELETE and undo return `POST_IMPORT_NOT_QUEUED` and still save; a healthy queue adds no warning | I |
+| IMP-55 | Undo of a re-imported identical file (B08-5) | Import, re-import, undo the second: removed rows listed with `UNDO_REMOVES_EARLIER_IMPORT` and `earlier_batch_ids`; undo the older: `UNDO_REMOVED_NOTHING`; a different file gives no warning | I |
+| IMP-56 | Manual number and key hygiene (B08-6/7) | JSON number `1e5` -> 422 "exponent notation not accepted" (never accepted); `values` keys `Revenue` and `revenue` -> 422 "duplicate key", nothing written | I |
 
 ## INS: instruments
 | ID | Scenario | Required behavior | Test |
@@ -413,6 +417,7 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | SYS-29 | Detected-action note from worker-http and `process_queued_jobs` (docs/04 3.2) | Production wiring sends exactly one Telegram note per new action (none on a re-run); without `TELEGRAM_BOT_TOKEN`, without a linked chat or when the send fails it is skipped with a status and the job still succeeds | I |
 | SYS-30 | Two batches with the same symbols run at once (worker-http plus `process_queued_jobs`) | One `corporate_action` and one note per symbol, both jobs `ok` | I |
 | SYS-31 | 3.5-minute stop with a symbol in flight | The symbol in flight completes and is counted, the next one is not started, `remaining` and the continuation row hold the rest | U |
+| SYS-32 | Holiday year with clearing rows only (B08-9) | The seed counts only `trading` rows: a year with only `clearing` rows is seeded; same rule as calendar reads | I |
 
 ## F01 additions (app shell, tokens, security headers)
 | ID | Scenario | Required behavior | Test |

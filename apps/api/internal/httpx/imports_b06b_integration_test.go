@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -150,5 +151,38 @@ func TestManualEntryHTTP(t *testing.T) {
 	}
 	if e.count(`SELECT count(*) FROM import_batch WHERE kind = 'manual_form'`) != 5 {
 		t.Error("every manual write and delete leaves an audit batch")
+	}
+}
+
+// IMP-53: review B08-1, undoing an imported corporate action that has a portfolio adjustment is a 409 with
+// code UNDO_HAS_DEPENDENTS (never a 500) and changes nothing.
+func TestUndoCorporateActionsWithAdjustmentHTTP(t *testing.T) {
+	e := newImportEnv(t)
+	e.exec(`INSERT INTO instrument (symbol, name) VALUES ('AAA', 'AAA Ltd')`)
+	d := e.validate("corporate_actions", "symbol,ex_date,type,ratio_num,ratio_den,amount_per_share,purpose_text\nAAA,2026-02-10,split,10,2,,x\n")
+	cr := e.post("/imports/corporate_actions/commit", fmt.Sprintf(`{"upload_id":%q}`, d["upload_id"]))
+	c := decodeData(t, cr)
+	e.exec(`INSERT INTO portfolio_adjustment (instrument_id, corporate_action_id, effective_date, qty_multiplier)
+		SELECT instrument_id, id, ex_date, 5 FROM corporate_action`)
+	u := e.post(fmt.Sprintf("/imports/batches/%v/undo", c["batch_id"]), "")
+	if u.Code != 409 || errCode(t, u) != "UNDO_HAS_DEPENDENTS" || !strings.Contains(u.Body.String(), "portfolio_adjustment") {
+		t.Fatalf("undo: %d %s", u.Code, u.Body.String())
+	}
+	if e.count(`SELECT count(*) FROM corporate_action`) != 1 || e.count(`SELECT count(*) FROM portfolio_adjustment`) != 1 {
+		t.Error("nothing may change")
+	}
+}
+
+// IMP-56: review B08-6/7: a JSON number in exponent notation and keys differing only by case are clear 422s.
+func TestManualResultsExponentAndDuplicateHTTP(t *testing.T) {
+	e := newImportEnv(t)
+	e.exec(`INSERT INTO instrument (symbol, name) VALUES ('AAA', 'AAA Ltd')`)
+	r := e.post("/stocks/AAA/results", `{"basis":"consolidated","period_type":"Q","period_end":"2026-09-30","values":{"revenue":1e5}}`)
+	if r.Code != 422 || !fieldsOf(t, r)["values.revenue"] || !strings.Contains(r.Body.String(), "exponent notation not accepted") {
+		t.Errorf("1e5: %d %s", r.Code, r.Body.String())
+	}
+	r = e.post("/stocks/AAA/results", `{"basis":"consolidated","period_type":"Q","period_end":"2026-09-30","values":{"Revenue":1,"revenue":2}}`)
+	if r.Code != 422 || !strings.Contains(r.Body.String(), "duplicate key") {
+		t.Errorf("duplicate: %d %s", r.Code, r.Body.String())
 	}
 }

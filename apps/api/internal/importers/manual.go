@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -98,7 +99,11 @@ func (s *Service) writeManual(ctx context.Context, ref stockRef, note string, ro
 		id := sink.actionIDs[0]
 		res.ID = &id
 	}
-	res.PostImportJobID = s.queuePostImport(ctx, batchID, []string{ref.Symbol})
+	var queued bool
+	res.PostImportJobID, queued = s.queuePostImport(ctx, batchID, []string{ref.Symbol})
+	if !queued {
+		res.Warnings = append(res.Warnings, issue("post_import", WarnPostImportNotQueued, "the data is saved but analytics were not queued; import any file again or enqueue by hand"))
+	}
 	return res, nil
 }
 
@@ -131,7 +136,22 @@ func (s *Service) AddResults(ctx context.Context, symbol string, in ResultsEntry
 	}
 	cells := map[string]string{}
 	var unknown []FieldIssue
-	for col, raw := range in.Values {
+	// Go map order is random: keys that differ only by case or spaces would silently pick one.
+	norm := map[string]string{}
+	cols := make([]string, 0, len(in.Values))
+	for col := range in.Values {
+		cols = append(cols, col)
+	}
+	sort.Strings(cols)
+	for _, col := range cols {
+		k := strings.ToLower(strings.TrimSpace(col))
+		if first, dup := norm[k]; dup {
+			return nil, validation("values."+col, fmt.Sprintf("duplicate key: %q and %q are the same value; give it once", first, col))
+		}
+		norm[k] = col
+	}
+	for _, col := range cols {
+		raw := in.Values[col]
 		key := ""
 		for _, d := range resultMetrics {
 			if d.Col == strings.ToLower(strings.TrimSpace(col)) {
@@ -219,6 +239,8 @@ type DeleteResultsOutcome struct {
 	Deleted         int    `json:"deleted"`
 	BatchID         int64  `json:"batch_id"`
 	PostImportJobID *int64 `json:"post_import_job_id"`
+	// Warnings: POST_IMPORT_NOT_QUEUED when the queue failed after the delete (data is deleted).
+	Warnings []string `json:"warnings"`
 }
 
 // DeleteResults removes the manual values of one period (docs/03 section 14); CSV-imported values
@@ -269,5 +291,11 @@ func (s *Service) DeleteResults(ctx context.Context, symbol, periodType, periodE
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
-	return &DeleteResultsOutcome{Deleted: n, BatchID: batchID, PostImportJobID: s.queuePostImport(ctx, batchID, []string{canon})}, nil
+	out := &DeleteResultsOutcome{Deleted: n, BatchID: batchID, Warnings: []string{}}
+	var queued bool
+	out.PostImportJobID, queued = s.queuePostImport(ctx, batchID, []string{canon})
+	if !queued {
+		out.Warnings = append(out.Warnings, WarnPostImportNotQueued)
+	}
+	return out, nil
 }

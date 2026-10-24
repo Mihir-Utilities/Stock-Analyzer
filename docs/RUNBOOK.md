@@ -265,3 +265,10 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 
 - Next.js was bumped from 16.4.0 to 16.4.1 (owner approved) because `next build` failed with `SecurityFatalError`: 16.0.0 to 16.4.0 are affected by GHSA-2464-fhr4-w9xw, GHSA-p3m5-59mp-jv5r and GHSA-673q-mjm6-r5xr. `eslint-config-next` moved to the same version.
 - The advisory gate runs inside `next build` (it queries the npm advisory service). Any future advisory against the installed Next.js version will fail the web CI job until it is bumped, so merge Renovate PRs for `next` promptly.
+
+## 33. Import undo and manual-entry review fixes (T02, B06b, B08)
+
+- **Undo refused with 409 `UNDO_HAS_DEPENDENTS`:** an imported corporate action is used by a portfolio adjustment (B11). Nothing was changed. Open the portfolio, remove the adjustment for that action, then undo again. The undo never deletes portfolio data.
+- **Undo warnings:** `UNDO_REMOVES_EARLIER_IMPORT` means the same file had been imported before and a re-import re-tags the rows, so the undo also removed values that existed before this batch; overwritten values are never restored, so import the correct file again. `UNDO_REMOVED_NOTHING` means a later import took the rows over; undo the newest batch instead. `POST_IMPORT_NOT_QUEUED` (also on manual entries and manual deletes) means the data is saved but analytics were not queued: import any file again or enqueue by hand.
+- **Numbers:** exponent notation such as `1e5` is rejected on purpose ("exponent notation not accepted"); write 100000. Manual `values` keys that differ only by case are a 422.
+- **Holidays:** a year with only `clearing` holiday rows counts as having no holidays (calendar reads use the `trading` segment), so the seed fills it and `holidays_missing` is true until trading holidays exist.

@@ -3,10 +3,12 @@ package importers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // undoWindow is how long a batch can be undone (docs/01 section 7).
@@ -17,6 +19,23 @@ type UndoResult struct {
 	BatchID         int64  `json:"batch_id"`
 	Removed         int    `json:"removed"`
 	PostImportJobID *int64 `json:"post_import_job_id"`
+	// Warnings: POST_IMPORT_NOT_QUEUED (queue failed after the undo), UNDO_REMOVED_NOTHING (no row
+	// carried the batch id any more: a later import took the values over) and
+	// UNDO_REMOVES_EARLIER_IMPORT (an identical earlier file was re-imported, so the removed rows
+	// also existed before this batch; EarlierBatchIDs lists those batches).
+	Warnings        []string `json:"warnings"`
+	EarlierBatchIDs []int64  `json:"earlier_batch_ids"`
+}
+
+// DependentsError is the 409 of an undo (or delete) that would orphan owner data: the rows to remove
+// are referenced by other tables. Nothing is changed.
+type DependentsError struct {
+	Table string // the referencing table, e.g. portfolio_adjustment
+	Count int    // 0 when unknown (a foreign-key violation caught from the database)
+}
+
+func (e *DependentsError) Error() string {
+	return fmt.Sprintf("importers: rows are referenced by %s (%d)", e.Table, e.Count)
 }
 
 // undoTables maps an undoable kind to the table whose rows carry the batch id.
@@ -60,11 +79,21 @@ func (s *Service) Undo(ctx context.Context, id int64) (*UndoResult, error) {
 	if now.Sub(created) > undoWindow {
 		return nil, ErrUndoExpired
 	}
-	res := &UndoResult{BatchID: id}
+	res := &UndoResult{BatchID: id, Warnings: []string{}, EarlierBatchIDs: []int64{}}
+	if kind == KindCorporateActions {
+		var n int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM portfolio_adjustment pa JOIN corporate_action ca ON ca.id = pa.corporate_action_id
+			WHERE ca.import_batch_id = $1`, id).Scan(&n); err != nil {
+			return nil, err
+		}
+		if n > 0 {
+			return nil, &DependentsError{Table: "portfolio_adjustment", Count: n}
+		}
+	}
 	affected := map[int32]bool{}
 	rows, err := tx.Query(ctx, `DELETE FROM `+table+` WHERE import_batch_id = $1 RETURNING instrument_id`, id) //nolint:gosec // the table name comes from the constant undoTables map
 	if err != nil {
-		return nil, err
+		return nil, undoDBError(err)
 	}
 	for rows.Next() {
 		var inst int32
@@ -77,7 +106,33 @@ func (s *Service) Undo(ctx context.Context, id int64) (*UndoResult, error) {
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
+		return nil, undoDBError(err)
+	}
+	// An identical file imported earlier (same sha256, same kind, not undone) had all its rows
+	// re-tagged by this batch: the undo removes values that existed before this import too.
+	earlier, err := tx.Query(ctx, `SELECT e.id FROM import_batch e JOIN import_batch b ON b.id = $1
+		WHERE e.id <> b.id AND e.kind = b.kind AND e.sha256 IS NOT NULL AND e.sha256 = b.sha256
+		AND e.undone_at IS NULL AND e.id < b.id ORDER BY e.id`, id)
+	if err != nil {
 		return nil, err
+	}
+	for earlier.Next() {
+		var eid int64
+		if err := earlier.Scan(&eid); err != nil {
+			earlier.Close()
+			return nil, err
+		}
+		res.EarlierBatchIDs = append(res.EarlierBatchIDs, eid)
+	}
+	earlier.Close()
+	if err := earlier.Err(); err != nil {
+		return nil, err
+	}
+	if res.Removed == 0 {
+		res.Warnings = append(res.Warnings, "UNDO_REMOVED_NOTHING")
+	}
+	if res.Removed > 0 && len(res.EarlierBatchIDs) > 0 {
+		res.Warnings = append(res.Warnings, "UNDO_REMOVES_EARLIER_IMPORT")
 	}
 	if _, err := tx.Exec(ctx, `UPDATE import_batch SET undone_at = $2 WHERE id = $1`, id, now); err != nil {
 		return nil, err
@@ -89,8 +144,22 @@ func (s *Service) Undo(ctx context.Context, id int64) (*UndoResult, error) {
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
-	res.PostImportJobID = s.queuePostImport(ctx, id, symbols)
+	var queued bool
+	res.PostImportJobID, queued = s.queuePostImport(ctx, id, symbols)
+	if !queued {
+		res.Warnings = append(res.Warnings, WarnPostImportNotQueued)
+	}
 	return res, nil
+}
+
+// undoDBError turns a foreign-key violation (SQLSTATE 23503) into a DependentsError so a dependent
+// table the explicit check does not know can never surface as a 500.
+func undoDBError(err error) error {
+	var pg *pgconn.PgError
+	if errors.As(err, &pg) && pg.Code == "23503" {
+		return &DependentsError{Table: pg.TableName}
+	}
+	return err
 }
 
 func symbolsOf(ctx context.Context, tx pgx.Tx, set map[int32]bool) ([]string, error) {

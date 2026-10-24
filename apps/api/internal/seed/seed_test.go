@@ -104,6 +104,7 @@ func migrated(t *testing.T) *pgx.Conn {
 	return conn
 }
 
+// SYS-15: the seed creates one user and the defaults; a second run changes nothing and keeps owner edits and the password hash.
 func TestSeedCreatesOneUserAndDefaults(t *testing.T) {
 	conn := migrated(t)
 	ctx := context.Background()
@@ -167,6 +168,7 @@ func TestSeedCreatesOneUserAndDefaults(t *testing.T) {
 	}
 }
 
+// SYS-17: a plaintext or non-argon2id INITIAL_PASSWORD_HASH is refused and nothing is written.
 func TestSeedRejectsNonArgon2idHash(t *testing.T) {
 	conn := migrated(t)
 	for _, bad := range []string{"", "hunter2hunter2", "$2a$10$abcdefghijklmnopqrstuv"} {
@@ -179,6 +181,7 @@ func TestSeedRejectsNonArgon2idHash(t *testing.T) {
 	}
 }
 
+// SYS-16, SYS-32: only years with no trading-holiday rows are seeded (a clearing-only year counts as empty, B08-9); an empty year only warns.
 func TestSeedHolidaysOnlyForYearsWithoutRows(t *testing.T) {
 	conn := migrated(t)
 	ctx := context.Background()
@@ -194,7 +197,8 @@ func TestSeedHolidaysOnlyForYearsWithoutRows(t *testing.T) {
 	}
 	// Test fixture dates only (not a real exchange calendar).
 	cfg := `{"2030":[{"date":"2030-01-01","description":"fixture A"},{"date":"2030-02-01","description":"fixture B"}],
-	         "2031":[{"date":"2031-03-03","description":"fixture C"}], "2032":[]}`
+	         "2031":[{"date":"2031-03-03","description":"fixture C"}], "2032":[],
+	         "2033":[{"date":"2033-04-04","description":"fixture D"}]}`
 	if err := os.WriteFile(filepath.Join(dir, "market_holidays.json"), []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -202,22 +206,26 @@ func TestSeedHolidaysOnlyForYearsWithoutRows(t *testing.T) {
 	if _, err := conn.Exec(ctx, `INSERT INTO market_holiday (holiday_date, source) VALUES ('2031-05-05', 'import')`); err != nil {
 		t.Fatal(err)
 	}
+	// 2033 has only a clearing-segment row: calendar reads use segment 'trading', so the year still has no holidays.
+	if _, err := conn.Exec(ctx, `INSERT INTO market_holiday (holiday_date, segment, source) VALUES ('2033-06-06', 'clearing', 'import')`); err != nil {
+		t.Fatal(err)
+	}
 	hash, _ := passhash.Hash("a long test password")
 	res, err := seed.Run(ctx, conn, seed.Options{PasswordHash: hash, ConfigDir: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.HolidaysInserted != 2 {
-		t.Errorf("inserted = %d, want 2", res.HolidaysInserted)
+	if res.HolidaysInserted != 3 {
+		t.Errorf("inserted = %d, want 3", res.HolidaysInserted)
 	}
 	got := func(x []int) []int { sort.Ints(x); return x }
-	if g := got(res.YearsSeeded); len(g) != 1 || g[0] != 2030 {
+	if g := got(res.YearsSeeded); len(g) != 2 || g[0] != 2030 || g[1] != 2033 {
 		t.Errorf("seeded years = %v", g)
 	}
 	if g := got(res.YearsSkipped); len(g) != 1 || g[0] != 2031 {
 		t.Errorf("skipped years = %v", g)
 	}
-	if n := count(t, conn, `SELECT count(*) FROM market_holiday WHERE source='seed'`); n != 2 {
+	if n := count(t, conn, `SELECT count(*) FROM market_holiday WHERE source='seed'`); n != 3 {
 		t.Errorf("seed-source rows = %d", n)
 	}
 	if n := count(t, conn, `SELECT count(*) FROM market_holiday WHERE holiday_date >= '2031-01-01' AND holiday_date < '2032-01-01'`); n != 1 {
