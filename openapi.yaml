@@ -1446,7 +1446,7 @@ paths:
         - "$ref": "#/components/parameters/Cursor"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success. data = {items, next_cursor, attribution}; items are schemes, or funds with variants[] when group=true. Defaults to plan=direct and option=growth unless include_all=true. Percent figures are percent numbers; latest_nav is INR per unit."
           content:
             "application/json":
               schema:
@@ -1457,8 +1457,6 @@ paths:
           "$ref": "#/components/responses/Unprocessable"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
         default:
           description: "Error envelope"
           content:
@@ -1481,17 +1479,17 @@ paths:
             format: "int64"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success. data has meta, latest_nav, returns (r_1m..r_since, percent, null with return_reasons when history is shorter), risk, backfill (when no NAV rows yet) and attribution; warnings[] carries IDCW, merged/closed and metrics-pending notices."
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
         default:
           description: "Error envelope"
           content:
@@ -1532,7 +1530,7 @@ paths:
             default: false
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success. data.points = [[date, nav]...] downsampled to at most 2,000 points (INR per unit); data.log only echoes the requested axis scale."
           content:
             "application/json":
               schema:
@@ -1541,10 +1539,10 @@ paths:
           "$ref": "#/components/responses/Unauthenticated"
         "422":
           "$ref": "#/components/responses/Unprocessable"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
         default:
           description: "Error envelope"
           content:
@@ -1590,7 +1588,7 @@ paths:
             format: "int64"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success. Money fields are INR strings; xirr_pct and absolute_return_pct are percent numbers or null; skipped_installments counts those before the first NAV."
           content:
             "application/json":
               schema:
@@ -1599,10 +1597,10 @@ paths:
           "$ref": "#/components/responses/Unauthenticated"
         "422":
           "$ref": "#/components/responses/Unprocessable"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
         default:
           description: "Error envelope"
           content:
@@ -1630,7 +1628,7 @@ paths:
           description: "Default 3Y."
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success. Series rebased to 100 at the first common date; table has return, volatility and drawdown per scheme (percent); different_starts flags unequal histories."
           content:
             "application/json":
               schema:
@@ -1639,10 +1637,10 @@ paths:
           "$ref": "#/components/responses/Unauthenticated"
         "422":
           "$ref": "#/components/responses/Unprocessable"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
         default:
           description: "Error envelope"
           content:
@@ -1657,7 +1655,7 @@ paths:
       summary: "Distinct categories for filters. (docs/03 section 10)"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success. data.items is the list of category names of active schemes."
           content:
             "application/json":
               schema:
@@ -1666,8 +1664,6 @@ paths:
           "$ref": "#/components/responses/Unauthenticated"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
         default:
           description: "Error envelope"
           content:

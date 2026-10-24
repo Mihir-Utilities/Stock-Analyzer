@@ -49,6 +49,9 @@ func (rt route) handler(d Deps) http.Handler {
 	if h := stockHandler(rt, d); h != nil { // B03 (stocks_handlers.go)
 		return h
 	}
+	if h := mfHandler(rt, d); h != nil { // B10 (mf_handlers.go)
+		return h
+	}
 	switch rt.Kind {
 	case kindHealthz:
 		return http.HandlerFunc(healthz)
