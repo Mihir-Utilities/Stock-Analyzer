@@ -4,9 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/url"
-
-	"github.com/go-chi/chi/v5"
 
 	"github.com/india-analyzer/api/internal/ownerdata"
 )
@@ -29,11 +26,9 @@ func ownerDataHandler(rt route, d Deps) http.Handler {
 	svc := d.OwnerData
 	run := func(call func(r *http.Request, symbol string) (ownerdata.Result, error)) http.Handler {
 		return Adapt(func(w http.ResponseWriter, r *http.Request) error {
-			sym := chi.URLParam(r, "symbol")
-			if dec, err := url.PathUnescape(sym); err == nil {
-				sym = dec
-			} else {
-				return ErrNotFound("Instrument not found", map[string]any{"symbol": sym})
+			sym, err := pathSymbol(r)
+			if err != nil {
+				return err
 			}
 			res, err := call(r, sym)
 			if err != nil {

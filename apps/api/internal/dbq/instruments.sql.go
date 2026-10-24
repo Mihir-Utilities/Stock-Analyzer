@@ -65,7 +65,7 @@ func (q *Queries) GetPredictionsAsOf(ctx context.Context, instrumentID int32) (p
 
 const getPriceStats = `-- name: GetPriceStats :one
 SELECT max(trade_date)::date AS last_bar, min(trade_date)::date AS first_bar, count(*)::int AS bars
-FROM price_daily WHERE instrument_id = $1
+FROM price_daily WHERE instrument_id = $1 AND NOT suspect
 `
 
 type GetPriceStatsRow struct {
@@ -74,6 +74,7 @@ type GetPriceStatsRow struct {
 	Bars     int32
 }
 
+// Valid (non-suspect) bars only, consistent with GetValidBarRange (BRK-07, BRK-08).
 func (q *Queries) GetPriceStats(ctx context.Context, instrumentID int32) (GetPriceStatsRow, error) {
 	row := q.db.QueryRow(ctx, getPriceStats, instrumentID)
 	var i GetPriceStatsRow
@@ -169,7 +170,7 @@ SELECT i.id, i.symbol, i.name,
    | CASE WHEN EXISTS (SELECT 1 FROM index_constituent c WHERE c.instrument_id = i.id
                        AND upper(replace(c.index_name, ' ', '')) = 'NIFTY50') THEN 64 ELSE 0 END
    | CASE WHEN EXISTS (SELECT 1 FROM index_constituent c WHERE c.instrument_id = i.id
-                       AND upper(replace(c.index_name, ' ', '')) IN ('NIFTY50', 'NIFTY100', 'NIFTYNEXT50')) THEN 128 ELSE 0 END
+                       AND upper(replace(c.index_name, ' ', '')) IN ('NIFTY50', 'NIFTY100', 'NEXT50', 'NIFTYNEXT50')) THEN 128 ELSE 0 END
   )::int AS flags
 FROM instrument i
 ORDER BY i.symbol

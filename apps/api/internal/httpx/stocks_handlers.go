@@ -4,11 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
-
-	"github.com/go-chi/chi/v5"
 
 	"github.com/india-analyzer/api/internal/instruments"
 	"github.com/india-analyzer/api/internal/pagination"
@@ -80,13 +77,9 @@ func stocksSearch(svc StockService, w http.ResponseWriter, r *http.Request) erro
 }
 
 func stocksProfile(svc StockService, w http.ResponseWriter, r *http.Request) error {
-	sym := chi.URLParam(r, "symbol")
-	// chi hands over the raw (still percent-encoded) segment when the request carries a RawPath
-	// (M%26M); decode it once. A malformed escape cannot name an instrument.
-	if dec, err := url.PathUnescape(sym); err == nil {
-		sym = dec
-	} else {
-		return ErrNotFound("Instrument not found", map[string]any{"symbol": sym})
+	sym, err := pathSymbol(r)
+	if err != nil {
+		return err
 	}
 	res, err := svc.Open(r.Context(), sym)
 	if err != nil {

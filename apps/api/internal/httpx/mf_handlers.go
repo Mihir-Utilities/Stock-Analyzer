@@ -42,7 +42,7 @@ func mfHandler(rt route, d Deps) http.Handler {
 			if err != nil {
 				return mapMFError(err)
 			}
-			WriteData(w, http.StatusOK, res, WithMeta(NewMeta(time.Now(), mfSource, false, 0)))
+			WriteData(w, http.StatusOK, res, mfMeta(res.Freshness))
 			return nil
 		})
 	case "/mf/categories":
@@ -162,8 +162,8 @@ func mapMFError(err error) error {
 	case errors.As(err, &nd):
 		return ErrDataUnavailable("no_nav_yet")
 	case errors.As(err, &nc):
-		return NewError(http.StatusUnprocessableEntity, "NO_COMMON_DATES",
-			"The schemes share no NAV date in this range", nil)
+		return NewError(http.StatusUnprocessableEntity, CodeUnprocessable,
+			"The schemes share no NAV date in this range", map[string]any{"reason": "no_common_dates"})
 	}
 	return err
 }

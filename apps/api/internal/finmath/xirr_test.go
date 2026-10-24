@@ -51,3 +51,23 @@ func TestXIRRNoSolution(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// All flows on one date that sum to zero: NPV is identically zero, there is no rate.
+func TestXIRRSameDateZeroSum(t *testing.T) {
+	d := day("2020-01-01")
+	r, err := XIRR([]CashFlow{{d, -1000}, {d, 1000}})
+	if !errors.Is(err, ErrNoSignChange) {
+		t.Fatalf("rate=%v err=%v, want ErrNoSignChange", r, err)
+	}
+}
+
+// The iteration limit must surface as an error, never as a half-converged rate.
+func TestXIRRNonConvergence(t *testing.T) {
+	f := func(x float64) float64 { return x - 0.1234567 }
+	if _, err := brent(f, -0.9999, 100, 1); !errors.Is(err, ErrNoConvergence) {
+		t.Fatalf("err = %v, want ErrNoConvergence", err)
+	}
+	if r, err := brent(f, -0.9999, 100, maxIter); err != nil || math.Abs(r-0.1234567) > 1e-6 {
+		t.Fatalf("converging case: %v %v", r, err)
+	}
+}

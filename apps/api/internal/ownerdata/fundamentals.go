@@ -37,13 +37,14 @@ type BasisCount struct {
 
 // FundamentalsInput is everything the pure builder needs.
 type FundamentalsInput struct {
-	Requested   string // consolidated | standalone | auto
-	PeriodType  string // Q | A
-	CompanyType string
-	Bases       []BasisCount
-	Rows        func(basis string) []FundRow // rows of the chosen basis (called at most once)
-	MetaStatus  string                       // fundamental_meta.status, "" when absent
-	Snapshot    json.RawMessage              // analysis_snapshot.indicators.fundamentals, may be empty
+	Requested    string // consolidated | standalone | auto
+	PeriodType   string // Q | A
+	CompanyType  string
+	Bases        []BasisCount
+	Rows         func(basis string) []FundRow // rows of the chosen basis (called at most once)
+	MetaStatus   string                       // fundamental_meta.status, "" when absent
+	Snapshot     json.RawMessage              // analysis_snapshot.indicators.fundamentals, may be empty
+	SnapshotAsOf *time.Time                   // analysis_snapshot.as_of (a date), nil without a snapshot
 }
 
 // Fundamentals is `data` of GET /stocks/{symbol}/fundamentals.
@@ -62,6 +63,7 @@ type Fundamentals struct {
 	MetricsReason     *string               `json:"metrics_reason"`
 	Derived           map[string][]*float64 `json:"derived"`
 	DerivedReason     *string               `json:"derived_reason"`
+	DerivedAsOf       *string               `json:"derived_as_of"` // as_of date of the snapshot behind derived, ratios and valuation
 	Ratios            map[string]*float64   `json:"ratios"`
 	RatiosReason      *string               `json:"ratios_reason"`
 	Valuation         map[string]any        `json:"valuation"`
@@ -72,6 +74,8 @@ type Fundamentals struct {
 	LastUpdated       *string               `json:"last_updated"`
 	LastUpdatedSource *string               `json:"last_updated_source"`
 	Warnings          []string              `json:"-"`
+	DerivedStale      bool                  `json:"-"` // the snapshot is older than the newest stored value
+	MixedSources      []string              `json:"-"` // metrics whose periods come from more than one source
 	updatedAt         time.Time
 }
 
@@ -167,6 +171,7 @@ func BuildFundamentals(in FundamentalsInput) (Fundamentals, error) {
 	}
 
 	latest := map[string]int{}
+	sources := map[string]map[string]bool{}
 	updatedSource := ""
 	for k, r := range win {
 		i, ok := idx[k.end]
@@ -180,6 +185,10 @@ func BuildFundamentals(in FundamentalsInput) (Fundamentals, error) {
 		}
 		v := r.Value
 		series[i] = &v
+		if sources[k.key] == nil {
+			sources[k.key] = map[string]bool{}
+		}
+		sources[k.key][r.Source] = true
 		if r.FetchedAt.After(out.updatedAt) {
 			out.updatedAt, updatedSource = r.FetchedAt, r.Source
 		}
@@ -190,6 +199,13 @@ func BuildFundamentals(in FundamentalsInput) (Fundamentals, error) {
 			latest[k.key] = i
 		}
 	}
+
+	for k, set := range sources {
+		if len(set) > 1 {
+			out.MixedSources = append(out.MixedSources, k)
+		}
+	}
+	sort.Strings(out.MixedSources)
 
 	if len(all) == 0 {
 		out.Status = "none"
@@ -287,6 +303,14 @@ func applySnapshot(out *Fundamentals, in FundamentalsInput, basis string, period
 		out.DerivedReason, out.RatiosReason, out.ValuationReason = &r, &r, &r
 		return nil
 	}
+	if in.SnapshotAsOf != nil {
+		d := in.SnapshotAsOf.Format(time.DateOnly)
+		out.DerivedAsOf = &d
+		// The snapshot is stale when a stored value was fetched on a later IST day than its as_of.
+		if !out.updatedAt.IsZero() && istDate(out.updatedAt).After(*in.SnapshotAsOf) {
+			out.DerivedStale = true
+		}
+	}
 	pos := map[string]int{}
 	for i, p := range node.Periods {
 		pos[p] = i
@@ -311,4 +335,10 @@ func applySnapshot(out *Fundamentals, in FundamentalsInput, basis string, period
 		out.Valuation["pe_basis"] = v
 	}
 	return nil
+}
+
+// istDate is the IST calendar date of t as a UTC-midnight time (comparable with DATE columns).
+func istDate(t time.Time) time.Time {
+	ist := t.In(time.FixedZone("IST", 5*3600+30*60))
+	return time.Date(ist.Year(), ist.Month(), ist.Day(), 0, 0, 0, 0, time.UTC)
 }

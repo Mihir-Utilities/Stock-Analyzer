@@ -290,3 +290,16 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | D06-11 | NAV alerts: evaluation points and the "1 business day" NAV freshness | Evaluated in the EOD run only (no hook after `mf_refresh`); freshness is moot because only NAV rows newer than the last evaluated one can fire | `alerts_db.py` |
 | D06-12 | Recurring alert, bar swallowed by the cooldown | That bar counts as evaluated; the next qualifying bar after the cooldown fires (re-arm rule unchanged) | `alerts_eval.py` |
 | D06-13 | Who schedules the 19:30 EOD run | The CLI job `evaluate_alerts` exists (`python -m worker run evaluate_alerts`); no GitHub schedule workflow exists yet for any job, so none was added | docs/RUNBOOK.md 23 |
+
+## B03/B04/B05/B10 read-API review fixes (Claude, 2026-10-24; owner approved the items, values below are mine)
+| # | Question | Choice made | Where |
+|---|---|---|---|
+| R-B03-1 | docs/03 names `NEXT50`; the code matched `NIFTYNEXT50` | Both match (after space/case normalisation) with `NIFTY50` and `NIFTY100`; owner tags such as `NIFTY NEXT 50` keep working | `queries/instruments.sql` |
+| R-B04-1 | `volume` with `adjusted=true` is not split-adjusted (docs/03 and docs/05 are silent) | **Owner decision needed.** Interim: volume is always the stored raw volume; prices are adjusted. If wanted: volume x (cumulative split factor), computed in the worker like `adj_close` | `internal/prices` |
+| R-B05-1 | Staleness of `derived`/`ratios`/`valuation` (snapshot vs entered values) | `derived_as_of` = snapshot `as_of`; warning `DERIVED_STALE` when the newest returned value was fetched on a later IST day than the snapshot. `MIXED_SOURCES` is a warning (no new field) listing metrics whose periods mix sources | `internal/ownerdata` |
+| R-B05-2 | Research link placeholders in a URL path | A space is `%20` in the path part and `+` after `?`/`#`; `&` is `%26` in both | `internal/ownerdata/links.go` |
+| R-B10-3 | docs/03 section 1 said MF NAV stale after "2 business days"; section 10 and B10-3 said 4 calendar days | Spec text reconciled to the implemented 4 calendar days (long weekend plus one day). **Owner to confirm**; a 2-business-day rule would flag every Monday/Tuesday after a weekend as stale only if Friday's NAV is not yet published | `docs/03`, `internal/mf/service.go` |
+| R-B10-4 | SIP installment whose next NAV falls after `end` (a Saturday `end` and `day` equal to it) | Not executed; counted in `skipped_installments` with the `INSTALLMENTS_SKIPPED` warning (consistent with docs/05 9.4: value is at the NAV on or before `end`, so a later purchase cannot be valued). The alternative, a 422, would reject valid requests | `internal/mf/calc.go` |
+| R-B10-5 | Search `latest_nav` source | The cache row (`end_nav` with `end_date`); without a cache row `latest_nav` is null and `last_nav_date` is the scheme's own | `internal/mf/service.go` |
+| R-B10-6 | Error codes outside docs/03 section 1 (`NO_COMMON_DATES`) | `422 UNPROCESSABLE` with `details.reason`; no private codes | `internal/httpx/mf_handlers.go` |
+| R-B03-2 | NUL bytes and invalid UTF-8 in text inputs | Filters, cursors: 422 with `details.fields`; path symbols: 404. One helper (`internal/validate`) | `internal/validate` |

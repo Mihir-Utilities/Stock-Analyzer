@@ -16,6 +16,7 @@ import (
 
 	"github.com/india-analyzer/api/internal/dbq"
 	"github.com/india-analyzer/api/internal/pagination"
+	"github.com/india-analyzer/api/internal/validate"
 )
 
 // Index flag bits (docs/03 section 3). Bit 1 (broker_ok) is always 0 in manual price mode (D-1).
@@ -114,7 +115,9 @@ func ParseSearch(v map[string][]string) (SearchParams, error) {
 	p := SearchParams{Kind: "equity", Status: "active"}
 	if q, ok := get("q"); ok {
 		q = strings.TrimSpace(q)
-		if q == "" {
+		if !validate.Text(q) {
+			fe = append(fe, FieldError{"q", "must be valid text without NUL bytes"})
+		} else if q == "" {
 			fe = append(fe, FieldError{"q", "must be at least 1 character"})
 		} else if utf8.RuneCountInString(q) > maxFilterLen {
 			fe = append(fe, FieldError{"q", "must be at most 100 characters"})
@@ -127,7 +130,9 @@ func ParseSearch(v map[string][]string) (SearchParams, error) {
 	}{{"index", &p.Index}, {"sector", &p.Sector}} {
 		if x, ok := get(f.key); ok {
 			x = strings.TrimSpace(x)
-			if utf8.RuneCountInString(x) > maxFilterLen {
+			if !validate.Text(x) {
+				fe = append(fe, FieldError{f.key, "must be valid text without NUL bytes"})
+			} else if utf8.RuneCountInString(x) > maxFilterLen {
 				fe = append(fe, FieldError{f.key, "must be at most 100 characters"})
 			}
 			*f.dst = x
@@ -193,7 +198,7 @@ func (s *Service) Search(ctx context.Context, p SearchParams) (pagination.Page[S
 		}
 		var k cursorKey
 		if json.Unmarshal(raw[0], &k.Rank) != nil || json.Unmarshal(raw[1], &k.NegSim) != nil ||
-			json.Unmarshal(raw[2], &k.Symbol) != nil || k.Rank < 0 || k.Rank > 3 {
+			json.Unmarshal(raw[2], &k.Symbol) != nil || k.Rank < 0 || k.Rank > 3 || !validate.Text(k.Symbol) {
 			return pagination.Page[StockItem]{}, ErrInvalidCursor
 		}
 		arg.HasCursor, arg.CurRank, arg.CurNegSim, arg.CurSymbol = true, k.Rank, k.NegSim, k.Symbol
@@ -291,7 +296,7 @@ type ProfileResult struct {
 // enqueued (D-1). An alias answers with the redirect and has no side effects.
 func (s *Service) Open(ctx context.Context, symbol string) (ProfileResult, error) {
 	symbol = strings.TrimSpace(symbol)
-	if symbol == "" {
+	if symbol == "" || !validate.Text(symbol) {
 		return ProfileResult{}, ErrNotFound
 	}
 	found, err := s.q.FindInstrumentBySymbol(ctx, symbol)

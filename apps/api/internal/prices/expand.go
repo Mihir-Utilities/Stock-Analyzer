@@ -5,6 +5,9 @@ import (
 	"fmt"
 )
 
+// MaxSeriesPoints caps every indicator series at the last 750 trading days (docs/03 section 4).
+const MaxSeriesPoints = 750
+
 // alignedAnalysisKeys of snapshot.analysis are aligned to series.dates (D05a-A6); the other keys
 // (histogram, month_year, calendar) carry their own labels and pass through.
 var alignedAnalysisKeys = []string{"drawdown", "rolling_vol_21", "rolling_vol_63", "rolling_beta_252"}
@@ -48,12 +51,14 @@ func ExpandIndicators(indicators, scores []byte) (map[string]any, error) {
 
 // pairs zips an array (or a map of arrays) with the shared dates. A length mismatch is not
 // papered over: values without a date are dropped from the end and the rest are kept aligned.
+// Only the most recent MaxSeriesPoints pairs are returned.
 func pairs(dates []any, v any) any {
 	switch x := v.(type) {
 	case []any:
 		n := min(len(dates), len(x))
-		out := make([][2]any, 0, n)
-		for i := 0; i < n; i++ {
+		start := max(0, n-MaxSeriesPoints) // keep the most recent points
+		out := make([][2]any, 0, n-start)
+		for i := start; i < n; i++ {
 			out = append(out, [2]any{dates[i], x[i]})
 		}
 		return out

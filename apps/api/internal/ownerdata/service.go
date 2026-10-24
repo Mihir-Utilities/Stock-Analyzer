@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/india-analyzer/api/internal/dbq"
+	"github.com/india-analyzer/api/internal/validate"
 )
 
 // Errors the handlers map onto the envelope.
@@ -71,7 +72,7 @@ type target struct {
 // the stock profile): an alias yields a redirect.
 func (s *Service) resolve(ctx context.Context, symbol string) (t target, redirect string, err error) {
 	symbol = strings.TrimSpace(symbol)
-	if symbol == "" {
+	if symbol == "" || !validate.Text(symbol) {
 		return t, "", ErrNotFound
 	}
 	row, err := s.q.FindInstrumentForOwnerData(ctx, symbol)
@@ -160,6 +161,10 @@ func (s *Service) Fundamentals(ctx context.Context, symbol, basis, period string
 	switch {
 	case serr == nil:
 		in.Snapshot = json.RawMessage(snap.Fundamentals)
+		if snap.AsOf.Valid {
+			a := snap.AsOf.Time
+			in.SnapshotAsOf = &a
+		}
 	case !errors.Is(serr, pgx.ErrNoRows):
 		return Result{}, serr
 	}
@@ -174,6 +179,12 @@ func (s *Service) Fundamentals(ctx context.Context, symbol, basis, period string
 	res := Result{Data: data, AsOf: now, Source: "none"}
 	for _, w := range data.Warnings {
 		res.Warnings = append(res.Warnings, Warning{"BASIS_NOT_MIXED", w})
+	}
+	if len(data.MixedSources) > 0 {
+		res.Warnings = append(res.Warnings, Warning{"MIXED_SOURCES", "source_by_metric names the source of the latest period only; these metrics mix sources across periods: " + strings.Join(data.MixedSources, ", ")})
+	}
+	if data.DerivedStale {
+		res.Warnings = append(res.Warnings, Warning{"DERIVED_STALE", "Derived figures, ratios and valuation come from an older analysis snapshot than the latest entered values; they refresh on the next recompute."})
 	}
 	if u := data.UpdatedAt(); !u.IsZero() {
 		ref := u

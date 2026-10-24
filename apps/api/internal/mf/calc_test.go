@@ -65,6 +65,20 @@ func TestDownsample(t *testing.T) {
 	}
 }
 
+// A single NAV spike between stride samples must survive downsampling (LTTB, not an even stride).
+func TestDownsampleKeepsNavPeak(t *testing.T) {
+	p := daily("2000-01-01", 10000, 10, 0)
+	p[4321].NAV = 500
+	out := Downsample(p, MaxPoints)
+	found := false
+	for _, x := range out {
+		found = found || x.NAV == 500
+	}
+	if !found || len(out) != MaxPoints {
+		t.Fatalf("peak lost (found=%v, len=%d)", found, len(out))
+	}
+}
+
 func sipIn(amount, start, end string, day int) SIPInput {
 	return SIPInput{Amount: decimal.RequireFromString(amount), Start: d(start), End: d(end), Day: day}
 }
@@ -156,5 +170,30 @@ func TestCommonDatesAndRebase(t *testing.T) {
 	ra, rb := Rebase(a, cd), Rebase(b, cd)
 	if ra[0] != 100 || rb[0] != 100 || math.Abs(ra[1]-12.0/11*100) > 1e-9 || math.Abs(rb[1]-80) > 1e-9 {
 		t.Fatalf("%v %v", ra, rb)
+	}
+}
+
+// MF-10 variant (MF-96): `end` is a Saturday and the installment day equals it. The next NAV
+// (Monday) is after End, so the installment is not executed (no post-End purchase valued at the
+// End NAV, no XIRR flow dated after the terminal flow).
+func TestSIPInstallmentOnNonNAVDayAtEndIsSkipped(t *testing.T) {
+	var navs []NavPoint
+	for day := d("2024-01-01"); !day.After(d("2024-03-31")); day = day.AddDate(0, 0, 1) {
+		if wd := day.Weekday(); wd != time.Saturday && wd != time.Sunday {
+			navs = append(navs, NavPoint{Date: day, NAV: 10 + float64(day.YearDay())/10})
+		}
+	}
+	// 2024-03-02 is a Saturday; installments on day 2: Jan 2, Feb 2 (Fri), Mar 2 (Sat).
+	r := SimulateSIP(navs, sipIn("1000", "2024-01-01", "2024-03-02", 2))
+	if len(r.Installments) != 2 || r.Skipped != 1 {
+		t.Fatalf("executed=%d skipped=%d", len(r.Installments), r.Skipped)
+	}
+	for _, in := range r.Installments {
+		if in.NavDate.After(d("2024-03-02")) {
+			t.Fatalf("installment executed after End: %+v", in)
+		}
+	}
+	if r.EndNavDate == nil || !r.EndNavDate.Equal(d("2024-03-01")) {
+		t.Fatalf("end nav date = %v", r.EndNavDate)
 	}
 }

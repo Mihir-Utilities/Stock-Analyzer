@@ -166,6 +166,8 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | FND-18 | Worker snapshot not yet written or period missing in it (B05) | `derived`/`ratios`/`valuation` null with `*_reason = not_computed`; derived series aligned to the returned periods by date | U/I |
 | FND-19 | Invalid `basis` or `period` query (B05) | 422 with `details.fields[]` | I |
 | FND-20 | Manual results entry and delete (B06b) | A manual period is stored with source `manual` next to any `csv_import` value; re-entering restates it (batch id updated); a unit warning still saves and is returned with its field; `DELETE` removes only manual values (404 when none, 422 for a bad query) and leaves an audit batch | I |
+| FND-90 | Derived block older than the entered values (B05 review) | `derived_as_of` = snapshot `as_of` (null without a snapshot); `DERIVED_STALE` when a value was fetched on a later IST day | Go: `TestDerivedAsOfAndStale`, `TestFundamentalsDerivedAsOfAndStaleWarning` |
+| FND-91 | A metric whose periods come from different sources | `MIXED_SOURCES` warning lists it; `source_by_metric` stays the latest period's source | Go: `TestSourceByMetricFlagsMixedSources`, `TestFundamentalsMixedSourcesWarning` |
 
 ## SHP: shareholding
 | ID | Scenario | Required behavior | Test |
@@ -218,6 +220,15 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | MF-93 | SIP shorter than 30 days between first execution and end | XIRR null with `xirr_reason: period_too_short`; absolute return still shown (docs/05 8.3) | Go: `TestSIPNoInstallmentsAndShortPeriod` |
 | MF-94 | Compare input | 2-5 distinct numeric codes else 422; unknown code 404; code without NAV 404 `DATA_UNAVAILABLE`; no shared NAV date in the window 422 `NO_COMMON_DATES`; invalid `range` 422 | Go: `TestMFCompare` |
 | MF-95 | Scheme search plan after a bulk `sync_mf_schemes` insert | After autovacuum (or `gin_clean_pending_list`) the planner uses `mf_scheme_name_trgm`; the 10,000-scheme search is < 300 ms and cursor pages are complete and disjoint | Go: `TestMF12SearchUsesTrigramIndexAndIsFast` |
+| MF-96 | SIP `end` on a Saturday and `day` equal to it (MF-10 variant) | The installment whose next NAV is after `end` is skipped and counted; no post-End purchase, no cash flow dated after the terminal flow | Go: `TestSIPInstallmentOnNonNAVDayAtEndIsSkipped` |
+| MF-97 | Search after a NAV refresh and before the cache recompute | `latest_nav` and `last_nav_date` come from the same cache row | Go: `TestMFSearchNavDateMatchesNav` |
+| MF-98 | NUL byte or invalid UTF-8 in `q`, `category`, `fund_house` | 422 `UNPROCESSABLE`, never 500 | Go: `TestMFParamsRejectNulAndInvalidUTF8` |
+| MF-99 | Search `meta.as_of` | Newest NAV date on the page; now only when the page has none | Go: `TestMFSearchMetaAsOfIsDataDate` |
+| MF-100 | Scheme detail with no NAV rows | Every `r_*` key present as `null` with reason `no_nav_yet` | Go: `TestMFDetailNoNavHasNullReturnsWithReasons` |
+| MF-101 | Cached `rolling_1y` and `nav_jumps` | Reach the detail response unchanged | Go: `TestMFDetailPassesRollingAndJumpsThrough` |
+| MF-102 | Compare with no shared NAV date | 422 `UNPROCESSABLE`, `details.reason = no_common_dates` (no private code) | Go: `TestMFCompareNoCommonDatesUsesDocumentedCode` |
+| MF-103 | NAV series above 2,000 points with one spike | LTTB keeps the spike; first and last kept | Go: `TestDownsampleKeepsNavPeak` |
+| MF-104 | XIRR with all flows on one date summing to zero, or no convergence in 200 iterations | `ErrNoSignChange` / `ErrNoConvergence` (never -0.9999 or a half-converged rate); SIP shows `xirr_pct` null with `no_solution` | Go: `TestXIRRSameDateZeroSum`, `TestXIRRNonConvergence` |
 
 ## PF: portfolio
 | ID | Scenario | Required behavior | Test |
@@ -337,6 +348,14 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | API-29 | Series expansion (B04, D05a-A6) | Stored columnar `series` returns as `[[date, value]]` pairs, nulls kept at warm-up, no `dates`/`format` keys | U |
 | API-36 | Detected split on prices/indicators (B04) | `UNCONFIRMED_ACTION` warning, no marker; confirmed split gives a marker `{date,type,label}`; rejected ignored | I |
 | API-37 | Prices/indicators validation and aliases (B04) | Bad `range`/`adjusted`/`downsample` is 422 with `details.fields`; an old symbol answers `redirect_symbol`; bars but no snapshot gives `DATA_UNAVAILABLE` reason `no_history` | I |
+| API-90 | Index tags `NEXT50`, `NIFTY 100`, `Next 50` (B03 review) | All three set `in_nifty100`; an unrelated index does not | Go: `TestIndexFlagsNext50` |
+| API-91 | Profile of a stock whose only bars are suspect (B03/B04 review, BRK-07, BRK-08) | `no_prices` true, `prices_as_of` null, hint shown, exactly like `/prices` (404 `no_prices_imported`); with an older valid bar `prices_as_of` is that bar | Go: `TestProfileIgnoresSuspectBars` |
+| API-92 | NUL byte or invalid UTF-8 in `q`, `sector`, `index` or a path symbol (B03/B04 review) | Filters: 422 `UNPROCESSABLE`; path symbols (`/stocks/{symbol}`, `/prices`, `/indicators`): 404; never 500 | Go: `TestNulAndInvalidUTF8AreRejected` |
+| API-93 | Percent in a path symbol | Decoded exactly once: `A%2541` finds the symbol `A%41`, not `AA` | Go: `TestSymbolPathIsNotDoubleDecoded` |
+| API-94 | `/prices` and `/indicators` without a session | 401 | Go: `TestPricesRequireSession` |
+| API-95 | 41 years of daily bars with `range=MAX` (LTTB branch) | Exactly 2,000 weekly points, first and last candle kept, < 150 kB gzip | Go: `TestPricesMaxRangeBudgetLTTB` |
+| API-96 | Indicator series longer than 750 points | Every series pair array is cut to the most recent 750 | Go: `TestIndicatorsSeriesCap750` |
+| API-97 | Research link placeholder inside the URL path | Spaces become `%20` (not `+`); placeholders after `?` keep query escaping | Go: `TestRenderLinksPathPlaceholderUsesPathEscape` |
 
 ## UI/SYS
 | ID | Scenario | Required behavior | Test |

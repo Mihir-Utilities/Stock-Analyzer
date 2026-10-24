@@ -14,6 +14,7 @@ import (
 
 	"github.com/india-analyzer/api/internal/dbq"
 	"github.com/india-analyzer/api/internal/instruments"
+	"github.com/india-analyzer/api/internal/validate"
 )
 
 // Errors the handlers map onto the envelope.
@@ -138,7 +139,7 @@ type target struct {
 
 func (s *Service) resolve(ctx context.Context, symbol string) (target, string, error) {
 	symbol = strings.TrimSpace(symbol)
-	if symbol == "" {
+	if symbol == "" || !validate.Text(symbol) {
 		return target{}, "", ErrNotFound
 	}
 	found, err := s.q.FindInstrumentBySymbol(ctx, symbol)
