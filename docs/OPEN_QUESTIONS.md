@@ -303,3 +303,16 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | R-B10-5 | Search `latest_nav` source | The cache row (`end_nav` with `end_date`); without a cache row `latest_nav` is null and `last_nav_date` is the scheme's own | `internal/mf/service.go` |
 | R-B10-6 | Error codes outside docs/03 section 1 (`NO_COMMON_DATES`) | `422 UNPROCESSABLE` with `details.reason`; no private codes | `internal/httpx/mf_handlers.go` |
 | R-B03-2 | NUL bytes and invalid UTF-8 in text inputs | Filters, cursors: 422 with `details.fields`; path symbols: 404. One helper (`internal/validate`) | `internal/validate` |
+
+## B11 watchlist and portfolio (assumptions, 2026-10-24)
+| ID | Question or ambiguity | Assumption taken | Where |
+|---|---|---|---|
+| B11-1 | docs/05 8.1 says "order by trade_date, then id" and also "buys before sells on the same date" | Same-day order is: buys first, then sells, each by id. A sell can therefore use shares bought later the same day, never an oversell that no order could satisfy | `portfolio/engine.go` |
+| B11-2 | Confirmed `split_or_bonus` rows (the detector's type) have no defined multiplier | Not auto-applied; listed as review needed until the owner confirms them as `split` or `bonus` (B07) or enters an override | `Multiplier()` |
+| B11-3 | No idempotency table exists in docs/02 | New table `idempotency_key` (migration 0012): key claimed in the same transaction as the insert, response stored and replayed for 24 h, expired rows ignored and purged on the next claim | `db/migrations/0012*` |
+| B11-4 | Manual mode has no live quote; "LTP" for holdings and watchlist | LTP = close of the latest valid (non-suspect) bar on or before as_of; `quote_latest` is not read. Day change uses the bar before it | `portfolio/service.go` |
+| B11-5 | Bars before an ex-date while `as_of` is after it | If the bar is not source-adjusted, LTP is divided by the multiplier (flag `price_before_action`); day change and watchlist change are null with reason `corporate_action_in_window` when a confirmed split/bonus lies between the two bars | `summary.go` |
+| B11-6 | Tracking after watchlist/portfolio removal | Re-derived: portfolio txns, else watchlist, else imported prices ('imported'), else a past open ('opened', left to the LRU job), else untracked. Watchlist add never overrides a reason except 'opened'; portfolio add always sets 'portfolio' | `portfolio/store.go` |
+| B11-7 | Shape of `GET/POST /portfolio/adjustments` is not specified | See docs/03 section 12 (B11 response details). An override replaces every action of the same ex-date | `service.go` |
+| B11-8 | Benchmark XIRR | Same dated flows buy/sell NIFTY50 units at the level on or before each date; null with reason when the series is missing, starts after the first flow, or the flows would oversell units; same 30-day rule | `summary.go` |
+| B11-9 | sqlc vs hand-written SQL | B11 uses parameterised pgx queries inside `internal/portfolio` instead of regenerating `internal/dbq`, to avoid generated-code merge conflicts with parallel tasks. The coordinator may move them to sqlc later | `portfolio/*.go` |

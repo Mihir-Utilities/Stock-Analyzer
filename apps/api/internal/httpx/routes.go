@@ -62,6 +62,9 @@ func (rt route) handler(d Deps) http.Handler {
 	if h := importsHandler(rt, d); h != nil { // B06a (imports_handlers.go)
 		return h
 	}
+	if h := portfolioHandler(rt, d); h != nil { // B11 (portfolio_handlers.go)
+		return h
+	}
 	switch rt.Kind {
 	case kindHealthz:
 		return http.HandlerFunc(healthz)

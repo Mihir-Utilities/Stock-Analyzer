@@ -1702,7 +1702,7 @@ paths:
       summary: "Watchlist stocks and funds. (docs/03 section 11)"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success"
           content:
             "application/json":
               schema:
@@ -1711,8 +1711,6 @@ paths:
           "$ref": "#/components/responses/Unauthenticated"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
         default:
           description: "Error envelope"
           content:
@@ -1734,7 +1732,7 @@ paths:
               "$ref": "#/components/schemas/WatchlistCreate"
       responses:
         "201":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success"
           content:
             "application/json":
               schema:
@@ -1745,8 +1743,14 @@ paths:
           "$ref": "#/components/responses/Unprocessable"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "409":
+          description: "CONFLICT (duplicate entry, Idempotency-Key reused with a different request, or an override already exists)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
         default:
           description: "Error envelope"
           content:
@@ -1776,7 +1780,7 @@ paths:
               "$ref": "#/components/schemas/WatchlistPatch"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success"
           content:
             "application/json":
               schema:
@@ -1787,8 +1791,8 @@ paths:
           "$ref": "#/components/responses/Unprocessable"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         default:
           description: "Error envelope"
           content:
@@ -1811,7 +1815,7 @@ paths:
         - "$ref": "#/components/parameters/CsrfHeader"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success"
           content:
             "application/json":
               schema:
@@ -1820,8 +1824,8 @@ paths:
           "$ref": "#/components/responses/Unauthenticated"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         default:
           description: "Error envelope"
           content:
@@ -1844,7 +1848,7 @@ paths:
         - "$ref": "#/components/parameters/Cursor"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success"
           content:
             "application/json":
               schema:
@@ -1855,8 +1859,8 @@ paths:
           "$ref": "#/components/responses/Unprocessable"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         default:
           description: "Error envelope"
           content:
@@ -1884,7 +1888,7 @@ paths:
               "$ref": "#/components/schemas/TxnCreate"
       responses:
         "201":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success"
           content:
             "application/json":
               schema:
@@ -1895,8 +1899,14 @@ paths:
           "$ref": "#/components/responses/Unprocessable"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "409":
+          description: "CONFLICT (duplicate entry, Idempotency-Key reused with a different request, or an override already exists)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
         default:
           description: "Error envelope"
           content:
@@ -1926,7 +1936,7 @@ paths:
               "$ref": "#/components/schemas/TxnPatch"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success"
           content:
             "application/json":
               schema:
@@ -1937,8 +1947,8 @@ paths:
           "$ref": "#/components/responses/Unprocessable"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         default:
           description: "Error envelope"
           content:
@@ -1961,7 +1971,7 @@ paths:
         - "$ref": "#/components/parameters/CsrfHeader"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success"
           content:
             "application/json":
               schema:
@@ -1970,8 +1980,8 @@ paths:
           "$ref": "#/components/responses/Unauthenticated"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         default:
           description: "Error envelope"
           content:
@@ -1983,7 +1993,7 @@ paths:
       operationId: "getPortfolioSummary"
       tags:
         - "portfolio"
-      summary: "Holdings, totals, XIRR, realized/unrealized P&L, allocation. Money fields are strings. (docs/03 section 12)"
+      summary: "Holdings, totals, XIRR, realized/unrealized P&L, allocation. Money fields are strings with 4 decimals (INR); percent fields are percent numbers; unknown values are null with a sibling *_reason. (docs/03 section 12)"
       parameters:
         - name: "as_of"
           in: "query"
@@ -1991,9 +2001,16 @@ paths:
           schema:
             type: "string"
             format: "date"
+        - name: "include_exited"
+          in: "query"
+          required: false
+          description: "Also list fully sold positions (hidden by default; their realized P&L is always in the totals)."
+          schema:
+            type: "boolean"
+            default: false
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success"
           content:
             "application/json":
               schema:
@@ -2004,8 +2021,6 @@ paths:
           "$ref": "#/components/responses/Unprocessable"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
         default:
           description: "Error envelope"
           content:
@@ -2020,7 +2035,7 @@ paths:
       summary: "Portfolio adjustments. (docs/03 section 12)"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success"
           content:
             "application/json":
               schema:
@@ -2029,8 +2044,6 @@ paths:
           "$ref": "#/components/responses/Unauthenticated"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
         default:
           description: "Error envelope"
           content:
@@ -2041,7 +2054,7 @@ paths:
       operationId: "postPortfolioAdjustments"
       tags:
         - "portfolio"
-      summary: "Override an adjustment. (docs/03 section 12)"
+      summary: "Override the quantity multiplier of an ex-date; the whole sequence is re-validated (422 INSUFFICIENT_HOLDINGS). (docs/03 section 12)"
       parameters:
         - "$ref": "#/components/parameters/CsrfHeader"
       requestBody:
@@ -2049,10 +2062,10 @@ paths:
         content:
           "application/json":
             schema:
-              "$ref": "#/components/schemas/FreeObject"
+              "$ref": "#/components/schemas/AdjustmentCreate"
       responses:
         "201":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success"
           content:
             "application/json":
               schema:
@@ -2063,8 +2076,14 @@ paths:
           "$ref": "#/components/responses/Unprocessable"
         "429":
           "$ref": "#/components/responses/RateLimited"
-        "501":
-          "$ref": "#/components/responses/NotImplemented"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "409":
+          description: "CONFLICT (duplicate entry, Idempotency-Key reused with a different request, or an override already exists)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
         default:
           description: "Error envelope"
           content:
@@ -3411,6 +3430,30 @@ components:
         - "qty"
         - "price"
         - "trade_date"
+    AdjustmentCreate:
+      type: "object"
+      properties:
+        symbol:
+          type: "string"
+        effective_date:
+          type: "string"
+          format: "date"
+          description: "The ex-date; not in the future."
+        qty_multiplier:
+          type: "string"
+          description: "Decimal string, 0 < m <= 1000000, up to 8 decimals (a 10 -> 2 split is 5)."
+        corporate_action_id:
+          type: "integer"
+          format: "int64"
+          description: "Optional; must belong to the symbol and have the same ex-date."
+        note:
+          type: "string"
+          maxLength: 500
+      required:
+        - "symbol"
+        - "effective_date"
+        - "qty_multiplier"
+      additionalProperties: false
     TxnPatch:
       type: "object"
       additionalProperties: true

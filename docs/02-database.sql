@@ -485,6 +485,17 @@ CREATE TABLE flag_dismissals (
   PRIMARY KEY (instrument_id, flag_type, trade_date)
 );
 
+-- Idempotency-Key store for POST /portfolio/txns (B11): the key is claimed in the same transaction that creates the
+-- row; the stored response is replayed for 24 h (older rows are ignored and purged on the next claim).
+CREATE TABLE idempotency_key (
+  key          uuid PRIMARY KEY,
+  scope        text NOT NULL,                     -- 'portfolio_txn'
+  request_hash text NOT NULL,                     -- sha256 of the normalised request; a different body under the same key is a 409
+  response     jsonb,
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX idempotency_key_created_idx ON idempotency_key (created_at);
+
 -- Foreign keys to import_batch added after all tables exist (keeps ordering simple)
 ALTER TABLE fundamental_value ADD CONSTRAINT fundamental_value_batch_fk FOREIGN KEY (import_batch_id) REFERENCES import_batch(id) ON DELETE SET NULL;
 ALTER TABLE shareholding      ADD CONSTRAINT shareholding_batch_fk      FOREIGN KEY (import_batch_id) REFERENCES import_batch(id) ON DELETE SET NULL;

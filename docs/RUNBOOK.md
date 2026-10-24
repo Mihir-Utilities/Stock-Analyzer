@@ -228,3 +228,12 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - **SIP shows fewer installments than months.** Installments dated before the first NAV, or whose next NAV is after `end`, are skipped and counted (`skipped_installments`).
 - **XIRR is null with `no_solution`.** All flows on one date summing to zero, no sign change in [-0.9999, 100], or no convergence in 200 iterations; never a made-up rate.
 - **Local tests:** `go test ./internal/finmath ./internal/mf ./internal/prices ./internal/ownerdata ./internal/httpx -race` (Docker or `TEST_DATABASE_URL`).
+
+## 28. Watchlist and portfolio (B11)
+
+- Routes: `/watchlist` and `/portfolio/*` (docs/03 sections 11-12). Everything is computed on request from `portfolio_txn`, confirmed `corporate_action` rows, `portfolio_adjustment` overrides and `price_daily`; nothing is cached, so a prices import or an action confirmation shows on the next summary call.
+- Writes lock the instrument with `pg_advisory_xact_lock(7011, instrument_id)` and replay the whole symbol sequence before commit; a rejected edit changes nothing.
+- Idempotency: table `idempotency_key` keeps the response for 24 h; expired rows are purged on the next claim. A lost response is safe to retry with the same key.
+- Failure mode `HOLDINGS_INCONSISTENT` warning in the summary: stored transactions no longer pass the holdings check (for example a confirmed split was edited or removed after a sell). The symbol is excluded from totals; fix the action (or add an override) or the transactions.
+- Failure mode: totals show a null market value with `missing_price: SYM`: import a `prices.csv` containing that symbol.
+- Owner action: review warnings `REVIEW_NEEDED` (rights, buyback, merger, demerger, split_or_bonus) and `UNCONFIRMED_ACTION`; these are never applied to quantities automatically.

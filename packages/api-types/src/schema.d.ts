@@ -715,7 +715,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Holdings, totals, XIRR, realized/unrealized P&L, allocation. Money fields are strings. (docs/03 section 12) */
+        /** Holdings, totals, XIRR, realized/unrealized P&L, allocation. Money fields are strings with 4 decimals (INR); percent fields are percent numbers; unknown values are null with a sibling *_reason. (docs/03 section 12) */
         get: operations["getPortfolioSummary"];
         put?: never;
         post?: never;
@@ -735,7 +735,7 @@ export interface paths {
         /** Portfolio adjustments. (docs/03 section 12) */
         get: operations["getPortfolioAdjustments"];
         put?: never;
-        /** Override an adjustment. (docs/03 section 12) */
+        /** Override the quantity multiplier of an ex-date; the whole sequence is re-validated (422 INSUFFICIENT_HOLDINGS). (docs/03 section 12) */
         post: operations["postPortfolioAdjustments"];
         delete?: never;
         options?: never;
@@ -1270,6 +1270,22 @@ export interface components {
             fees?: string;
             /** Format: date */
             trade_date: string;
+            note?: string;
+        };
+        AdjustmentCreate: {
+            symbol: string;
+            /**
+             * Format: date
+             * @description The ex-date; not in the future.
+             */
+            effective_date: string;
+            /** @description Decimal string, 0 < m <= 1000000, up to 8 decimals (a 10 -> 2 split is 5). */
+            qty_multiplier: string;
+            /**
+             * Format: int64
+             * @description Optional; must belong to the symbol and have the same ex-date.
+             */
+            corporate_action_id?: number;
             note?: string;
         };
         /** @description Same fields as TxnCreate, all optional. */
@@ -3249,7 +3265,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3260,7 +3276,6 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3288,7 +3303,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -3298,9 +3313,18 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /** @description CONFLICT (duplicate entry, Idempotency-Key reused with a different request, or an override already exists) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3327,7 +3351,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3337,8 +3361,8 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3369,7 +3393,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3379,9 +3403,9 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3408,7 +3432,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3418,9 +3442,9 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3449,7 +3473,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -3459,9 +3483,18 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /** @description CONFLICT (duplicate entry, Idempotency-Key reused with a different request, or an override already exists) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3488,7 +3521,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3498,8 +3531,8 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3530,7 +3563,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3540,9 +3573,9 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3558,6 +3591,8 @@ export interface operations {
         parameters: {
             query?: {
                 as_of?: string;
+                /** @description Also list fully sold positions (hidden by default; their realized P&L is always in the totals). */
+                include_exited?: boolean;
             };
             header?: never;
             path?: never;
@@ -3565,7 +3600,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3577,7 +3612,6 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3598,7 +3632,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3609,7 +3643,6 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {
@@ -3633,11 +3666,11 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["FreeObject"];
+                "application/json": components["schemas"]["AdjustmentCreate"];
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -3647,9 +3680,18 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /** @description CONFLICT (duplicate entry, Idempotency-Key reused with a different request, or an override already exists) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
-            501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
             default: {
                 headers: {

@@ -203,7 +203,7 @@ func TestSYS07FailedMigrationRollsBack(t *testing.T) {
 		}
 	}
 	bad := "-- +goose Up\nCREATE TABLE sys07_partial (id int);\nINSERT INTO sys07_no_such_table VALUES (1);\n-- +goose Down\nDROP TABLE sys07_partial;\n"
-	if err := os.WriteFile(filepath.Join(tmp, "0012_sys07_bad.sql"), []byte(bad), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, fmt.Sprintf("%04d_sys07_bad.sql", len(src)+1)), []byte(bad), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -214,8 +214,8 @@ func TestSYS07FailedMigrationRollsBack(t *testing.T) {
 		t.Fatal("partial migration left sys07_partial behind: migrations must be transactional")
 	}
 	var version int
-	if err := db.QueryRow(`SELECT max(version_id) FROM goose_db_version WHERE is_applied`).Scan(&version); err != nil || version != 11 {
-		t.Fatalf("schema version = %d (%v), want 11 (the failed one is not recorded)", version, err)
+	if err := db.QueryRow(`SELECT max(version_id) FROM goose_db_version WHERE is_applied`).Scan(&version); err != nil || version != len(src) {
+		t.Fatalf("schema version = %d (%v), want %d (the failed one is not recorded)", version, err, len(src))
 	}
 	verifySchema(t, db) // earlier migrations stay intact
 }
