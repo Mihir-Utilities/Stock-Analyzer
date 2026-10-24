@@ -265,3 +265,12 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 
 - Next.js was bumped from 16.4.0 to 16.4.1 (owner approved) because `next build` failed with `SecurityFatalError`: 16.0.0 to 16.4.0 are affected by GHSA-2464-fhr4-w9xw, GHSA-p3m5-59mp-jv5r and GHSA-673q-mjm6-r5xr. `eslint-config-next` moved to the same version.
 - The advisory gate runs inside `next build` (it queries the npm advisory service). Any future advisory against the installed Next.js version will fail the web CI job until it is bumped, so merge Renovate PRs for `next` promptly.
+
+## 33. Stock page: header and Overview (F05)
+
+- Route `/stocks/{symbol}?tab=overview|chart|analysis|fundamentals|ownership|peers|prediction|events|data`. Only Overview is built; the other tabs say so. An alias symbol redirects with `router.replace` and a toast; an unknown symbol shows "No stock with the symbol X" with search advice.
+- Data: `GET /stocks/{symbol}` (60 s), `/prices?range=1Y&adjusted=true` (5 min), `/indicators` (10 min), `/events`, `/links`, `/fundamentals` (KPI ratios). Browser calls go only to same-origin `/api/v1`; research links are plain `ExternalLink` anchors that the app never fetches.
+- Manual price mode (current): no Refresh button; chip "Last price import: {date}" (amber with the word "stale" from `freshness.prices_stale`), "Import prices" link, "Holiday list missing" chip from `freshness.holidays_missing`, manual-mode banner. Header price is the last imported close (assumption F05-1).
+- Failure modes: KPI, gauges and scores show a dash with `not computed yet` until D05b writes the snapshot (not a bug). A card that errors shows Retry; the rest of the page stays. `DATA_UNAVAILABLE` (`no_prices_imported`, `no_history`) shows the reason, never 0.
+- Notices that wait for B07: Confirm / Reject on the UNCONFIRMED_ACTION banner and Dismiss on the soft-flag notice are disabled with a reason; the soft flag is derived in the browser (20% one-day drop, assumption F05-5). When B07 ships, fill `apps/web/src/lib/stock/soft-flag-adapter.ts`.
+- Tests: `npm test` (`stock-page.test.tsx`, `stock-derive.test.ts` incl. the UI-09 field map in `docs/field-map.json`); `npx playwright test tests/e2e/stock.spec.ts` after `npm run build` (port 3100 must be free).
