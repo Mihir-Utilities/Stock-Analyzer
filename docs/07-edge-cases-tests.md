@@ -44,6 +44,8 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | BRK-18 | Timezone boundaries (IST vs UTC dates) | Market date test around 00:00 | U |
 | BRK-19 | Duplicate candles in a response | Upsert; counts stable | I |
 | BRK-20 | Broker returns already-adjusted history | With `PRICES_ALREADY_ADJUSTED=true` no double adjustment (broker mode inactive; manual-mode equivalent: ACT-11, ACT-12) | U |
+| BRK-21 | Imported close moves more than 50% from the previous stored bar | Bar stored `suspect=true` unless a confirmed corporate action lies within one trading day; 40% moves and the reserved market series are not flagged; the detector still reads suspect bars (D03-A9); re-importing a corrected bar clears the row-level flag | I |
+| BRK-22 | Prices with `high < low`, or any of open/high/low/close <= 0 | Row error (cannot be stored: DB constraints); `high` below max(open, close) or `low` above min(open, close) beyond 1e-6: stored `suspect=true` with a warning | F |
 
 ## ACT: corporate actions and adjustments
 | ID | Scenario | Required behavior | Test |
@@ -100,16 +102,25 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | IMP-26 | Adjustment check on a validated upload | Returns closes for up to 5 trading days each side of the ex-date, observed ratio, nearest fraction and hint (`raw_likely` within 3% of the expected ratio/fraction, `adjusted_likely` within 3% of 1, else `inconclusive`); writes nothing; unknown symbol/ex-date outside file -> 422 | I |
 | IMP-27 | `holidays.csv` import | Columns/segment validated; weekend date = warning; duplicate `(date, segment)` = error; replace-per-year on commit; not undoable; template has no example dates; shipped 2026 list is empty (no invented dates) | F |
 | IMP-28 | Decimal comma in a semicolon-delimited file (`1234,56`, `12,34`) | Rejected as ambiguous, never silently read as 123456 or 1234.56; a comma is accepted only as a thousands separator in valid groupings (`1,234.56`, Indian `1,23,456.78`) (S13; interim behaviour, see OQ-9) | F |
+| IMP-29 | Browser-split large prices file (`upload_group`, D-G) | Parts validate separately; commit with `upload_ids` + `upload_group` writes all parts in one transaction under one `import_batch`; one missing/expired part rolls everything back and keeps the other parts | I |
+| IMP-30 | Spreadsheet, zip, UTF-16 or binary content; wrong MIME type or extension (SEC-05) | 422 on field `file` with a plain message; nothing is stored; only `.csv`/`.txt` with a CSV/text MIME are read | I |
+| IMP-31 | Empty required price cell (open/high/low/close/volume); empty optional `instruments.csv` cell | Required price cell: row error naming the column, never read as 0. Optional instrument cell: on insert the column default or NULL, on update the stored value is kept | F |
+| IMP-32 | `prices.csv` row uses a symbol that was renamed through `previous_symbol` | Row error "symbol OLD was renamed to NEW; use the new symbol"; never silently mapped | I |
+| IMP-33 | Lower-case symbol in `instruments.csv` / Add stock form; lower-case symbol in `prices.csv` | Instruments: upper-cased with a `SYMBOL_UPPERCASED` warning (same in the form); prices: matched case-insensitively | F |
+| IMP-34 | Validation and commit share one code path (`scanPrices`, `scanInstruments`) | The preview of validate equals what commit writes; commit re-validates against the current database and refuses if errors appeared since | I |
 
 ## INS: instruments
 | ID | Scenario | Required behavior | Test |
 |---|---|---|---|
 | INS-14 | `previous_symbol` rename | Matching existing instrument + new symbol free: instrument renamed, `symbol_alias` written, prices/fundamentals/portfolio links kept; new symbol already taken or no match: ignored with warning | I |
+| INS-15 | Add stock form (`POST /instruments`) | 201 with id; existing symbol 409; invalid symbol/name 422 with `details.fields`; malformed ISIN or lower-case symbol are warnings (`ISIN_MALFORMED`, `SYMBOL_UPPERCASED`); same messages as the CSV validators (IMP-17 for this kind) | I |
 
 ## PRC: manual price data actions
 | ID | Scenario | Required behavior | Test |
 |---|---|---|---|
 | PRC-21 | Delete prices for {symbol} between {from} and {to} | Preview count, confirm required, rows deleted, audit row written, `post_import` recomputes analytics/detection; `from > to` 422; other symbols untouched | I |
+| PRC-22 | Trim history before {date} for chosen stocks | Preview gives rows per symbol and estimated MB freed; confirm required; unknown symbol 422; rows older than the date deleted for those stocks only; one audit row; `post_import` queued for the affected symbols; nothing deleted automatically | I |
+| PRC-23 | Delete or trim that removes no rows | `deleted: 0`, no audit row, no job | I |
 
 ## FND: fundamentals (owner data) and analytics
 | ID | Scenario | Required behavior | Test |

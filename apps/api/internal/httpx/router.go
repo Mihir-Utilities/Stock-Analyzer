@@ -53,6 +53,10 @@ type Deps struct {
 	// Stocks serves GET /stocks, /stocks/index and /stocks/{symbol} (B03); nil keeps them 501 stubs.
 	Stocks StockService
 
+	// Imports serves the B06a routes (/imports/*, /settings/prices-adjustment, POST /instruments,
+	// price delete and trim); nil keeps them 501 stubs.
+	Imports ImportService
+
 	// LoginLimiter (default 10/min per IP) guards POST /auth/login; GeneralLimiter (default
 	// 120/min) guards authenticated routes (docs/03 section 16).
 	LoginLimiter   *Limiter
