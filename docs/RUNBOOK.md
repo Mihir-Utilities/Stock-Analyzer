@@ -184,3 +184,11 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Failure mode: if the Playwright web server fails with "already used", a previous run left `next start` (port 3100) or `scripts/serve-static.mjs` (port 6100) running; stop that process and re-run.
 - Failure mode: a chart shows a red "could not be drawn" banner when ECharts throws on an option; the data table (Show data) and CSV still work, so no data is lost while it is fixed.
 - Licences checked for S15: echarts 6.1.0 Apache-2.0, zrender BSD-3-Clause, lucide-react ISC, Inter OFL-1.1, @tanstack/react-table and react-virtual MIT.
+
+## 23. Import center, storage and manual deletes (F13a)
+- Page `/imports` (tabs Upload, Templates, Manual forms, Storage). The browser only calls `/api/v1` (same origin, CSRF header on every non-GET). Uploads are multipart through the Next rewrite, so the host's request-body limit applies (spike S9). If a few-MB prices file fails with a 413 from the proxy, record it in `docs/SPIKE_RESULTS.md` S9 and decide on the browser-split fallback (D-G).
+- Prices wizard: choose the file, read the errors (row and column), choose raw / already adjusted (required once; "I don't know" runs the Adjustment check), read the growth estimate, commit. Prices and instruments batches cannot be undone: fix by re-importing, Trim history or Delete prices.
+- Storage tab: meter against 380 MB (marks 70/85/95%). It needs `GET /admin/status`; while that returns 501 the meter shows "not available" and the server still blocks at the limit. Trim history and Delete prices ask for a preview and a confirmation; both enqueue `post_import` for the affected stocks.
+- Failure mode: "This upload expired" after a long pause (uploads live 1 hour): upload the file again. "Choose whether the prices are raw or adjusted": set the choice on the review step.
+- Failure mode: `npm run build` in `apps/web` exits 1 with a Next.js security advisory message after a successful compile (F13a-10): upgrade `next`.
+- Checks: `npm test` (unit; mocks in `tests/mocks`); `npx playwright test tests/e2e/imports.spec.ts` after `npm run build` (port 3100 must be free).
