@@ -12,14 +12,17 @@ import {
   formatFraction,
   formatFreshness,
   formatInr,
+  formatMb,
   formatMultiple,
   formatNumber,
   formatPercent,
+  formatPercentOf,
+  formatRatio,
   formatRelative,
   setGroupingPreference,
 } from "@/lib/format";
 
-describe("formatInr (Indian grouping)", () => {
+describe("UI-24: formatInr (Indian grouping)", () => {
   it("groups in lakhs and crores", () => {
     expect(formatInr(1234567.89).text).toBe("₹12,34,567.89");
     expect(formatInr(999).text).toBe("₹999.00");
@@ -51,7 +54,7 @@ describe("formatInr (Indian grouping)", () => {
   });
 });
 
-describe("formatCrore", () => {
+describe("UI-24: formatCrore", () => {
   it("uses Cr below 1,00,000 Cr and L Cr from there", () => {
     expect(formatCrore(123456).text).toBe("₹1.23 L Cr");
     expect(formatCrore(99999).text).toBe("₹99,999 Cr");
@@ -70,7 +73,7 @@ describe("formatCrore", () => {
   });
 });
 
-describe("formatPercent (percent numbers) and formatFraction", () => {
+describe("UI-24: formatPercent (percent numbers) and formatFraction", () => {
   it("shows 2 dp and an explicit sign for changes", () => {
     expect(formatPercent(12.345, { signed: true }).text).toBe("+12.35%");
     expect(formatPercent(-0.5, { signed: true }).text).toBe("-0.50%");
@@ -95,7 +98,7 @@ describe("formatPercent (percent numbers) and formatFraction", () => {
   });
 });
 
-describe("formatMultiple and numbers", () => {
+describe("UI-24: formatMultiple and numbers", () => {
   it("multiples", () => {
     expect(formatMultiple(23.456).text).toBe("23.46x");
     expect(formatMultiple(-4).text).toBe("-4.00x");
@@ -153,7 +156,7 @@ describe("UI-02: every null shows a dash and a reason", () => {
   });
 });
 
-describe("dates (IST)", () => {
+describe("UI-24: dates (IST)", () => {
   it("formats a date-only string without timezone shifts", () => {
     expect(formatDate("2026-10-10").text).toBe("10 Oct 2026");
     expect(formatDate("2026-01-01").text).toBe("1 Jan 2026");
@@ -230,5 +233,53 @@ describe("formatFreshness (source and as-of chips)", () => {
     const r = formatFreshness({ source: "Owner import", asOf: null });
     expect(r.asOf).toBe(DASH);
     expect(r.text).toBe("Owner import, as of unknown");
+  });
+});
+
+describe("UI-24: review fixes (crore tier, grouping preference, F13a helpers, IST midnight)", () => {
+  it("formatCrore picks the tier from the rounded value: 99,999.6 is lakh-crore", () => {
+    expect(formatCrore(99999.6).text).toBe("₹1.00 L Cr");
+    expect(formatCrore(99999.4).text).toBe("₹99,999 Cr");
+    expect(formatCrore(-99999.6).text).toBe("-₹1.00 L Cr");
+    expect(formatCrore(999.996).text).toBe("₹1,000 Cr");
+  });
+  it("formatPercent and formatMultiple honour the western grouping preference", () => {
+    expect(formatPercent(1234567.891).text).toBe("12,34,567.89%");
+    expect(formatMultiple(1234567.891).text).toBe("12,34,567.89x");
+    setGroupingPreference("western");
+    try {
+      expect(formatPercent(1234567.891).text).toBe("1,234,567.89%");
+      expect(formatMultiple(1234567.891).text).toBe("1,234,567.89x");
+      expect(formatPercent(1234567.891, { grouping: "indian" }).text).toBe("12,34,567.89%");
+    } finally {
+      setGroupingPreference("indian");
+    }
+  });
+  it("formatMb: unit, grouping, small values keep two decimals, unknown has a reason", () => {
+    expect(formatMb(12.345).text).toBe("12.3 MB");
+    expect(formatMb(1234.56).text).toBe("1,234.6 MB");
+    expect(formatMb(0.01).text).toBe("0.01 MB");
+    expect(formatMb(0).text).toBe("0.0 MB");
+    expect(formatMb(-0.04).direction).toBe("down");
+    for (const v of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const f = formatMb(v);
+      expect([f.text, f.reason === null]).toEqual([DASH, false]);
+    }
+  });
+  it("formatRatio uses 4 decimals; formatPercentOf never shows -0.0% and needs a positive total", () => {
+    expect(formatRatio(0.5).text).toBe("0.5000");
+    expect(formatRatio(null).reason).not.toBeNull();
+    expect(formatPercentOf(1, 380).text).toBe("0.3%");
+    expect(formatPercentOf(-0.0001, 380).text).toBe("0.0%");
+    expect(formatPercentOf(1.005, 100).text).toBe("1.0%");
+    expect(formatPercentOf(5, 0).text).toBe(DASH);
+    expect(formatPercentOf(5, 0).reason).not.toBeNull();
+    expect(formatPercentOf(null, 10).text).toBe(DASH);
+  });
+  it("IST midnight: the instant just before and after 00:00 IST lands on different days", () => {
+    expect(formatDate("2026-10-10T18:29:59Z").text).toBe("10 Oct 2026");
+    expect(formatDate("2026-10-10T18:30:00Z").text).toBe("11 Oct 2026");
+    expect(formatDateTime("2026-10-10T18:30:00Z").text).toBe("11 Oct 2026, 00:00 IST");
+    expect(formatDate(new Date("2026-12-31T18:30:00Z")).text).toBe("1 Jan 2027");
   });
 });

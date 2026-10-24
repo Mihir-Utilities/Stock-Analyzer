@@ -9,7 +9,9 @@ import { Wizard, type WizardStep } from "@/components/ui/Wizard";
 import { ApiError } from "@/lib/api/client";
 import { commitUpload, validateUpload } from "@/lib/imports/api";
 import { describeError, isApiError } from "@/lib/imports/errors";
-import { formatCount, formatMb } from "@/lib/imports/local-format";
+import { formatCount, formatMb } from "@/lib/format";
+import { precheckFile } from "@/lib/imports/precheck";
+import { useSingleFlight } from "@/lib/imports/single-flight";
 import {
   IMPORT_KINDS,
   type CommitResult,
@@ -18,6 +20,7 @@ import {
 } from "@/lib/imports/schemas";
 import { DB_SOFT_LIMIT_MB, exceedsLimit, sizeGuardMessage } from "@/lib/imports/storage";
 import { AdjustmentChoice } from "./AdjustmentChoice";
+import { Fmt } from "./Fmt";
 import { IssueList, PreviewTable } from "./IssueLists";
 import { useDbStatus } from "./StorageMeter";
 
@@ -55,7 +58,7 @@ function symbolsOf(preview: Array<Record<string, unknown>>): string[] {
 
 export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportKind }) {
   const [kind, setKind] = useState<ImportKind>(initialKind);
-  const [file, setFile] = useState<File | null>(null);
+  const [picked, setPicked] = useState<File | null>(null);
   const [validation, setValidation] = useState<ValidateResult | null>(null);
   const [adjustment, setAdjustment] = useState<boolean | null>(null);
   const [step, setStep] = useState(0);
@@ -65,6 +68,7 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
   const [commitError, setCommitError] = useState<{ code: string; message: string } | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const once = useSingleFlight();
   const db = useDbStatus();
   const currentMb = db.data?.db.size_mb ?? null;
 
@@ -101,8 +105,12 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
     },
   });
 
+  // Client-side pre-check (extension and size); the server stays authoritative.
+  const pre = picked ? precheckFile(picked, kind) : null;
+  const file = pre?.blocked ? null : picked;
+
   const restart = () => {
-    setFile(null);
+    setPicked(null);
     setValidation(null);
     setAdjustment(null);
     setNote("");
@@ -126,7 +134,10 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
         <fieldset className="flex flex-col gap-2">
           <legend className="text-caption font-medium text-text-1">File type</legend>
           {IMPORT_KINDS.map((k) => (
-            <label key={k} className="flex items-center gap-2 text-body-sm text-text-1">
+            <label
+              key={k}
+              className="touch-target flex items-center gap-2 text-body-sm text-text-1"
+            >
               <input
                 type="radio"
                 name="import-kind"
@@ -149,7 +160,7 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
             href={templateUrl(kind)}
             download
             data-testid="import-template-link"
-            className="text-accent underline"
+            className="touch-target inline-flex items-center text-accent underline"
           >
             Download the {kind} template
           </a>
@@ -169,12 +180,22 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
               data-testid="import-file"
               className={inputClass}
               onChange={(e) => {
-                setFile(e.target.files?.[0] ?? null);
+                setPicked(e.target.files?.[0] ?? null);
                 validate.reset();
               }}
             />
           )}
         </FormField>
+        {pre?.blocked ? (
+          <Banner tone="error" testId="import-file-error">
+            {pre.blocked}
+          </Banner>
+        ) : null}
+        {pre?.warning ? (
+          <Banner tone="warn" testId="import-file-warning">
+            {pre.warning}
+          </Banner>
+        ) : null}
         {validate.isError ? (
           <Banner tone="error" testId="import-validate-error">
             {describeError(validate.error)}
@@ -193,8 +214,9 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
           Review the file
         </h2>
         <p role="status" data-testid="import-summary" className="text-body text-text-1">
-          {formatCount(validation.rows)} rows read, {formatCount(validation.error_count)} errors,{" "}
-          {formatCount(validation.warning_count)} warnings.
+          <Fmt f={formatCount(validation.rows)} /> rows read,{" "}
+          <Fmt f={formatCount(validation.error_count)} /> errors,{" "}
+          <Fmt f={formatCount(validation.warning_count)} /> warnings.
         </p>
         {commitError ? (
           <Banner tone="error" testId="import-commit-error">
@@ -216,10 +238,16 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
             >
               <h3 className="text-body font-semibold text-text-1">Database growth</h3>
               <p className="text-body-sm text-text-1">
-                Estimated growth: {formatMb(growth)} (upper bound, about 130 bytes per row).
-                {currentMb !== null
-                  ? ` The database is now ${formatMb(currentMb)} of ${DB_SOFT_LIMIT_MB} MB.`
-                  : " The current database size is not available; the server still checks the limit at commit."}
+                Estimated growth: <Fmt f={formatMb(growth)} /> (upper bound, about 130 bytes per
+                row).
+                {currentMb !== null ? (
+                  <>
+                    {" "}
+                    The database is now <Fmt f={formatMb(currentMb)} /> of {DB_SOFT_LIMIT_MB} MB.
+                  </>
+                ) : (
+                  " The current database size is not available; the server still checks the limit at commit."
+                )}
               </p>
               {sizeBlocked ? (
                 <Banner tone="error" testId="import-size-guard">
@@ -251,8 +279,8 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
           Commit
         </h2>
         <p className="text-body-sm text-text-2">
-          {formatCount(validation?.rows ?? null)} rows go in as one batch, in one transaction. This
-          batch cannot be undone; re-import corrected data to change it.
+          <Fmt f={formatCount(validation?.rows ?? null)} /> rows go in as one batch, in one
+          transaction. This batch cannot be undone; re-import corrected data to change it.
         </p>
         {commitError ? (
           <Banner tone="error" testId="import-commit-error">
@@ -281,10 +309,6 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
     ];
   })();
 
-  if (result) {
-    return <ImportResult kind={kind} result={result} onAnother={restart} />;
-  }
-
   const expired = isApiError(commit.error, "NOT_FOUND");
   const canAdvance =
     step === 0
@@ -293,8 +317,24 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
         ? validation !== null && errorCount === 0 && !needsAdjustment && !sizeBlocked
         : validation !== null;
 
+  // One persistent live region: it exists before the result so the announcement is spoken.
+  const announce = (
+    <div role="status" aria-live="polite" className="sr-only" data-testid="import-announce">
+      {result ? `Import saved, batch ${result.batch_id}.` : ""}
+    </div>
+  );
+  if (result) {
+    return (
+      <>
+        {announce}
+        <ImportResult kind={kind} result={result} onAnother={restart} />
+      </>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3" data-testid="import-wizard">
+      {announce}
       {expired ? (
         <Banner tone="warn" testId="import-expired">
           This upload expired (uploads are kept for 1 hour). Upload the file again.{" "}
@@ -302,7 +342,7 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
             type="button"
             data-testid="import-restart"
             onClick={restart}
-            className="underline"
+            className="touch-target inline-flex items-center underline"
           >
             Start over
           </button>
@@ -332,7 +372,7 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
       />
       <ConfirmDialog
         open={confirmOpen}
-        title={`Commit ${formatCount(validation?.rows ?? null)} rows?`}
+        title={`Commit ${formatCount(validation?.rows ?? null).text} rows?`}
         message={
           <>
             {kind === "prices"
@@ -342,9 +382,10 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
           </>
         }
         confirmLabel="Commit"
+        busy={commit.isPending}
         onCancel={() => setConfirmOpen(false)}
         onConfirm={() => {
-          if (validation) commit.mutate(validation.upload_id);
+          if (validation) once(() => commit.mutateAsync(validation.upload_id));
         }}
       />
     </div>
@@ -360,21 +401,35 @@ function ImportResult({
   result: CommitResult;
   onAnother: () => void;
 }) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  // The commit button and dialog are gone: move focus to the result so it is not lost to <body>.
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
   return (
     <section
       data-testid="import-result"
       aria-label="Import result"
       className="flex flex-col gap-3 rounded-card border border-border bg-surface-1 p-4"
     >
-      <h2 role="status" className="text-lead font-semibold text-text-1">
+      <h2
+        ref={headingRef}
+        tabIndex={-1}
+        data-testid="import-result-heading"
+        className="text-lead font-semibold text-text-1 outline-none focus-visible:outline-2 focus-visible:outline-accent"
+      >
         Import saved (batch {result.batch_id})
       </h2>
       <ul className="text-body-sm text-text-1">
-        <li data-testid="result-inserted">Inserted: {formatCount(result.inserted)}</li>
-        <li data-testid="result-updated">Updated: {formatCount(result.updated)}</li>
+        <li data-testid="result-inserted">
+          Inserted: <Fmt f={formatCount(result.inserted)} />
+        </li>
+        <li data-testid="result-updated">
+          Updated: <Fmt f={formatCount(result.updated)} />
+        </li>
         {kind === "instruments" ? (
           <li data-testid="result-renamed">
-            Renamed (previous_symbol): {formatCount(result.renamed)}
+            Renamed (previous_symbol): <Fmt f={formatCount(result.renamed)} />
           </li>
         ) : null}
       </ul>
@@ -392,7 +447,7 @@ function ImportResult({
           type="button"
           data-testid="import-another"
           onClick={onAnother}
-          className="h-9 rounded-control border border-accent px-3 text-body-sm font-medium hover:bg-surface-3"
+          className="touch-target h-9 rounded-control border border-accent px-3 text-body-sm font-medium hover:bg-surface-3"
         >
           Import another file
         </button>

@@ -7,7 +7,9 @@ import { ConfirmDialog } from "@/components/ui/overlays";
 import { FormField, inputClass } from "@/components/ui/FormField";
 import { runAdjustmentCheck, setPricesAdjustment } from "@/lib/imports/api";
 import { describeError, fieldMessage, isApiError } from "@/lib/imports/errors";
-import { formatRatio, UNKNOWN } from "@/lib/imports/local-format";
+import { formatDate, formatInr, formatRatio } from "@/lib/format";
+import { useSingleFlight } from "@/lib/imports/single-flight";
+import { Fmt } from "./Fmt";
 import type { AdjustmentCheck } from "@/lib/imports/schemas";
 
 /** Wizard text of docs/01 section 3.7 (rule 4), shown verbatim. */
@@ -55,6 +57,7 @@ export function AdjustmentChoice({
   const [choice, setChoice] = useState<AdjustmentValue | null>(storedChoice(current));
   const [pending, setPending] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const once = useSingleFlight();
 
   const save = useMutation({
     mutationFn: ({ value, confirm }: { value: boolean; confirm: boolean }) =>
@@ -77,6 +80,8 @@ export function AdjustmentChoice({
   });
 
   const choose = (v: AdjustmentValue) => {
+    // Not `disabled` while saving: a disabled radio would drop keyboard focus.
+    if (save.isPending) return;
     setError(null);
     if (v === "unknown") {
       setChoice("unknown");
@@ -105,14 +110,16 @@ export function AdjustmentChoice({
       </p>
       <div className="flex flex-col gap-2">
         {OPTIONS.map((o) => (
-          <label key={o.value} className="flex items-center gap-2 text-body-sm text-text-1">
+          <label
+            key={o.value}
+            className="touch-target flex items-center gap-2 text-body-sm text-text-1"
+          >
             <input
               type="radio"
               name="prices-adjustment"
               value={o.value}
               data-testid={`adjustment-${o.value}`}
               checked={choice === o.value}
-              disabled={save.isPending}
               onChange={() => choose(o.value)}
             />
             {o.label}
@@ -124,9 +131,15 @@ export function AdjustmentChoice({
           Choose one option to continue. The commit is blocked until the setting is chosen.
         </Banner>
       ) : null}
-      {choice === "unknown" ? (
+      {choice === "unknown" && current === null ? (
         <Banner tone="warn" testId="adjustment-unknown">
           Nothing was saved. Run the check below, then choose Raw or Already adjusted.
+        </Banner>
+      ) : null}
+      {choice === "unknown" && current !== null ? (
+        <Banner tone="info" testId="adjustment-unknown-stored">
+          Nothing was changed. The stored setting ({current ? "already adjusted" : "raw"}) stays in
+          use. Run the check below if you want to verify it.
         </Banner>
       ) : null}
       {error ? (
@@ -141,9 +154,13 @@ export function AdjustmentChoice({
         message="Bars already stored keep their own setting. Mixing raw and adjusted files for the same stock is an owner error and can show a false split or bonus warning."
         confirmLabel="Change setting"
         danger
+        busy={save.isPending}
         onCancel={() => setPending(null)}
         onConfirm={() => {
-          if (pending !== null) save.mutate({ value: pending, confirm: true });
+          if (pending !== null) {
+            const value = pending;
+            once(() => save.mutateAsync({ value, confirm: true }));
+          }
         }}
       />
     </fieldset>
@@ -260,7 +277,7 @@ function AdjustmentCheckPanel({ uploadId, symbols }: { uploadId: string; symbols
           type="submit"
           data-testid="check-run"
           disabled={check.isPending}
-          className="h-9 rounded-control border border-accent px-3 text-body-sm font-medium hover:bg-surface-3 disabled:opacity-50"
+          className="touch-target h-9 rounded-control border border-accent px-3 text-body-sm font-medium hover:bg-surface-3 disabled:opacity-50"
         >
           {check.isPending ? "Checking" : "Run check"}
         </button>
@@ -279,29 +296,37 @@ function AdjustmentResult({ result }: { result: AdjustmentCheck }) {
   return (
     <div data-testid="check-result" role="status" className="flex flex-col gap-2">
       <table className="w-full max-w-sm text-left text-body-sm">
-        <caption className="sr-only">Closes around the ex-date</caption>
+        <caption className="sr-only">
+          Closes around the ex-date, in rupees, from the uploaded file
+        </caption>
         <thead className="text-text-2">
           <tr>
             <th scope="col" className="px-2 py-1 font-medium">
               Date
             </th>
             <th scope="col" className="px-2 py-1 font-medium">
-              Close
+              Close (₹, uploaded file)
             </th>
           </tr>
         </thead>
         <tbody>
           {result.bars.map(([d, c]) => (
             <tr key={d} className="border-t border-border">
-              <td className="px-2 py-1">{d}</td>
-              <td className="px-2 py-1 tabular-nums">{Number.isFinite(c) ? c : UNKNOWN}</td>
+              <td className="px-2 py-1">
+                <Fmt f={formatDate(d)} />
+              </td>
+              <td className="px-2 py-1 tabular-nums">
+                <Fmt f={formatInr(c, { reason: "no close in the file" })} />
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
       <p className="text-body-sm text-text-1">
         Observed ratio (close on the ex-date / previous close):{" "}
-        <span data-testid="check-ratio">{formatRatio(result.ratio)}</span>
+        <span data-testid="check-ratio">
+          <Fmt f={formatRatio(result.ratio, { reason: "no previous close to compare with" })} />
+        </span>
         {result.nearest_fraction
           ? ` (nearest ${result.nearest_fraction})`
           : " (no common fraction)"}

@@ -8,7 +8,9 @@ import { FormField, inputClass } from "@/components/ui/FormField";
 import { ConfirmDialog } from "@/components/ui/overlays";
 import { deletePrices, previewDeletePrices } from "@/lib/imports/api";
 import { describeError, fieldMessage, isApiError } from "@/lib/imports/errors";
-import { formatCount } from "@/lib/imports/local-format";
+import { formatCount, formatDate } from "@/lib/format";
+import { useSingleFlight } from "@/lib/imports/single-flight";
+import { Fmt } from "./Fmt";
 import { DB_STATUS_KEY } from "./StorageMeter";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -26,6 +28,7 @@ export function DeletePricesAction({ symbol: fixedSymbol }: { symbol?: string })
   const [rows, setRows] = useState<number | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const qc = useQueryClient();
+  const once = useSingleFlight();
   const symbol = (fixedSymbol ?? typed).trim().toUpperCase();
 
   const preview = useMutation({
@@ -146,7 +149,7 @@ export function DeletePricesAction({ symbol: fixedSymbol }: { symbol?: string })
             type="submit"
             data-testid="delete-preview"
             disabled={preview.isPending}
-            className="h-9 rounded-control border border-border px-3 text-body-sm hover:bg-surface-3 disabled:opacity-50"
+            className="touch-target h-9 rounded-control border border-border px-3 text-body-sm hover:bg-surface-3 disabled:opacity-50"
           >
             {preview.isPending ? "Counting" : "Preview rows"}
           </button>
@@ -155,34 +158,43 @@ export function DeletePricesAction({ symbol: fixedSymbol }: { symbol?: string })
               type="button"
               data-testid="delete-open-confirm"
               onClick={() => setConfirmOpen(true)}
-              className="h-9 rounded-control border border-down px-3 text-body-sm font-medium hover:bg-surface-3"
+              className="touch-target h-9 rounded-control border border-down px-3 text-body-sm font-medium hover:bg-surface-3"
             >
-              Delete {formatCount(rows)} rows
+              Delete {formatCount(rows).text} rows
             </button>
           ) : null}
         </div>
         {rows !== null ? (
           <p role="status" data-testid="delete-preview-result" className="text-body-sm text-text-1">
-            {rows === 0
-              ? `No rows of ${symbol} between ${from} and ${to}. Nothing to delete.`
-              : `${formatCount(rows)} rows of ${symbol} between ${from} and ${to} would be deleted.`}
+            {rows === 0 ? (
+              <>
+                No rows of {symbol} between <Fmt f={formatDate(from)} /> and{" "}
+                <Fmt f={formatDate(to)} />. Nothing to delete.
+              </>
+            ) : (
+              <>
+                <Fmt f={formatCount(rows)} /> rows of {symbol} between <Fmt f={formatDate(from)} />{" "}
+                and <Fmt f={formatDate(to)} /> would be deleted.
+              </>
+            )}
           </p>
         ) : null}
         {del.isSuccess ? (
           <Banner tone="info" testId="delete-done">
-            Deleted {formatCount(del.data.deleted)} rows.
+            Deleted <Fmt f={formatCount(del.data.deleted)} /> rows.
             {del.data.job_id !== null ? " Analytics are being recomputed." : ""}
           </Banner>
         ) : null}
       </form>
       <ConfirmDialog
         open={confirmOpen}
-        title={`Delete ${formatCount(rows)} rows of ${symbol}?`}
-        message={`Prices from ${from} to ${to} are deleted. This cannot be undone; re-import the file to bring them back.`}
+        title={`Delete ${formatCount(rows).text} rows of ${symbol}?`}
+        message={`Prices from ${formatDate(from).text} to ${formatDate(to).text} are deleted. This cannot be undone; re-import the file to bring them back.`}
         confirmLabel="Delete prices"
         danger
+        busy={del.isPending}
         onCancel={() => setConfirmOpen(false)}
-        onConfirm={() => del.mutate()}
+        onConfirm={() => once(() => del.mutateAsync())}
       />
     </Card>
   );

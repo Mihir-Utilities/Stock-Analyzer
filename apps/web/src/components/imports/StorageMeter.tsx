@@ -5,7 +5,8 @@ import { Card } from "@/components/ui/Card";
 import { cx } from "@/components/ui/cx";
 import { fetchDbStatus } from "@/lib/imports/api";
 import { describeError } from "@/lib/imports/errors";
-import { formatMb, formatPercentOf } from "@/lib/imports/local-format";
+import { formatMb, formatPercentOf } from "@/lib/format";
+import { Fmt } from "./Fmt";
 import { DB_SOFT_LIMIT_MB, warnLevelFor, warnLevelText } from "@/lib/imports/storage";
 
 export const DB_STATUS_KEY = ["admin", "db-status"] as const;
@@ -47,8 +48,8 @@ export function StorageMeter() {
     >
       <div className="flex flex-col gap-2">
         <p className="text-body text-text-1" data-testid="storage-size-text">
-          {formatMb(db.size_mb)} of {DB_SOFT_LIMIT_MB} MB (
-          {formatPercentOf(db.size_mb, DB_SOFT_LIMIT_MB)})
+          <Fmt f={formatMb(db.size_mb)} /> of {DB_SOFT_LIMIT_MB} MB (
+          <Fmt f={formatPercentOf(db.size_mb, DB_SOFT_LIMIT_MB)} />)
         </p>
         <div
           role="meter"
@@ -56,7 +57,7 @@ export function StorageMeter() {
           aria-valuemin={0}
           aria-valuemax={DB_SOFT_LIMIT_MB}
           aria-valuenow={Math.min(db.size_mb, DB_SOFT_LIMIT_MB)}
-          aria-valuetext={`${formatMb(db.size_mb)} of ${DB_SOFT_LIMIT_MB} MB`}
+          aria-valuetext={`${formatMb(db.size_mb).text} of ${DB_SOFT_LIMIT_MB} MB`}
           data-testid="storage-meter-bar"
           data-level={level}
           className="relative h-3 w-full overflow-hidden rounded-chip border border-border bg-surface-2"

@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+﻿import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -138,7 +138,7 @@ describe("prices wizard: required raw / adjusted choice (IMP-25, IMP-26)", () =>
     await user.click(screen.getByTestId("check-run"));
     expect((await screen.findByTestId("check-ratio")).textContent).toBe("0.5000");
     expect(screen.getByTestId("check-hint").textContent).toContain("looks raw");
-    expect(screen.getByTestId("check-result").textContent).toContain("2026-06-11");
+    expect(screen.getByTestId("check-result").textContent).toContain("11 Jun 2026");
     const call = mock.calls.find((c) => c.path === "/imports/prices/adjustment-check");
     expect(call?.body).toEqual({
       upload_id: validPrices.upload_id,
@@ -298,5 +298,150 @@ describe("instruments wizard (IMP-20 UI path)", () => {
     expect(screen.getByTestId("result-undo-note").textContent).toContain(
       "Instrument batches cannot be undone",
     );
+  });
+});
+
+describe("review fixes: double commit, focus, file pre-check, stored raw/adjusted", () => {
+  const stored = { ...validPrices, prices_already_adjusted: false };
+
+  /** Holds the commit POST open until `release()` so a second click can arrive while it is in flight. */
+  function holdCommit(mock: ReturnType<typeof renderWith>) {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).endsWith("/commit")
+        ? gate.then(() => mock.impl(input, init))
+        : mock.impl(input, init),
+    );
+    return release;
+  }
+
+  async function toCommitStep(user: ReturnType<typeof userEvent.setup>) {
+    await upload(user);
+    await user.click(await screen.findByTestId("wizard-next"));
+    await user.click(screen.getByTestId("wizard-commit"));
+    return within(openDialog());
+  }
+
+  it("UI-32: a double click on Commit sends exactly one POST", async () => {
+    const user = userEvent.setup();
+    const mock = renderWith(<ImportWizard />, {
+      "POST /imports/prices/validate": ok(stored),
+      "POST /imports/prices/commit": ok(commitOk),
+    });
+    const release = holdCommit(mock);
+    const dialog = await toCommitStep(user);
+    const okBtn = dialog.getByTestId("confirm-ok");
+    // Two clicks in the same tick: the single-flight ref, not React state, must stop the second.
+    fireEvent.click(okBtn);
+    fireEvent.click(okBtn);
+    release();
+    await screen.findByTestId("import-result");
+    expect(mock.calls.filter((c) => c.path === "/imports/prices/commit")).toHaveLength(1);
+  });
+
+  it("UI-32: the confirm dialog disables both buttons while the commit runs", async () => {
+    const user = userEvent.setup();
+    const mock = renderWith(<ImportWizard />, {
+      "POST /imports/prices/validate": ok(stored),
+      "POST /imports/prices/commit": ok(commitOk),
+    });
+    const release = holdCommit(mock);
+    const dialog = await toCommitStep(user);
+    await user.click(dialog.getByTestId("confirm-ok"));
+    await waitFor(() => {
+      expect((dialog.getByTestId("confirm-ok") as HTMLButtonElement).disabled).toBe(true);
+      expect((dialog.getByTestId("confirm-cancel") as HTMLButtonElement).disabled).toBe(true);
+    });
+    release();
+    await screen.findByTestId("import-result");
+  });
+
+  it("UI-30: after a successful commit focus moves to the result heading and it is announced", async () => {
+    const user = userEvent.setup();
+    renderWith(<ImportWizard />, {
+      "POST /imports/prices/validate": ok(stored),
+      "POST /imports/prices/commit": ok(commitOk),
+    });
+    const dialog = await toCommitStep(user);
+    await user.click(dialog.getByTestId("confirm-ok"));
+    const heading = await screen.findByTestId("import-result-heading");
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    expect(heading.getAttribute("tabindex")).toBe("-1");
+    expect(screen.getByTestId("import-announce").textContent).toContain("batch 7");
+  });
+
+  it("UI-30: the prices wizard can be completed with the keyboard only", async () => {
+    const user = userEvent.setup();
+    renderWith(<ImportWizard />, {
+      "POST /imports/prices/validate": ok(validPrices),
+      "PUT /settings/prices-adjustment": ok({ value: false, set_at: "2026-10-24T09:00:00Z" }),
+      "POST /imports/prices/commit": ok(commitOk),
+    });
+    const next = () => screen.getByTestId("wizard-next") as HTMLButtonElement;
+    await user.upload(screen.getByTestId("import-file"), csv());
+    next().focus();
+    await user.keyboard("{Enter}");
+    const heading = await screen.findByRole("heading", { name: "Review the file" });
+    expect(document.activeElement).toBe(heading);
+    screen.getByTestId("adjustment-raw").focus();
+    await user.keyboard(" ");
+    await waitFor(() => expect(next().disabled).toBe(false));
+    next().focus();
+    await user.keyboard("{Enter}");
+    expect(document.activeElement).toBe(await screen.findByRole("heading", { name: "Commit" }));
+    screen.getByTestId("wizard-commit").focus();
+    await user.keyboard("{Enter}");
+    const dialog = within(openDialog());
+    dialog.getByTestId("confirm-ok").focus();
+    await user.keyboard("{Enter}");
+    const result = await screen.findByTestId("import-result-heading");
+    await waitFor(() => expect(document.activeElement).toBe(result));
+  });
+
+  it("I don't know does not block Next when a value is stored and says the stored value stays", async () => {
+    const user = userEvent.setup();
+    const mock = renderWith(<ImportWizard />, {
+      "POST /imports/prices/validate": ok({ ...validPrices, prices_already_adjusted: true }),
+    });
+    await upload(user);
+    await user.click(await screen.findByTestId("adjustment-unknown"));
+    expect(screen.getByTestId("adjustment-unknown-stored").textContent).toContain(
+      "already adjusted",
+    );
+    expect(screen.queryByTestId("adjustment-required")).toBeNull();
+    expect((screen.getByTestId("wizard-next") as HTMLButtonElement).disabled).toBe(false);
+    expect(mock.calls.some((c) => c.method === "PUT")).toBe(false);
+  });
+
+  it("pre-check: a non-CSV file is not uploaded and a clear message is shown", async () => {
+    const user = userEvent.setup({ applyAccept: false });
+    const mock = renderWith(<ImportWizard />, {});
+    await user.upload(
+      screen.getByTestId("import-file"),
+      new File(["x"], "prices.xlsx", { type: "application/vnd.ms-excel" }),
+    );
+    expect(screen.getByTestId("import-file-error").textContent).toContain(".csv");
+    expect((screen.getByTestId("wizard-next") as HTMLButtonElement).disabled).toBe(true);
+    expect(mock.calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it("pre-check: over 5 MB warns for prices (the server decides), blocks for instruments and over 25 MB", async () => {
+    const user = userEvent.setup();
+    renderWith(<ImportWizard />, {});
+    const big = (mb: number) => {
+      const f = new File(["x"], "p.csv", { type: "text/csv" });
+      Object.defineProperty(f, "size", { value: mb * 1024 * 1024 });
+      return f;
+    };
+    await user.upload(screen.getByTestId("import-file"), big(6));
+    expect(screen.getByTestId("import-file-warning").textContent).toContain("6.0 MB");
+    expect((screen.getByTestId("wizard-next") as HTMLButtonElement).disabled).toBe(false);
+    await user.click(screen.getByTestId("import-kind-instruments"));
+    expect(screen.getByTestId("import-file-error").textContent).toContain("5.0 MB");
+    expect((screen.getByTestId("wizard-next") as HTMLButtonElement).disabled).toBe(true);
+    await user.click(screen.getByTestId("import-kind-prices"));
+    await user.upload(screen.getByTestId("import-file"), big(26));
+    expect(screen.getByTestId("import-file-error").textContent).toContain("25.0 MB");
   });
 });

@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+﻿import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ExperimentalBanner } from "@/components/ui/banners";
@@ -437,6 +437,30 @@ describe("small components", () => {
     );
     await userEvent.click(screen.getByTestId("confirm-ok"));
     expect(onConfirm).toHaveBeenCalled();
+  });
+
+  it("UI-32: a busy ConfirmDialog disables both buttons and ignores clicks and Escape", async () => {
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    render(
+      <ConfirmDialog
+        open
+        busy
+        title="Delete?"
+        message="Sure"
+        confirmLabel="Delete"
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />,
+    );
+    const ok = screen.getByTestId("confirm-ok") as HTMLButtonElement;
+    const cancel = screen.getByTestId("confirm-cancel") as HTMLButtonElement;
+    expect([ok.disabled, cancel.disabled]).toEqual([true, true]);
+    fireEvent.click(ok);
+    fireEvent.click(cancel);
+    fireEvent(screen.getByTestId("confirm-dialog"), new Event("cancel", { cancelable: true }));
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
   });
 
   it("Toast appears and can be dismissed", async () => {

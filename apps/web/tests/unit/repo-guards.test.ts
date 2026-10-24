@@ -70,3 +70,19 @@ describe("reduced motion (docs/06a section 3.3)", () => {
     expect(block).toMatch(/scroll-behavior:\s*auto !important/);
   });
 });
+
+describe("import screens use F03 formatters (F03/F13a review)", () => {
+  it("local-format.ts is gone and nothing under src imports it", () => {
+    expect(sources.some((f) => /local-format\.ts$/.test(f))).toBe(false);
+    const offenders = sources.filter((f) => /local-format/.test(readFileSync(f, "utf8")));
+    expect(offenders).toEqual([]);
+  });
+  it("no component under components/imports uses Intl or toFixed for display", () => {
+    const files = sources.filter((f) => /components[\\/]imports[\\/]/.test(f));
+    expect(files.length).toBeGreaterThan(3);
+    const offenders = files.filter((f) =>
+      /Intl\.NumberFormat|\.toFixed\(|toLocaleString/.test(readFileSync(f, "utf8")),
+    );
+    expect(offenders).toEqual([]);
+  });
+});

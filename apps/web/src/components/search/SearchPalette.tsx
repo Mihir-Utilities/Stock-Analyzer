@@ -16,6 +16,7 @@ import {
 } from "@/lib/search/rank";
 import {
   indexedDbStore,
+  isValidRecentKey,
   loadStockIndex,
   pushRecent,
   readRecents,
@@ -50,13 +51,29 @@ const fundRow = (f: FundHit): Row => ({
   label: f.name,
   sub: f.sub,
   flags: 0,
-  href: `/mf/${f.code}`,
+  href: `/mf/${encodeURIComponent(String(f.code))}`,
 });
 
-const recentRow = (r: RecentItem): Row =>
-  r.kind === "stock"
+// Recents come from localStorage, so the key is validated again here (readRecents already drops
+// invalid entries) and encoded; a tampered value can never become a different route.
+const recentRow = (r: RecentItem): Row | null => {
+  if (!isValidRecentKey(r.kind, r.key)) return null;
+  return r.kind === "stock"
     ? stockRow(r.key, r.sub, 0)
-    : { kind: "fund", key: r.key, label: r.label, sub: r.sub, flags: 0, href: `/mf/${r.key}` };
+    : {
+        kind: "fund",
+        key: r.key,
+        label: r.label,
+        sub: r.sub,
+        flags: 0,
+        href: `/mf/${encodeURIComponent(r.key)}`,
+      };
+};
+const rowsOf = (list: RecentItem[], kind: RecentItem["kind"]): Row[] =>
+  list
+    .filter((r) => r.kind === kind)
+    .map(recentRow)
+    .filter((r): r is Row => r !== null);
 
 function badgesFor(flags: number): string[] {
   const out: string[] = [];
@@ -69,7 +86,13 @@ function badgesFor(flags: number): string[] {
 
 function isEditable(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false;
-  return el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName);
+  // jsdom has no `isContentEditable`, so the attribute is checked as well.
+  const editableAttr = el.closest('[contenteditable]:not([contenteditable="false"])') !== null;
+  return (
+    el.isContentEditable === true ||
+    editableAttr ||
+    ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)
+  );
 }
 
 export interface SearchPaletteProps {
@@ -143,6 +166,8 @@ export function SearchPalette({ store, request = apiRequest }: SearchPaletteProp
         else openPalette();
       } else if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey && !open) {
         if (isEditable(e.target)) return;
+        // Never open over another modal (a confirmation, a drawer).
+        if (document.querySelector("dialog[open]")) return;
         e.preventDefault();
         openPalette();
       }
@@ -236,12 +261,8 @@ export function SearchPalette({ store, request = apiRequest }: SearchPaletteProp
   }, [open, trimmed, request]);
 
   const showRecents = normalized === "" && recents.length > 0;
-  const stockRows = showRecents
-    ? recents.filter((r) => r.kind === "stock").map(recentRow)
-    : stockHits;
-  const fundRows = showRecents
-    ? recents.filter((r) => r.kind === "fund").map(recentRow)
-    : funds.map(fundRow);
+  const stockRows = showRecents ? rowsOf(recents, "stock") : stockHits;
+  const fundRows = showRecents ? rowsOf(recents, "fund") : funds.map(fundRow);
   const flat = useMemo(() => [...stockRows, ...fundRows], [stockRows, fundRows]);
   const activeRow = flat[Math.min(active, flat.length - 1)];
   const optionId = (r: Row) => `${listId}-${r.kind}-${r.key}`;
@@ -392,7 +413,7 @@ export function SearchPalette({ store, request = apiRequest }: SearchPaletteProp
                 type="button"
                 onClick={close}
                 data-testid="search-close"
-                className="h-11 rounded-control px-3 text-body text-text-2 hover:text-text-1"
+                className="touch-target h-11 rounded-control px-3 text-body text-text-2 hover:text-text-1"
               >
                 Close
               </button>

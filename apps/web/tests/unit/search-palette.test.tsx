@@ -95,7 +95,7 @@ async function setup(handler: Handler = defaultHandler) {
   return api;
 }
 
-describe("SearchPalette: opening and accessibility", () => {
+describe("UI-21: SearchPalette: opening and accessibility", () => {
   it("opens with Ctrl+K and Cmd+K, focuses the input and exposes combobox semantics", async () => {
     await setup();
     expect(screen.queryByTestId("search-input")).toBeNull();
@@ -151,7 +151,7 @@ describe("SearchPalette: opening and accessibility", () => {
   });
 });
 
-describe("SearchPalette: results and keyboard navigation", () => {
+describe("UI-21/UI-25: SearchPalette: results and keyboard navigation", () => {
   it("finds M&M by typing M&M and by typing MM, and BAJAJ-AUTO", async () => {
     await setup();
     await openWithKeyboard();
@@ -205,7 +205,7 @@ describe("SearchPalette: results and keyboard navigation", () => {
   });
 });
 
-describe("SearchPalette: funds, recents and states", () => {
+describe("UI-21: SearchPalette: funds, recents and states", () => {
   it("debounces fund search by 250 ms and shows a Funds group", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const api = await setup();
@@ -289,5 +289,56 @@ describe("SearchPalette: funds, recents and states", () => {
     await userEvent.type(screen.getByTestId("search-input"), "tata");
     await waitFor(() => expect(api.calls.some((c) => c.includes("/mf/schemes"))).toBe(true));
     expect(api.calls.every((c) => c.startsWith("/api/v1/"))).toBe(true);
+  });
+});
+
+describe("UI-21: review fixes (tampered recents, contenteditable, other modals)", () => {
+  it("a tampered recent never becomes a route: invalid keys are not listed and cannot be opened", async () => {
+    localStorage.setItem(
+      RECENT_KEY,
+      JSON.stringify([
+        { kind: "fund", key: "../x?", label: "Evil fund", sub: "" },
+        { kind: "fund", key: "120503", label: "Axis Bluechip", sub: "" },
+        { kind: "stock", key: "../../logout", label: "x", sub: "x" },
+      ]),
+    );
+    await setup();
+    await openWithKeyboard();
+    expect(screen.queryByText("Evil fund")).toBeNull();
+    expect(screen.queryByTestId("search-result-stock-../../logout")).toBeNull();
+    await userEvent.click(screen.getByTestId("search-result-fund-120503"));
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith("/mf/120503");
+  });
+
+  it("/ inside a contenteditable element does not open the palette", async () => {
+    await setup();
+    const editable = document.createElement("div");
+    editable.setAttribute("contenteditable", "true");
+    document.body.appendChild(editable);
+    const inner = document.createElement("span");
+    editable.appendChild(inner);
+    await act(async () => {
+      fireEvent.keyDown(editable, { key: "/" });
+      fireEvent.keyDown(inner, { key: "/" });
+    });
+    expect(screen.queryByTestId("search-input")).toBeNull();
+    editable.remove();
+  });
+
+  it("/ does not open the palette over another open modal", async () => {
+    await setup();
+    const other = document.createElement("dialog");
+    other.setAttribute("open", "");
+    document.body.appendChild(other);
+    await act(async () => {
+      fireEvent.keyDown(document.body, { key: "/" });
+    });
+    expect(screen.queryByTestId("search-input")).toBeNull();
+    other.remove();
+    await act(async () => {
+      fireEvent.keyDown(document.body, { key: "/" });
+    });
+    expect(screen.getByTestId("search-input")).toBeTruthy();
   });
 });
