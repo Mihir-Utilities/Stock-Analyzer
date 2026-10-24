@@ -44,7 +44,7 @@ test.describe("stories exist", () => {
   });
 });
 
-test.describe("axe on every component story (both themes)", () => {
+test.describe("UI-20 axe on every component story (both themes)", () => {
   test.use({ bypassCSP: true });
   for (const theme of ["dark", "light"] as const) {
     for (const s of stories) {
@@ -85,7 +85,9 @@ test.describe("axe on every component story (both themes)", () => {
 });
 
 test.describe("ChartFrame in a real browser", () => {
-  test("draws, shows the data table, and exports CSV and PNG", async ({ page }) => {
+  test("UI-07 UI-10 draws in the real SVG renderer, shows the data table, exports CSV and PNG", async ({
+    page,
+  }) => {
     await page.goto(url("charts-chartframe--ready", "dark"));
     await ready(page);
     await expect(page.getByTestId("chart-canvas").locator("svg")).toHaveCount(1);
@@ -108,7 +110,7 @@ test.describe("ChartFrame in a real browser", () => {
     expect(await page.getByTestId("chart-data-row").count()).toBe(120);
   });
 
-  test("legend toggle hides a series; theme change redraws with the new theme", async ({
+  test("UI-19 legend toggle hides a series; theme change redraws with the new theme", async ({
     page,
   }) => {
     await page.goto(url("charts-chartframe--ready", "dark"));

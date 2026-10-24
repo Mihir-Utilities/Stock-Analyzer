@@ -228,7 +228,7 @@ export function DataTable<T>({
             type="button"
             data-testid="data-table-retry"
             onClick={onRetry}
-            className="h-9 rounded-control border border-border px-3 text-body-sm hover:bg-surface-3"
+            className="h-9 touch-target rounded-control border border-border px-3 text-body-sm hover:bg-surface-3"
           >
             Retry
           </button>
@@ -266,7 +266,7 @@ export function DataTable<T>({
             data-testid="data-table-density"
             aria-pressed={density === "touch"}
             onClick={() => setDensity((d) => (d === "compact" ? "touch" : "compact"))}
-            className="inline-flex h-9 items-center gap-1 rounded-control border border-border px-3 text-body-sm hover:bg-surface-3"
+            className="inline-flex h-9 touch-target items-center gap-1 rounded-control border border-border px-3 text-body-sm hover:bg-surface-3"
           >
             <Rows3 size={16} strokeWidth={1.75} aria-hidden="true" />
             {density === "compact" ? "Compact" : "Touch"}
@@ -275,7 +275,7 @@ export function DataTable<T>({
             type="button"
             data-testid="data-table-export"
             onClick={exportCsv}
-            className="inline-flex h-9 items-center gap-1 rounded-control border border-border px-3 text-body-sm hover:bg-surface-3"
+            className="inline-flex h-9 touch-target items-center gap-1 rounded-control border border-border px-3 text-body-sm hover:bg-surface-3"
           >
             <Download size={16} strokeWidth={1.75} aria-hidden="true" />
             Export CSV
@@ -321,7 +321,7 @@ export function DataTable<T>({
                         data-r={-1}
                         data-c={ci}
                         onClick={h.column.getToggleSortingHandler()}
-                        className="flex h-full min-w-0 flex-1 items-center gap-1 px-2 text-left"
+                        className="touch-target flex h-full min-w-0 flex-1 items-center gap-1 px-2 text-left"
                       >
                         <span className="truncate" title={String(h.column.columnDef.header)}>
                           {flexRender(h.column.columnDef.header, h.getContext())}

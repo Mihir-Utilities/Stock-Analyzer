@@ -11,6 +11,8 @@ import {
 } from "@/components/charts/chart-data";
 import { ChartFrame } from "@/components/charts/ChartFrame";
 import * as csv from "@/components/ui/csv";
+import { toCsv } from "@/components/ui/csv";
+import { applyTheme } from "@/lib/theme/use-theme";
 
 function dataset(n: number, seriesCount = 2): ChartDataset {
   return {
@@ -30,6 +32,8 @@ function dataset(n: number, seriesCount = 2): ChartDataset {
 
 afterEach(() => vi.restoreAllMocks());
 
+// UI-07 / UI-10: jsdom has no layout, so this file covers the model, the empty state and the real
+// ECharts SVG renderer; real-browser drawing is in tests/e2e/stories.spec.ts (UI-07, UI-10 tests).
 describe("UI-07 charts render with 0, 1, 2, 10 and 2000 points", () => {
   it.each([0, 1, 2, 10, 2000])("buildOption handles %i points", (n) => {
     const opt = buildOption(dataset(n), { theme: "dark" });
@@ -119,6 +123,82 @@ describe("UI-10 every chart has a data-table view with parity", () => {
   });
 });
 
+// UI-17: unknown, NaN or Infinity never reach the screen as 0/NaN/Infinity; the CSV cell is empty.
+describe("UI-17 unknown values in a chart", () => {
+  const bad: ChartDataset = {
+    xName: "Date",
+    x: ["d1", "d2", "d3", "d4"],
+    series: [
+      {
+        id: "a",
+        name: "A",
+        unit: "%",
+        kind: "line",
+        values: [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, null],
+      },
+      { id: "b", name: "B", unit: "%", kind: "line", values: [1, 2, 3, 4] },
+    ],
+    source: "Test source",
+    asOf: "2025-01-28",
+  };
+
+  it("table cells say No data and the plotted option has no NaN or Infinity", () => {
+    expect(tableModel(bad).rows.map((r) => r[1])).toEqual(Array(4).fill("No data"));
+    const opt = buildOption(bad, { theme: "dark" });
+    const a = (opt["series"] as Array<{ data: unknown[] }>)[0]?.data;
+    expect(a).toEqual([null, null, null, null]);
+  });
+
+  it("CSV cell is empty (not 0, NaN or Infinity) for unknown values", () => {
+    const m = csvModel(bad);
+    const lines = toCsv(m.headers, m.rows).split("\r\n");
+    expect(lines.slice(1, 5)).toEqual(["d1,,1", "d2,,2", "d3,,3", "d4,,4"]);
+    expect(lines.join("\n")).not.toMatch(/NaN|Infinity/);
+  });
+
+  it("the rendered table view never shows NaN, Infinity or a bare 0", async () => {
+    render(<ChartFrame title="Price" dataset={bad} />);
+    await userEvent.click(screen.getByTestId("chart-show-data"));
+    const cells = screen
+      .getAllByTestId("chart-data-row")
+      .map((r) => within(r).getAllByRole("cell")[1]?.textContent);
+    expect(cells).toEqual(Array(4).fill("No data"));
+  });
+});
+
+// UI-19: the chart follows a theme change without reload, also when only the attribute changes.
+describe("UI-19 theme changes while a chart is mounted", () => {
+  async function ready() {
+    await waitFor(() => expect(screen.getByTestId("chart-canvas").dataset["ready"]).toBe("true"), {
+      timeout: 10_000,
+    });
+  }
+  it.each([
+    ["applyTheme()", () => applyTheme("light")],
+    ["attribute set directly", () => document.documentElement.setAttribute("data-theme", "light")],
+  ])(
+    "re-creates the chart with the new theme (%s)",
+    async (_name, change) => {
+      document.documentElement.setAttribute("data-theme", "dark");
+      render(<ChartFrame title="Price" dataset={dataset(10)} />);
+      await ready();
+      expect(screen.getByTestId("chart-frame").dataset["themeName"]).toBe("dark");
+      const before = screen.getByTestId("chart-canvas").querySelector("svg");
+      change();
+      await waitFor(() =>
+        expect(screen.getByTestId("chart-frame").dataset["themeName"]).toBe("light"),
+      );
+      await ready();
+      await waitFor(() => {
+        const after = screen.getByTestId("chart-canvas").querySelector("svg");
+        expect(after).not.toBeNull();
+        expect(after).not.toBe(before);
+      });
+    },
+    20_000,
+  );
+});
+
 describe("ChartFrame behaviour", () => {
   it("legend toggles remove a series from the option and mark the button", async () => {
     render(<ChartFrame title="Price" dataset={dataset(10)} />);
@@ -130,7 +210,7 @@ describe("ChartFrame behaviour", () => {
     expect((opt["series"] as unknown[]).length).toBe(1);
   });
 
-  it("second encoding: each series has its own marker shape and an end label", () => {
+  it("UI-16 second encoding: each series has its own marker shape and an end label", () => {
     expect(new Set(SERIES_SYMBOLS.map((_, i) => seriesSymbol(i))).size).toBe(SERIES_SYMBOLS.length);
     const opt = buildOption(dataset(10, 3), { theme: "dark" });
     const series = opt["series"] as Array<{ symbol: string; endLabel: { show: boolean } }>;
@@ -139,7 +219,7 @@ describe("ChartFrame behaviour", () => {
     expect((opt["aria"] as { decal: { show: boolean } }).decal.show).toBe(true);
   });
 
-  it("forecast series are dashed", () => {
+  it("UI-16 forecast series are dashed", () => {
     const d = dataset(5, 1);
     const first = d.series[0];
     if (!first) throw new Error("fixture");

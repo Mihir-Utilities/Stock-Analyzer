@@ -8,7 +8,7 @@ export interface FieldControlProps {
 }
 
 export const inputClass =
-  "h-9 w-full min-w-0 rounded-control border border-border bg-surface-1 px-2 text-body text-text-1 aria-[invalid=true]:border-down";
+  "h-9 touch-target w-full min-w-0 rounded-control border border-border bg-surface-1 px-2 text-body text-text-1 aria-[invalid=true]:border-down";
 
 /** Label, hint, optional unit suffix, inline error and accessible description. */
 export function FormField({

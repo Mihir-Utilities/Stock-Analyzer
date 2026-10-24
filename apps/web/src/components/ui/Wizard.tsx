@@ -62,7 +62,7 @@ export function Wizard({
           data-testid="wizard-back"
           disabled={step === 0 || busy}
           onClick={onBack}
-          className="h-9 rounded-control border border-border px-3 text-body-sm hover:bg-surface-3 disabled:opacity-50"
+          className="h-9 touch-target rounded-control border border-border px-3 text-body-sm hover:bg-surface-3 disabled:opacity-50"
         >
           Back
         </button>
@@ -72,7 +72,7 @@ export function Wizard({
             data-testid="wizard-commit"
             disabled={!canAdvance || busy}
             onClick={onCommit}
-            className="h-9 rounded-control border border-accent px-3 text-body-sm font-medium hover:bg-surface-3 disabled:opacity-50"
+            className="h-9 touch-target rounded-control border border-accent px-3 text-body-sm font-medium hover:bg-surface-3 disabled:opacity-50"
           >
             {busy ? "Working" : commitLabel}
           </button>
@@ -82,7 +82,7 @@ export function Wizard({
             data-testid="wizard-next"
             disabled={!canAdvance || busy}
             onClick={onNext}
-            className="h-9 rounded-control border border-accent px-3 text-body-sm font-medium hover:bg-surface-3 disabled:opacity-50"
+            className="h-9 touch-target rounded-control border border-accent px-3 text-body-sm font-medium hover:bg-surface-3 disabled:opacity-50"
           >
             Next
           </button>

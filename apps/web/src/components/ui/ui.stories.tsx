@@ -381,8 +381,10 @@ export const WizardStory: Story = { name: "Wizard", render: () => <WizardDemo />
 function OverlayDemo() {
   const [confirm, setConfirm] = useState(false);
   const [drawer, setDrawer] = useState(false);
+  const [stuck, setStuck] = useState(false);
   const toast = useToast();
-  const btn = "h-9 rounded-control border border-border px-3 text-body-sm hover:bg-surface-3";
+  const btn =
+    "h-9 touch-target rounded-control border border-border px-3 text-body-sm hover:bg-surface-3";
   return (
     <div className="flex flex-wrap items-center gap-3">
       <button
@@ -404,6 +406,9 @@ function OverlayDemo() {
       <button type="button" data-testid="show-toast" className={btn} onClick={() => toast("Saved")}>
         Toast
       </button>
+      <button type="button" data-testid="open-stuck" className={btn} onClick={() => setStuck(true)}>
+        Stuck confirm
+      </button>
       <Tooltip text="Compound annual growth rate">
         <button type="button" className={btn}>
           CAGR
@@ -417,6 +422,15 @@ function OverlayDemo() {
         danger
         onConfirm={() => setConfirm(false)}
         onCancel={() => setConfirm(false)}
+      />
+      {/* Parent that ignores onCancel: the dialog must stay open and consistent. */}
+      <ConfirmDialog
+        open={stuck}
+        title="Cannot dismiss"
+        message="The parent ignores Cancel."
+        confirmLabel="OK"
+        onConfirm={() => setStuck(false)}
+        onCancel={() => {}}
       />
       <Drawer open={drawer} title="Details" onClose={() => setDrawer(false)}>
         Drawer content.

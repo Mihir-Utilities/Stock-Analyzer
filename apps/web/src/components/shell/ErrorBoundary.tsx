@@ -72,7 +72,7 @@ export function ErrorPanel(props: {
           type="button"
           onClick={props.onRetry}
           data-testid="error-retry"
-          className="mt-3 inline-flex h-11 items-center rounded-control border border-border bg-surface-2 px-4 text-body-sm font-medium text-text-1 hover:bg-surface-3"
+          className="touch-target mt-3 inline-flex h-11 items-center rounded-control border border-border bg-surface-2 px-4 text-body-sm font-medium text-text-1 hover:bg-surface-3"
         >
           Retry
         </button>

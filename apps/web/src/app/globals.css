@@ -6,6 +6,15 @@
  * there is exactly one source of hex values. Tailwind utilities below only reference them.
  */
 
+/* Touch targets (docs/06a: 44 px touch, 36 px desktop density). The root font size is 14 px, so
+   rem-based utilities (h-11) are 38.5 px: touch targets use px. `touch-target` raises a control
+   to 44 x 44 on coarse pointers and below the desktop breakpoint; desktop density is untouched. */
+@utility touch-target {
+  @media (pointer: coarse), (max-width: 1023.98px) {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
 @theme {
   --breakpoint-*: initial;
   --breakpoint-tablet: 640px;

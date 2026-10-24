@@ -13,7 +13,7 @@ export default function NotFound() {
       <Link
         href="/"
         data-testid="not-found-home"
-        className="mt-4 inline-flex h-11 items-center rounded-control border border-border bg-surface-2 px-4 text-body-sm font-medium text-text-1 hover:bg-surface-3"
+        className="touch-target mt-4 inline-flex h-11 items-center rounded-control border border-border bg-surface-2 px-4 text-body-sm font-medium text-text-1 hover:bg-surface-3"
       >
         Go to Home
       </Link>

@@ -14,7 +14,7 @@ export function ThemeToggle() {
       aria-label={label}
       title={label}
       data-testid="theme-toggle"
-      className="inline-flex h-11 w-11 items-center justify-center rounded-control text-text-2 hover:bg-surface-2 hover:text-text-1 desktop:h-9 desktop:w-9"
+      className="touch-target inline-flex h-11 w-11 items-center justify-center rounded-control text-text-2 hover:bg-surface-2 hover:text-text-1 desktop:h-9 desktop:w-9"
     >
       <Icon size={20} strokeWidth={1.75} aria-hidden="true" />
     </button>

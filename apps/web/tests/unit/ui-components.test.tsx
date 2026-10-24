@@ -67,7 +67,7 @@ describe("DataTable", () => {
     );
   });
 
-  it("virtualizes above 100 rows", () => {
+  it("UI-18 virtualizes above 100 rows", () => {
     // jsdom has no layout; give the scroll box a size so the virtualizer has a window.
     vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(480);
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
@@ -161,6 +161,71 @@ describe("small components", () => {
     expect(screen.getByTestId("delta-badge").textContent).toBe("n/a");
     rerender(<DeltaBadge value={-1.2} text="-1.20%" />);
     expect(screen.getByTestId("delta-badge").dataset["direction"]).toBe("down");
+  });
+
+  // UI-17: NaN / Infinity / null never render as 0, NaN or Infinity (chart cases: chart-frame.test).
+  it("UI-17 Sparkline ignores NaN, Infinity and null and says n/a when under two points remain", () => {
+    for (const values of [
+      [Number.NaN, Number.NaN, Number.NaN],
+      [1, Number.POSITIVE_INFINITY, null],
+      [null, null],
+    ]) {
+      const { unmount } = render(<Sparkline values={values} label="x" />);
+      expect(screen.getByTestId("sparkline-empty").textContent).toBe("n/a");
+      unmount();
+    }
+    const { container } = render(<Sparkline values={[1, Number.NaN, 3, null, 5]} label="x" />);
+    expect(container.innerHTML).not.toMatch(/NaN|Infinity/);
+  });
+
+  it("UI-17 RangeBar shows the reason for NaN, Infinity and inverted ranges", () => {
+    const cases: Array<[number | null, number | null, number | null]> = [
+      [Number.NaN, 20, 15],
+      [10, Number.POSITIVE_INFINITY, 15],
+      [10, 20, Number.NEGATIVE_INFINITY],
+      [20, 20, 20],
+    ];
+    for (const [low, high, value] of cases) {
+      const { unmount, container } = render(
+        <RangeBar
+          low={low}
+          high={high}
+          value={value}
+          lowText={null}
+          highText={null}
+          valueText={null}
+          nullReason="Reason"
+        />,
+      );
+      expect(screen.getByTestId("range-bar-null").textContent).toContain("Reason");
+      expect(screen.queryByTestId("range-bar-marker")).toBeNull();
+      expect(container.innerHTML).not.toMatch(/NaN|Infinity/);
+      unmount();
+    }
+  });
+
+  it("UI-17 Heatmap prints n/a (never NaN or Infinity) for non-finite cells", () => {
+    render(
+      <Heatmap
+        label="Monthly returns"
+        rows={["2024"]}
+        columns={["Jan", "Feb", "Mar"]}
+        cells={[
+          [
+            { value: Number.NaN, text: "NaN%" },
+            { value: Number.POSITIVE_INFINITY, text: "Infinity%" },
+            { value: null, text: null },
+          ],
+        ]}
+        maxAbs={5}
+        legend={{ negative: "-5%", positive: "+5%" }}
+      />,
+    );
+    expect(screen.getAllByTestId("heat-cell").map((c) => c.textContent)).toEqual([
+      "n/a",
+      "n/a",
+      "n/a",
+    ]);
   });
 
   it("Sparkline with fewer than two points says n/a", () => {
@@ -314,6 +379,47 @@ describe("small components", () => {
     await userEvent.keyboard("{ArrowRight}");
     expect(screen.getByTestId("tab-b").getAttribute("aria-selected")).toBe("true");
     expect(screen.getByText("pb")).toBeTruthy();
+  });
+
+  it("UI-27 a dialog closed natively while the parent keeps open=true is re-opened and reported", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const onCancel = vi.fn();
+    render(
+      <ConfirmDialog
+        open
+        title="Stuck"
+        message="m"
+        confirmLabel="OK"
+        onConfirm={() => {}}
+        onCancel={onCancel}
+      />,
+    );
+    const dlg = screen.getByTestId("confirm-dialog");
+    expect(dlg.hasAttribute("open")).toBe(true);
+    // Simulate the browser closing it (second Escape): attribute gone, `close` event fired.
+    dlg.removeAttribute("open");
+    dlg.dispatchEvent(new Event("close"));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(5);
+    expect(dlg.hasAttribute("open")).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it("UI-27 Cancel button reports once and an ignoring parent keeps the dialog open", async () => {
+    const onCancel = vi.fn();
+    render(
+      <ConfirmDialog
+        open
+        title="Stuck"
+        message="m"
+        confirmLabel="OK"
+        onConfirm={() => {}}
+        onCancel={onCancel}
+      />,
+    );
+    await userEvent.click(screen.getByTestId("confirm-cancel"));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("confirm-dialog").hasAttribute("open")).toBe(true);
   });
 
   it("ConfirmDialog calls back", async () => {

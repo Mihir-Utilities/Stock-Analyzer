@@ -252,3 +252,11 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Failure mode: "This upload expired" after a long pause (uploads live 1 hour): upload the file again. "Choose whether the prices are raw or adjusted": set the choice on the review step.
 - Failure mode: `npm run build` in `apps/web` exits 1 with a Next.js security advisory message after a successful compile (F13a-10): upgrade `next`.
 - Checks: `npm test` (unit; mocks in `tests/mocks`); `npx playwright test tests/e2e/imports.spec.ts` after `npm run build` (port 3100 must be free).
+
+## 31. Frontend review fixes for F01/F02
+
+- Touch targets: the root font size is 14 px, so Tailwind rem classes are 12.5 percent smaller than their names (`h-11` is 38.5 px). Use the `touch-target` utility (`globals.css`, 44 px minimum below 1024 px and on coarse pointers) on every new button or link; the Playwright test `UI-26` fails for any `button[data-testid]` or `a[data-testid]` under 44 px at 375 px (the visually hidden skip link is the only exclusion).
+- Dialogs and drawers (`ui/overlays.tsx`): the `open` prop is the source of truth. If a browser closes a modal natively while the parent still says open (second Escape without user activation), `onClose` is called and the dialog is re-opened. Backdrop click intentionally does nothing.
+- Login redirect (`middleware.ts`) clones `request.nextUrl`. A relative `Location` header was tried and rejected: Next's middleware adapter throws `Invalid URL` (HTTP 500) on it. Behind Render the public `Host` header must be forwarded so the redirect stays on the public origin.
+- External links must use `ui/ExternalLink` (adds `rel="noopener noreferrer"`); `tests/unit/repo-guards.test.ts` fails on any other `target="_blank"`.
+- `npm run build` in `apps/web` currently ends with `SecurityFatalError` (the installed Next.js 16.4.0 is flagged by the advisory service); the compile and page generation steps pass and the output serves. Upgrading Next is a separate task.

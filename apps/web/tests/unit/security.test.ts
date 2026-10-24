@@ -36,10 +36,10 @@ describe("auth gate (docs/06 section 1)", () => {
 });
 
 describe("middleware", () => {
-  it("redirects an anonymous visit to /login?next=", () => {
+  it("redirects an anonymous visit to /login?next= (relative Location)", () => {
     const res = middleware(new NextRequest("http://localhost:3000/stocks?tab=chart"));
     expect(res.status).toBe(307);
-    const loc = new URL(res.headers.get("location") ?? "");
+    const loc = new URL(res.headers.get("location") ?? "", "http://localhost:3000");
     expect(loc.origin).toBe("http://localhost:3000");
     expect(loc.pathname).toBe("/login");
     expect(loc.searchParams.get("next")).toBe("/stocks?tab=chart");
@@ -47,7 +47,7 @@ describe("middleware", () => {
 
   it("never redirects off-origin even for a hostile path (SEC-06)", () => {
     const res = middleware(new NextRequest("http://localhost:3000//evil.com/x"));
-    const loc = new URL(res.headers.get("location") ?? "http://localhost:3000/");
+    const loc = new URL(res.headers.get("location") ?? "/", "http://localhost:3000");
     expect(loc.origin).toBe("http://localhost:3000");
   });
 
