@@ -223,7 +223,7 @@ def test_act10_future_ex_date_is_not_applied() -> None:
 
 
 # --------------------------------------------------------------------------- D03 review fixes
-def test_act20_suspect_bars_are_excluded_from_the_volume_average() -> None:
+def test_act24_suspect_bars_are_excluded_from_the_volume_average() -> None:
     # 10 spiky bars inside the prior window would inflate the average to ~5.5M and hide the split.
     def bars(suspect: bool) -> list[Bar]:
         out = flat_then_jump(0.5, volume_at_jump=300_000, n_before=40)
@@ -239,13 +239,13 @@ def test_act20_suspect_bars_are_excluded_from_the_volume_average() -> None:
     assert (det.ratio_num, det.ratio_den) == (1, 2)
 
 
-def test_act20_fewer_than_20_clean_prior_bars_means_no_detection() -> None:
+def test_act24_fewer_than_20_clean_prior_bars_means_no_detection() -> None:
     out = flat_then_jump(0.5, volume_at_jump=300_000, n_before=25)
     flagged = [Bar(b.trade_date, b.close, b.volume, False, i < 10) for i, b in enumerate(out)]
     assert detect_splits(flagged, CFG) == []  # only 15 non-suspect prior bars
 
 
-def test_act20_the_suspect_split_day_bar_itself_is_still_detected() -> None:
+def test_act24_the_suspect_split_day_bar_itself_is_still_detected() -> None:
     # docs/01 3.5: a >50% day-over-day change marks the bar suspect AND triggers detection (1/3).
     out = flat_then_jump(1 / 3, volume_at_jump=300_000)
     out = [Bar(b.trade_date, b.close, b.volume, False, i == 30) for i, b in enumerate(out)]
@@ -253,7 +253,7 @@ def test_act20_the_suspect_split_day_bar_itself_is_still_detected() -> None:
     assert (det.ratio_num, det.ratio_den) == (1, 3)
 
 
-def test_act21_a_multi_month_hole_before_the_jump_is_flagged_low_confidence() -> None:
+def test_act25_a_multi_month_hole_before_the_jump_is_flagged_low_confidence() -> None:
     days = trading_days(200)
     before = [Bar(d, 1000.0, 100_000) for d in days[:30]]
     after = [Bar(d, 500.0, 300_000 if d == days[170] else 100_000) for d in days[170:175]]

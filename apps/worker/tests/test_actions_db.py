@@ -360,7 +360,7 @@ async def test_soft_flag_disappears_once_an_action_exists_on_that_date(
     assert await actions_db.list_soft_flags(pg_full, "ADD") == []
 
 
-async def test_act20_load_bars_returns_suspect_and_detect_ignores_it_in_the_average(
+async def test_act24_load_bars_returns_suspect_and_detect_ignores_it_in_the_average(
     pg_full: asyncpg.Pool,
 ) -> None:
     bars = make_series(60, jumps={40: (0.5, 3.0)})
