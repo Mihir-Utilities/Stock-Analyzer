@@ -1,4 +1,4 @@
-# 07. Edge-Case Catalogue and Test Matrix (Safe Edition)
+﻿# 07. Edge-Case Catalogue and Test Matrix (Safe Edition)
 
 Gaps in numbering are intentional; IDs are stable references.
 
@@ -473,6 +473,8 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | UI-32 | Double commit (F13a review) | `ConfirmDialog` has a `busy` state that disables confirm and cancel and ignores Escape; a double click on Commit, Trim history, Delete prices or Change setting sends exactly one request and never shows the 404 'expired' banner | U/E |
 | UI-33 | Palette input hardening (F03 review) | A tampered recent (`../x?`, a stock key outside `^[A-Z0-9][A-Z0-9&-]{0,29}$`, a non-numeric fund code) is dropped on read, valid recents survive, route segments are encoded; `/` does not open the palette inside a `contenteditable` element or over another open modal | U |
 | UI-34 | Formatter review rows (F03/F13a review) | `formatCrore(99999.6)` is `₹1.00 L Cr` (tier follows the rounded value); `formatPercent` and `formatMultiple` honour the western grouping setting; `formatMb`, `formatRatio` and `formatPercentOf` follow the same rounding rules (no `-0.0%`) and carry a reason when unknown; import screens format ISO dates with `formatDate`; no file under `components/imports` uses `Intl`, `toFixed` or the removed `local-format` | U |
+| UI-35 | Dashboard cards when endpoints answer 501 or 404 | Every card renders an empty state with the reason (never 0, NaN or Infinity); index tiles show the BRK-16 reason; errors show Retry and the request id (F04) | U/E |
+| UI-36 | Login messaging | 401 for a wrong password and for a lockout show the identical message; 429 shows the Retry-After seconds; an open-redirect `next` falls back to `/` (SEC-01, F04) | U/E |
 | API-30 | Refresh cooldown (B09) | A `mf_refresh` for a target whose last job finished < `REFRESH_COOLDOWN_MIN` ago gives 429 `RATE_LIMITED` with `details.retry_after_seconds` (= remaining cooldown) and a matching `Retry-After` header; allowed again after the cooldown | I |
 | API-31 | Global refresh limit (B09) | At `REFRESH_GLOBAL_PER_HOUR` on-demand jobs in the last hour the next request is 429 with `retry_after_seconds` = time until the oldest ages out; no row is created; `post_import` is exempt | I |
 | API-32 | Worker signal fails (B09) | Worker answers non-202 or is down: the request still returns 202, the row stays `queued`, nothing is retried with the same signature | I |

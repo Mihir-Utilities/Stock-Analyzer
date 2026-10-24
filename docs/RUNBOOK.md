@@ -301,3 +301,11 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - The Import center formats numbers and dates only through `lib/format` (`lib/imports/local-format.ts` is gone; a repo test keeps it gone). Unknown values show a dash with the reason as a tooltip (`components/imports/Fmt.tsx`).
 - The stock index cache treats a future `fetchedAt` (system clock moved back) as stale. If the palette seems to show an old list, clear the `analyzer-search` IndexedDB database in the browser.
 - Local e2e: `npm run build` bakes `API_BASE_URL` into the rewrites. Build with `API_BASE_URL=http://127.0.0.1:9` (as CI's closed-port intent) when another process answers on `localhost:8080`, otherwise the shell tests get a 401 from that process and are redirected to `/login`. Ports 3100 and 6100 are fixed in `playwright.config.ts`; two parallel runs on one machine collide.
+
+## 38. Login and dashboard (F04)
+
+- `/login` posts `{password}` to `/api/v1/auth/login` with the CSRF header, then does a full navigation to the validated `next` (`safeNext`); the session cookie is httpOnly and never read in JS. A wrong password and a lockout show the same message. There is no recovery link: reset the password with the CLI described in the password section of this runbook.
+- The dashboard calls `/watchlist`, `/portfolio/summary`, `/alerts/events`, `/broker/status`, `/market/overview`, `/admin/status` and `/stocks/{symbol}/events`. `501 NOT_IMPLEMENTED` and `404 DATA_UNAVAILABLE` render an empty card with the reason; other failures render an error card with Retry and the request id. If a card shows an error, quote the request id and search the API logs for it.
+- Index tiles stay empty with a reason until `NIFTY50` and `INDIAVIX` rows are imported through `prices.csv` (IMP-21) and the market overview endpoint exists.
+- The "stale" chip on the last price import counts weekends only; it can say stale after a trading holiday (F04-4).
+- E2E: `tests/e2e/f04-login-dashboard.spec.ts` mocks the API with Playwright routes; no backend is needed.
