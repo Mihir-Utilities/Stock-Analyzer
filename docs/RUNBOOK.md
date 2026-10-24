@@ -237,3 +237,10 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Failure mode `HOLDINGS_INCONSISTENT` warning in the summary: stored transactions no longer pass the holdings check (for example a confirmed split was edited or removed after a sell). The symbol is excluded from totals; fix the action (or add an override) or the transactions.
 - Failure mode: totals show a null market value with `missing_price: SYM`: import a `prices.csv` containing that symbol.
 - Owner action: review warnings `REVIEW_NEEDED` (rights, buyback, merger, demerger, split_or_bonus) and `UNCONFIRMED_ACTION`; these are never applied to quantities automatically.
+
+## 29. Formatters, definitions and search palette (F03)
+
+- All text for numbers, dates and labels comes from `apps/web/src/lib/format` (every formatter returns `{ text, reason, direction }`; unknown gives an em dash plus the reason). Do not call `toFixed`, `toLocaleString` or `Intl` in components. The chart and table defaults now use `formatNumber`.
+- `src/lib/definitions.ts` is generated from `docs/05-analytics-spec.md` by `npm run gen:definitions` (in `apps/web`). Run it after editing a formula line in docs/05; a unit test fails when the file is stale, and generation fails (names the key) when a spec line the generator anchors on was reworded. Add a new definition by adding a row to `ENTRIES` in `scripts/gen-definitions.mjs`.
+- Search palette (`components/search/SearchPalette.tsx`, mounted in the top bar): the stock index (`GET /stocks/index`) is cached in IndexedDB (`analyzer-search`, key `stocks-index`) and recent picks in `localStorage` (`analyzer-recent-searches`). Failure mode: if the list looks old after an import, clear site data for the app or wait for the 1 h background revalidation; if `/stocks/index` fails the palette shows a notice and uses `GET /stocks?q=`; if `/mf/schemes` fails it shows "Fund search is unavailable right now." and stocks still work.
+- No new npm dependency (tests inject `fetch`; no MSW). Browser requests go only to same-origin `/api/v1/*`.

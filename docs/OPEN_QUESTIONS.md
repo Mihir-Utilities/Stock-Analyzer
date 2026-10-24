@@ -316,3 +316,16 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | B11-7 | Shape of `GET/POST /portfolio/adjustments` is not specified | See docs/03 section 12 (B11 response details). An override replaces every action of the same ex-date | `service.go` |
 | B11-8 | Benchmark XIRR | Same dated flows buy/sell NIFTY50 units at the level on or before each date; null with reason when the series is missing, starts after the first flow, or the flows would oversell units; same 30-day rule | `summary.go` |
 | B11-9 | sqlc vs hand-written SQL | B11 uses parameterised pgx queries inside `internal/portfolio` instead of regenerating `internal/dbq`, to avoid generated-code merge conflicts with parallel tasks. The coordinator may move them to sqlc later | `portfolio/*.go` |
+
+## F03 assumptions (Claude, 2026-10-24; owner may overrule, none blocks)
+| # | Question | Choice made | Where |
+|---|---|---|---|
+| F03-1 | The task text says the palette calls `GET /search`; the contract has no such path | Stocks use `GET /stocks/index` (client ranking) with `GET /stocks?q=` as fallback; funds use `GET /mf/schemes?q=&limit=6` (plain scheme rows, default plan/option filters) | `lib/search/api.ts` |
+| F03-2 | Decimals for crore amounts are not specified | 0 decimals from 1,000 Cr, 2 below (so 0.4 Cr is not shown as 0); `L Cr` always 2 decimals | `lib/format/format.ts` |
+| F03-3 | `/stocks/index` has no sector and bit 1 (`broker_ok`) is always 0 | The sector chip and `No broker data` badge are not shown (the latter is also hidden in manual mode per the F03 amendment); `Suspended`, `Delisted`, `ETF/REIT` badges are shown | `SearchPalette.tsx` |
+| F03-4 | Fuzzy threshold applies to very short queries | Fuzzy (Jaro-Winkler >= 0.85, against symbol and each name word) runs only for 3+ normalised characters and only when fewer than 12 stronger matches exist; ties sort by shorter symbol, then alphabetical; a literal match beats a match that ignores `&` and `-` | `lib/search/rank.ts` |
+| F03-5 | Fund search trigger and size | Server fund search from 2 characters, 250 ms debounce, 6 results; the 12-result cap applies to stocks | `SearchPalette.tsx` |
+| F03-6 | Recents content | The last 8 picked results (stock or fund), not raw query text; stored in localStorage only | `lib/search/store.ts` |
+| F03-7 | A period end that is not Jun/Sep/Dec/Mar has no quarter label | Shows a dash with reason "period end is not a fiscal quarter end" instead of guessing (off-cycle reporters need a spec decision) | `fiscalQuarterLabel` |
+| F03-8 | `apiRequest` does not expose response headers, so the ETag cannot be compared in code | The browser HTTP cache sends `If-None-Match` itself; the code compares `generated_at` after a background revalidation once the cache is over 1 h old | `lib/search/store.ts` |
+| F03-9 | Playwright E-rows UI-05 (search 2,200 items) | Covered at unit level with 2,300 items (< 16 ms median per keystroke, open < 100 ms in jsdom); no browser E2E added in this task | `tests/unit/search-*.test.ts*` |

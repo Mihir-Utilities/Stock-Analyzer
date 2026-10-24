@@ -115,7 +115,7 @@ describe("UI-10 every chart has a data-table view with parity", () => {
         },
       ],
     };
-    expect(tableModel(d).rows.map((r) => r[1])).toEqual(["No data", "No data", "2"]);
+    expect(tableModel(d).rows.map((r) => r[1])).toEqual(["No data", "No data", "2.00"]);
   });
 });
 

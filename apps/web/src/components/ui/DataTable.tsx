@@ -12,6 +12,7 @@ import {
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp, ArrowUpDown, Download, Rows3 } from "lucide-react";
+import { formatNumber } from "@/lib/format";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Banner } from "./banners";
 import { AsOfChip, SourceChip } from "./chips";
@@ -29,7 +30,7 @@ export interface DataColumn<T> {
   header: string;
   /** Raw value used for sorting and CSV. null = unknown (shows the reason, sorts last). */
   value: (row: T) => string | number | null;
-  /** Formatted text from format.ts; defaults to String(value). */
+  /** Formatted text from format.ts; defaults to formatNumber for numbers. */
   display?: (row: T) => string | null;
   kind?: CellKind;
   /** Series for `sparkline` cells. */
@@ -72,7 +73,11 @@ interface Props<T> {
 function cellText<T>(col: DataColumn<T>, row: T): string | null {
   const raw = col.value(row);
   if (raw === null || (typeof raw === "number" && !Number.isFinite(raw))) return null;
-  const shown = col.display ? col.display(row) : String(raw);
+  const shown = col.display
+    ? col.display(row)
+    : typeof raw === "number"
+      ? formatNumber(raw).text
+      : String(raw);
   return shown;
 }
 
