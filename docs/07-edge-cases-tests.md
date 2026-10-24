@@ -44,6 +44,8 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | BRK-18 | Timezone boundaries (IST vs UTC dates) | Market date test around 00:00 | U |
 | BRK-19 | Duplicate candles in a response | Upsert; counts stable | I |
 | BRK-20 | Broker returns already-adjusted history | With `PRICES_ALREADY_ADJUSTED=true` no double adjustment (broker mode inactive; manual-mode equivalent: ACT-11, ACT-12) | U |
+| BRK-21 | Imported close moves more than 50% from the previous stored bar | Bar stored `suspect=true` unless a confirmed corporate action lies within one trading day; 40% moves and the reserved market series are not flagged; the detector still reads suspect bars (D03-A9); re-importing a corrected bar clears the row-level flag | I |
+| BRK-22 | Prices with `high < low`, or any of open/high/low/close <= 0 | Row error (cannot be stored: DB constraints); `high` below max(open, close) or `low` above min(open, close) beyond 1e-6: stored `suspect=true` with a warning | F |
 
 ## ACT: corporate actions and adjustments
 | ID | Scenario | Required behavior | Test |
@@ -68,6 +70,8 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ACT-18 | Ratio 2/3 and the trigger (D03, pins ACT-14) | Exactly 0.667 is not detected; only the sliver r in [0.6467, 0.65) of the 2/3 tolerance band passes the 0.35 trigger and is matched as 2/3 | U |
 | ACT-19 | Soft-flag dismissal lifecycle (D-U, D03) | Dismiss inserts one `flag_dismissals` row (repeat is a no-op); Undo deletes it; per bar date (a later drop still shows); survives a prices re-import; the flag disappears once an action exists on that date | I |
 | ACT-20 | Confirmed `rights`/`buyback`/`merger`/`demerger` or an untyped `split_or_bonus` (D03) | `adj_close` is never changed; the stock is listed in `review_needed` of the re-adjust result | I |
+| ACT-21 | Events read API (B05) | Actions include `detected` and `rejected` with `status`; default window last 5 years (no upper bound), calendar next 90 days; `from`/`to` override both; bad dates or `to < from` -> 422; detected rows add `UNCONFIRMED_ACTION` warnings; nothing entered -> `reason = no_data_entered` | I |
+| ACT-22 | Old symbol on fundamentals/shareholding/events/links (B05) | HTTP 200 with `data.redirect_symbol`; unknown symbol -> 404 | I |
 
 ## IMP: imports and manual entry
 | ID | Scenario | Required behavior | Test |
@@ -100,16 +104,25 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | IMP-26 | Adjustment check on a validated upload | Returns closes for up to 5 trading days each side of the ex-date, observed ratio, nearest fraction and hint (`raw_likely` within 3% of the expected ratio/fraction, `adjusted_likely` within 3% of 1, else `inconclusive`); writes nothing; unknown symbol/ex-date outside file -> 422 | I |
 | IMP-27 | `holidays.csv` import | Columns/segment validated; weekend date = warning; duplicate `(date, segment)` = error; replace-per-year on commit; not undoable; template has no example dates; shipped 2026 list is empty (no invented dates) | F |
 | IMP-28 | Decimal comma in a semicolon-delimited file (`1234,56`, `12,34`) | Rejected as ambiguous, never silently read as 123456 or 1234.56; a comma is accepted only as a thousands separator in valid groupings (`1,234.56`, Indian `1,23,456.78`) (S13; interim behaviour, see OQ-9) | F |
+| IMP-29 | Browser-split large prices file (`upload_group`, D-G) | Parts validate separately; commit with `upload_ids` + `upload_group` writes all parts in one transaction under one `import_batch`; one missing/expired part rolls everything back and keeps the other parts | I |
+| IMP-30 | Spreadsheet, zip, UTF-16 or binary content; wrong MIME type or extension (SEC-05) | 422 on field `file` with a plain message; nothing is stored; only `.csv`/`.txt` with a CSV/text MIME are read | I |
+| IMP-31 | Empty required price cell (open/high/low/close/volume); empty optional `instruments.csv` cell | Required price cell: row error naming the column, never read as 0. Optional instrument cell: on insert the column default or NULL, on update the stored value is kept | F |
+| IMP-32 | `prices.csv` row uses a symbol that was renamed through `previous_symbol` | Row error "symbol OLD was renamed to NEW; use the new symbol"; never silently mapped | I |
+| IMP-33 | Lower-case symbol in `instruments.csv` / Add stock form; lower-case symbol in `prices.csv` | Instruments: upper-cased with a `SYMBOL_UPPERCASED` warning (same in the form); prices: matched case-insensitively | F |
+| IMP-34 | Validation and commit share one code path (`scanPrices`, `scanInstruments`) | The preview of validate equals what commit writes; commit re-validates against the current database and refuses if errors appeared since | I |
 
 ## INS: instruments
 | ID | Scenario | Required behavior | Test |
 |---|---|---|---|
 | INS-14 | `previous_symbol` rename | Matching existing instrument + new symbol free: instrument renamed, `symbol_alias` written, prices/fundamentals/portfolio links kept; new symbol already taken or no match: ignored with warning | I |
+| INS-15 | Add stock form (`POST /instruments`) | 201 with id; existing symbol 409; invalid symbol/name 422 with `details.fields`; malformed ISIN or lower-case symbol are warnings (`ISIN_MALFORMED`, `SYMBOL_UPPERCASED`); same messages as the CSV validators (IMP-17 for this kind) | I |
 
 ## PRC: manual price data actions
 | ID | Scenario | Required behavior | Test |
 |---|---|---|---|
 | PRC-21 | Delete prices for {symbol} between {from} and {to} | Preview count, confirm required, rows deleted, audit row written, `post_import` recomputes analytics/detection; `from > to` 422; other symbols untouched | I |
+| PRC-22 | Trim history before {date} for chosen stocks | Preview gives rows per symbol and estimated MB freed; confirm required; unknown symbol 422; rows older than the date deleted for those stocks only; one audit row; `post_import` queued for the affected symbols; nothing deleted automatically | I |
+| PRC-23 | Delete or trim that removes no rows | `deleted: 0`, no audit row, no job | I |
 
 ## FND: fundamentals (owner data) and analytics
 | ID | Scenario | Required behavior | Test |
@@ -130,6 +143,9 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | FND-14 | Market cap missing (no shares outstanding) | Dependent metrics null | U |
 | FND-15 | Restated period re-entered | Overwrites; audit via batch | I |
 | FND-16 | Formula golden tests | All formulas of `05` verified against references/hand values | U |
+| FND-17 | Source priority and entry recency (B05) | `manual > csv_import > screener_import` per (period, metric); same source: newest entry wins; `derived` rows and NULL values are never served as metrics; `source_by_metric` and `last_updated` report the winners | U |
+| FND-18 | Worker snapshot not yet written or period missing in it (B05) | `derived`/`ratios`/`valuation` null with `*_reason = not_computed`; derived series aligned to the returned periods by date | U/I |
+| FND-19 | Invalid `basis` or `period` query (B05) | 422 with `details.fields[]` | I |
 
 ## SHP: shareholding
 | ID | Scenario | Required behavior | Test |
@@ -139,6 +155,8 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | SHP-03 | No promoter | Chart still renders | U |
 | SHP-04 | Single quarter | No QoQ | U |
 | SHP-05 | Non-quarter-end date | Rejected | F |
+| SHP-06 | Missing quarter between the last two rows (B05) | `qoq_change` all null with `qoq_reason = previous_quarter_missing` (no multi-quarter difference shown as QoQ) | U |
+| SHP-07 | No shareholding entered (B05) | `quarters = []`, `reason = no_data_entered`, `mf_available=false`, entry hint | I |
 
 ## MF: mutual funds
 | ID | Scenario | Required behavior | Test |
@@ -171,6 +189,14 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | MF-85 | `sync_mf_schemes` status rule | Stale or absent-with-no-NAV schemes become `inactive`, fresh ones (also with a value date after the file date) `active`; a failed or invalid AMFI file never changes status | I |
 | MF-86 | Flat or short NAV series in `mf_return_cache` | No NaN/Inf anywhere; zero volatility is 0 with Sharpe null (`n/m`); under 1Y volatility null | U |
 | MF-87 | mfapi 404 for a tracked code | Item error (not an AMFI-fallback case); other schemes continue | I |
+| MF-88 | XIRR golden vector (`internal/finmath`): -1000 on 2020-01-01, +1100 on 2021-01-01; no sign change; fewer than one outflow and one inflow | 0.09973 within 1e-4; monotonic in the terminal value; `ErrNoFlows` / `ErrNoSignChange` surface as null | Go: `TestXIRR*` (finmath) |
+| MF-89 | Scheme search text | Words AND-ed, case-insensitive, any order; `%` and `_` in the query are literal; every value is a bind parameter; at most 12 words / 100 chars | Go: `TestMFSearchDefaultsAndGrouping`, `TestBuildSearchParameterised` |
+| MF-90 | Scheme with no NAV rows opened | 200 with `backfill {status, job_id}` and warning `NO_NAV_DATA`; `mf_refresh` enqueued once; a refused enqueue (cooldown) gives `status: none` | Go: `TestMFDetailNoNavEnqueuesBackfill` |
+| MF-91 | NAV series longer than 2,000 points | Downsampled to <= 2,000 points, first and last kept, ascending; `raw_count` and `downsampled` reported; unknown `range` is 422; scheme without NAV is 404 `DATA_UNAVAILABLE` | Go: `TestMFNavSeries`, `TestDownsample` |
+| MF-92 | SIP `end` after the latest NAV; every installment before the first NAV | `end` clamped with warning `END_CLAMPED`; with no executed installment `value`, `xirr_pct` and `absolute_return_pct` are null (never 0) and `NO_INSTALLMENTS` is raised | Go: `TestMFSip`, `TestSIPNoInstallmentsAndShortPeriod` |
+| MF-93 | SIP shorter than 30 days between first execution and end | XIRR null with `xirr_reason: period_too_short`; absolute return still shown (docs/05 8.3) | Go: `TestSIPNoInstallmentsAndShortPeriod` |
+| MF-94 | Compare input | 2-5 distinct numeric codes else 422; unknown code 404; code without NAV 404 `DATA_UNAVAILABLE`; no shared NAV date in the window 422 `NO_COMMON_DATES`; invalid `range` 422 | Go: `TestMFCompare` |
+| MF-95 | Scheme search plan after a bulk `sync_mf_schemes` insert | After autovacuum (or `gin_clean_pending_list`) the planner uses `mf_scheme_name_trgm`; the 10,000-scheme search is < 300 ms and cursor pages are complete and disjoint | Go: `TestMF12SearchUsesTrigramIndexAndIsFast` |
 
 ## PF: portfolio
 | ID | Scenario | Required behavior | Test |
@@ -281,6 +307,10 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | API-25 | Opening a tracked stock (B03) | `tracked_reason` of an already tracked stock (watchlist, portfolio, imported) is never overwritten by `opened`; concurrent opens create no job and leave one consistent state | I |
 | API-26 | Profile without prices or with a young listing (B03) | `no_prices` plus hint `Import prices.csv for {symbol}`, `prices_as_of` null, never stale; `limited_history` only when the first bar is more than 7 days after max(today - PRICE_HISTORY_YEARS_TRACKED years, listing date); `series_warning` carries the series code when it is not EQ | I |
 | API-27 | Expected last trading date edge cases (B03, SYS-13 helper) | Before 18:00 IST the previous trading day is expected; weekends and holidays are skipped; the IST date (not the UTC date) decides; with holiday rows the bar must be >= the expected date; without them stale only when more than 4 calendar days old | U |
+| API-28 | Weekly aggregation (B04) | ISO-week candle = open of first, high max, low min, close of last, volume sum, dated with the last trading day of the week; no forward fill | U |
+| API-29 | Series expansion (B04, D05a-A6) | Stored columnar `series` returns as `[[date, value]]` pairs, nulls kept at warm-up, no `dates`/`format` keys | U |
+| API-36 | Detected split on prices/indicators (B04) | `UNCONFIRMED_ACTION` warning, no marker; confirmed split gives a marker `{date,type,label}`; rejected ignored | I |
+| API-37 | Prices/indicators validation and aliases (B04) | Bad `range`/`adjusted`/`downsample` is 422 with `details.fields`; an old symbol answers `redirect_symbol`; bars but no snapshot gives `DATA_UNAVAILABLE` reason `no_history` | I |
 
 ## UI/SYS
 | ID | Scenario | Required behavior | Test |

@@ -23,6 +23,7 @@ import (
 	"github.com/india-analyzer/api/internal/instruments"
 	"github.com/india-analyzer/api/internal/jobs"
 	"github.com/india-analyzer/api/internal/logx"
+	"github.com/india-analyzer/api/internal/prices"
 )
 
 func main() {
@@ -46,6 +47,8 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 	}
 	poolCfg.MaxConns = 5 // Neon free tier: stay small
 	poolCfg.MaxConnIdleTime = 4 * time.Minute
+	// S10: make the planner pick the trigram index for scheme search (MF-12).
+	poolCfg.ConnConfig.RuntimeParams["random_page_cost"] = "1.1"
 	// NewWithConfig does not dial, so a sleeping Neon database does not block start-up; /readyz pings.
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
@@ -66,7 +69,16 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts, Jobs: jobSvc, Alerts: alertDeps, Stocks: instruments.New(pool)})
+	instSvc := instruments.New(pool)
+	ownerSvc, err := ownerDataService(pool)
+	if err != nil {
+		return err
+	}
+	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts, Jobs: jobSvc, Alerts: alertDeps, Stocks: instSvc,
+		Prices: prices.New(pool, instSvc), OwnerData: ownerSvc,
+		MF: mfService(pool, jobSvc),
+		Imports: importService(cfg, pool, jobSvc, log),
+		TrustedProxyHops: cfg.TrustedProxyHops})
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
 		Handler:           router,

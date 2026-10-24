@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/netip"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -66,6 +67,9 @@ type Service struct {
 	Now   func() time.Time
 	Delay func() time.Duration
 	Sleep func(ctx context.Context, d time.Duration)
+	// OnVerify, when set (tests), is called for every verification whose result counts, i.e. not
+	// for attempts refused because of a lockout.
+	OnVerify func()
 }
 
 // New builds a Service.
@@ -118,6 +122,7 @@ type Issued struct {
 type Session struct {
 	ID        int64
 	ExpiresAt time.Time
+	Slid      bool // expiry was extended by this request; the cookie must be re-issued
 }
 
 // Profile is the payload of GET /auth/me.
@@ -159,54 +164,81 @@ func lockDuration(lockouts int) time.Duration {
 // Login verifies the password and creates a session. Any failure (wrong password, lockout, no
 // owner row) returns ErrInvalidCredentials after the random delay.
 func (s *Service) Login(ctx context.Context, password string, ip netip.Addr, userAgent string) (Issued, error) {
-	user, err := s.q.GetAppUser(ctx)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return Issued{}, fmt.Errorf("auth: load user: %w", err)
-	}
-	haveUser := err == nil
-	now := s.Now()
-	locked := haveUser && user.LockedUntil.Valid && user.LockedUntil.Time.After(now)
-	ok := false
-	if haveUser && !locked {
-		// A malformed stored hash is a deployment fault, not a credential failure.
-		ok, err = passhash.Verify(password, user.PasswordHash)
-		if err != nil {
-			return Issued{}, fmt.Errorf("auth: stored password hash unusable: %w", err)
-		}
+	ok, err := s.attempt(ctx, password)
+	if err != nil {
+		return Issued{}, err
 	}
 	if !ok {
-		if haveUser && !locked {
-			if err := s.recordFailure(ctx, now); err != nil {
-				return Issued{}, err
-			}
-		}
-		s.Sleep(ctx, s.Delay())
+		s.Sleep(ctx, s.Delay()) // outside the transaction: the row lock is not held during the delay
 		return Issued{}, ErrInvalidCredentials
 	}
-	if err := s.q.ResetLoginFailures(ctx); err != nil {
-		return Issued{}, fmt.Errorf("auth: reset failures: %w", err)
-	}
-	return s.createSession(ctx, now, ip, userAgent)
+	return s.createSession(ctx, s.Now(), ip, userAgent)
 }
 
-// recordFailure increments failed_logins under a row lock; every LoginMaxFails-th failure starts
-// a lockout of 15 min * 2^(lockouts-1), capped at 24 h. The lockout number is derived from the
-// counter (failed_logins / MaxFails), so no extra column is needed. Attempts made while locked do
-// not count (an attacker must not be able to extend the lock).
-func (s *Service) recordFailure(ctx context.Context, now time.Time) error {
+var (
+	dummyOnce sync.Once
+	dummyHash string
+)
+
+// dummyVerify spends the cost of one argon2id verification so timing does not reveal whether the
+// account is locked or absent.
+func dummyVerify(password string) {
+	dummyOnce.Do(func() { dummyHash, _ = passhash.Hash("dummy-password-for-constant-time") })
+	if dummyHash != "" {
+		_, _ = passhash.Verify(password, dummyHash)
+	}
+}
+
+// attempt runs one password check under the owner row lock (SELECT ... FOR UPDATE), so parallel
+// guesses are verified one at a time and a lockout that lands is seen by every later attempt: at
+// most MaxFails verifications can happen after the lock threshold. The counter update is committed
+// in the same transaction. A locked or unknown account still performs one (discarded) verification.
+func (s *Service) attempt(ctx context.Context, password string) (bool, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("auth: begin: %w", err)
+		return false, fmt.Errorf("auth: begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.q.WithTx(tx)
 	u, err := q.GetAppUserForUpdate(ctx)
+	if errors.Is(err, pgx.ErrNoRows) {
+		dummyVerify(password)
+		return false, nil
+	}
 	if err != nil {
-		return fmt.Errorf("auth: lock user: %w", err)
+		return false, fmt.Errorf("auth: lock user: %w", err)
 	}
+	now := s.Now()
 	if u.LockedUntil.Valid && u.LockedUntil.Time.After(now) {
-		return nil // locked by a concurrent attempt
+		_, _ = passhash.Verify(password, u.PasswordHash) // constant-time: result discarded
+		return false, nil
 	}
+	if s.OnVerify != nil {
+		s.OnVerify()
+	}
+	// A malformed stored hash is a deployment fault, not a credential failure.
+	ok, err := passhash.Verify(password, u.PasswordHash)
+	if err != nil {
+		return false, fmt.Errorf("auth: stored password hash unusable: %w", err)
+	}
+	if ok {
+		if err := q.ResetLoginFailures(ctx); err != nil {
+			return false, fmt.Errorf("auth: reset failures: %w", err)
+		}
+	} else if err := s.recordFailure(ctx, q, u, now); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("auth: commit: %w", err)
+	}
+	return ok, nil
+}
+
+// recordFailure increments failed_logins on the locked row u; every LoginMaxFails-th failure starts
+// a lockout of 15 min * 2^(lockouts-1), capped at 24 h. The lockout number is derived from the
+// counter (failed_logins / MaxFails), so no extra column is needed. Attempts made while locked do
+// not count (an attacker must not be able to extend the lock).
+func (s *Service) recordFailure(ctx context.Context, q *dbq.Queries, u dbq.AppUser, now time.Time) error {
 	failed := u.FailedLogins + 1
 	locked := u.LockedUntil
 	if int(failed)%s.cfg.MaxFails == 0 {
@@ -216,9 +248,6 @@ func (s *Service) recordFailure(ctx context.Context, now time.Time) error {
 	}
 	if err := q.SetLoginFailure(ctx, dbq.SetLoginFailureParams{FailedLogins: failed, LockedUntil: locked}); err != nil {
 		return fmt.Errorf("auth: record failure: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("auth: commit: %w", err)
 	}
 	return nil
 }
@@ -263,13 +292,15 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 		return Session{}, ErrNoSession
 	}
 	expires := row.ExpiresAt.Time
+	slid := false
 	if now.Sub(row.LastSeenAt.Time) >= touchInterval {
+		slid = true
 		expires = now.Add(time.Duration(s.cfg.SessionDays) * 24 * time.Hour)
 		if err := s.q.TouchSession(ctx, dbq.TouchSessionParams{ID: row.ID, Now: ts(now), ExpiresAt: ts(expires)}); err != nil {
 			return Session{}, fmt.Errorf("auth: touch session: %w", err)
 		}
 	}
-	return Session{ID: row.ID, ExpiresAt: expires}, nil
+	return Session{ID: row.ID, ExpiresAt: expires, Slid: slid}, nil
 }
 
 // Logout revokes one session.

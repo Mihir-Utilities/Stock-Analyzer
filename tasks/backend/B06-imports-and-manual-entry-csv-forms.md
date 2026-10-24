@@ -14,6 +14,15 @@ Source of truth: `docs/OPEN_QUESTIONS.md` Decisions; updated specs: `docs/01` 7.
 - **B06b** (depends on B05, B06a): every other importer (results, balance/cashflow, fundamentals long, shareholding, corporate actions, instrument_meta, **holidays** per `docs/01` 7.8: replace-per-year, no example dates in the template, seed loader leaves the 2026 list empty), manual-entry endpoints, undo, parity test. Required tests: IMP-05..07, 09, 14, 17, 18, IMP-27, FND-15, SHP-05 and the shared rows re-run for these kinds.
 - **Not built:** Screener import (D-5): ignore every Screener item below.
 
+### B06a status (2026-10-24, built and tested; B06b not started)
+- [x] `instruments` and `prices` importers, streamed, 5,000-row chunks in one transaction (`internal/importers`; IMP-01..04, 08..13, 15..17, 20..26, 28; INS-14; BRK-08, BRK-09). Evidence: `go test ./internal/importers ./internal/httpx` against Postgres 16 (service, HTTP and 300,000-row tests).
+- [x] Upload store `import_upload` (survives a restart, 1 h TTL, deleted on commit, expired rows removed lazily; IMP-12, IMP-24), `upload_group` commit in one transaction (IMP-29).
+- [x] `PRICES_ADJUSTMENT_UNSET` gate, `GET/PUT /settings/prices-adjustment`, per-bar `src_adjusted`, `POST /imports/prices/adjustment-check` (IMP-25, IMP-26).
+- [x] Size guard `DB_SIZE_LIMIT`, tracked-over-400 warning, `is_tracked/imported`, `EnqueuePostImport` after commit (IMP-23, IMP-21).
+- [x] `POST /instruments` (INS-15, IMP-17 for this kind), templates for prices and instruments (fixture parity test), `DELETE /stocks/{symbol}/prices` + delete-preview (PRC-21), `POST /prices/trim` + preview (PRC-22), undo refuses prices/instruments with 409.
+- [x] SEC-05 (size/type/content checks), SAF-05 (`screener_xlsx` is not a kind: 404), IMP-28 (decimal commas rejected, offending row and column shown).
+- [ ] Not in B06a: the other kinds (501), manual-entry endpoints, undo of non-price batches, holidays, parity tests for the non-price kinds, the S9 decision (limit stays 5 MB until `IMPORT_PRICES_LARGE_ENABLED`). Assumptions: `docs/OPEN_QUESTIONS.md` B06a-1..17.
+
 ## Read first
 - docs/01-data-sources.md section 7
 - docs/03-api-spec.md section 14

@@ -112,6 +112,7 @@ Raw results:
 Verdict: GO-WITH-CHANGES. Sizing is confirmed; B10 must ensure the trigram index is used (set `random_page_cost=1.1` on the API role, or `SET LOCAL enable_seqscan = off` for that query) and MF-12 must be re-measured on Neon.
 Spec amendments: Decisions row in `docs/OPEN_QUESTIONS.md` (S10 finding); MF-12 unchanged (still < 300 ms, now with the planner caveat).
 Fixtures saved: none (the SQL script regenerates everything).
+Follow-up (B10, 2026-10-24, local postgres:16 and 18): the API's ILIKE-per-word search (not the `%` form timed in the spike) is planned on `mf_scheme_name_trgm` and takes 10-65 ms for 10,000 schemes, but only once the GIN pending list is flushed; the API pool sets `random_page_cost=1.1`. Neon re-measurement is still an owner action (docs/OPEN_QUESTIONS.md B10-6).
 
 ## S11 GitHub Actions  (2026-10-10, desk computation, Claude Code)
 Steps: counted runs per month for each workflow in `docs/04` section 2 (manual mode: broker workflows are off), at 30.4 days per month, with the timeout as worst case and an assumed typical duration (assumption, to be measured; not data). Checked each cron expression against its IST time: all match (e.g. `30 16 * * *` = 22:00 IST, `30 23 * * 6` = Sunday 05:00 IST).
