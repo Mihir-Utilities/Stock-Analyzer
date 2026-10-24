@@ -341,12 +341,15 @@ export function SearchPalette({ store, request = apiRequest }: SearchPaletteProp
         aria-haspopup="dialog"
         aria-keyshortcuts="Control+K Meta+K /"
         data-testid="search-trigger"
-        className="flex h-11 min-w-11 items-center gap-2 rounded-control border border-border bg-surface-2 px-3 text-body text-text-2 hover:text-text-1 desktop:h-9"
+        className="touch-target flex h-9 items-center gap-2 rounded-control border border-border bg-surface-2 px-3 text-body text-text-2 hover:text-text-1"
       >
         <span aria-hidden="true">Search</span>
-        <kbd className="hidden rounded-control border border-border px-1 text-micro desktop:inline">
-          Ctrl K
-        </kbd>
+        {/* Shortcut hint drawn with CSS so it is not text content: the accessible name stays
+            "Search stocks and funds" (WCAG 2.5.3 label-in-name) and aria-keyshortcuts announces it. */}
+        <span
+          aria-hidden="true"
+          className="hidden rounded-control border border-border px-1 text-micro after:content-['Ctrl_K'] desktop:inline"
+        />
       </button>
       <dialog
         ref={dialogRef}
