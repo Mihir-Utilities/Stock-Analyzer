@@ -65,16 +65,19 @@ _ALERT_SQL = (
 
 
 class _Data:
-    """Per-run cache of price / NAV series so several alerts on one target load it once."""
+    """Per-run cache of price / NAV series so several alerts on one target load it once.
+
+    Callers inside a transaction pass their connection: borrowing a second one from a small pool
+    while holding the first deadlocks concurrent runs."""
 
     def __init__(self, conn: asyncpg.Pool | asyncpg.Connection) -> None:
         self._conn = conn
         self._bars: dict[int, Bars] = {}
         self._navs: dict[int, Bars] = {}
 
-    async def bars(self, instrument_id: int) -> Bars:
+    async def bars(self, instrument_id: int, conn: asyncpg.Connection | None = None) -> Bars:
         if instrument_id not in self._bars:
-            rows = await self._conn.fetch(
+            rows = await (conn or self._conn).fetch(
                 "SELECT trade_date, close, adj_close, high, low FROM price_daily "
                 "WHERE instrument_id = $1 AND NOT suspect ORDER BY trade_date",
                 instrument_id,
@@ -82,9 +85,9 @@ class _Data:
             self._bars[instrument_id] = _to_bars(rows, "close", "adj_close", "high", "low")
         return self._bars[instrument_id]
 
-    async def navs(self, scheme_code: int) -> Bars:
+    async def navs(self, scheme_code: int, conn: asyncpg.Connection | None = None) -> Bars:
         if scheme_code not in self._navs:
-            rows = await self._conn.fetch(
+            rows = await (conn or self._conn).fetch(
                 "SELECT nav_date AS trade_date, nav, nav AS adj_close, nav AS high, nav AS low "
                 "FROM mf_nav WHERE scheme_code = $1 ORDER BY nav_date",
                 scheme_code,
@@ -123,7 +126,7 @@ async def _evaluate_one(
     )
     iid = row["instrument_id"]
     if kind in ("nav_above", "nav_below"):
-        return evaluate_bar_alert(alert, await data.navs(int(row["mf_scheme_code"])), now)
+        return evaluate_bar_alert(alert, await data.navs(int(row["mf_scheme_code"]), conn), now)
     if kind == "results_upcoming":
         events = await conn.fetch(
             "SELECT id, event_date FROM event_calendar "
@@ -154,7 +157,7 @@ async def _evaluate_one(
             for r in rows
         ]
         return evaluate_holding_change(alert, quarters)
-    return evaluate_bar_alert(alert, await data.bars(int(iid)), now)
+    return evaluate_bar_alert(alert, await data.bars(int(iid), conn), now)
 
 
 _HOLDER_KEYS = ("promoter_pct", "fii_pct", "dii_pct", "mf_pct")
