@@ -20,7 +20,7 @@ Run on 2026-10-10 by Claude Code (agent) from the owner's Windows 11 machine, ma
 | S12 | Telegram | BLOCKED-OWNER | needs the owner's bot and a deployed API |
 | S13 | Import formats | GO-WITH-CHANGES (templates and notes done); validator run and owner trial deferred | 10 templates and a synthetic sample set; OQ-9..OQ-11 raised |
 | S14 | Terms re-read | BLOCKED-OWNER | `docs/TERMS_NOTES.md` prepared with documents to read |
-| S15 | Licence scan | GO | scan passes on 410 packages; ECharts/lucide/Inter not installed yet, check at F01/F02 |
+| S15 | Licence scan | GO | scan passes on 410 packages; ECharts 6.1.0 Apache-2.0, zrender BSD-3, lucide-react ISC, Inter OFL-1.1 confirmed at F02 (850 packages) |
 | S16 | Ratio accuracy | GO on synthetic known answers; real-company comparison BLOCKED-OWNER | 22 formula checks pass; definition choice alone moves ROE by 6.8% |
 | S17 | Owner effort | BLOCKED-OWNER | needs the owner's timing |
 

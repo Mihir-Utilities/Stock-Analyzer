@@ -26,8 +26,17 @@ const listeners = new Set<() => void>();
 
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
+  // Also follow direct changes of the attribute (Storybook toolbar, devtools), so charts and
+  // other theme-synced components redraw whoever changed the theme.
+  const observer =
+    typeof MutationObserver === "undefined" ? null : new MutationObserver(() => listener());
+  observer?.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-theme"],
+  });
   return () => {
     listeners.delete(listener);
+    observer?.disconnect();
   };
 }
 

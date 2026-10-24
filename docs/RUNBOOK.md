@@ -143,3 +143,11 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - **Retention and size:** latest 30 snapshots per stock; only the newest keeps the columnar `series`/`analysis` arrays (about 170 KB JSON for 4 years of bars before Postgres compression, so 500 stocks stay under about 85 MB). A trim or delete that leaves fewer than 60 valid bars removes the stock's snapshots and price metrics; snapshots newer than the last valid bar are removed.
 - **Symptoms:** a stock with null indicators and `null_reasons.* = insufficient_history` simply has too few bars (SMA200 needs 200, the 52-week range 252, beta 120 aligned returns). Beta null with `insufficient_overlap`: the imported `NIFTY50` series does not cover the stock's dates. A stock missing from the screener's price columns has fewer than 60 valid bars or no snapshot yet; run the CLI job for it.
 - **Performance:** about 3.5 s for a stock with 20 years of bars and a benchmark (numpy plus Python loops), well under a second for 3-5 years; a long batch uses the resumable 3.5-minute `post_import` stop.
+
+## 17. Frontend design system and ChartFrame (F02)
+
+- Components live in `apps/web/src/components/ui` and `components/charts`. Charts must go through `ChartFrame` (SVG renderer, `charts/echarts-core.ts` registers only the chart types in use; add a type there when a screen needs it).
+- Check commands in `apps/web`: `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run build`, `npm run build-storybook`, then `npx playwright test` (needs a system Chrome or Edge; it serves `.next` and `storybook-static`, so build both first). Run `VISUAL=1 npx playwright test stories --update-snapshots` to refresh screenshot baselines (win32 only so far, see OPEN_QUESTIONS F02-6).
+- Failure mode: if the Playwright web server fails with "already used", a previous run left `next start` (port 3100) or `scripts/serve-static.mjs` (port 6100) running; stop that process and re-run.
+- Failure mode: a chart shows a red "could not be drawn" banner when ECharts throws on an option; the data table (Show data) and CSV still work, so no data is lost while it is fixed.
+- Licences checked for S15: echarts 6.1.0 Apache-2.0, zrender BSD-3-Clause, lucide-react ISC, Inter OFL-1.1, @tanstack/react-table and react-virtual MIT.

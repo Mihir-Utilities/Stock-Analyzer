@@ -332,6 +332,11 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | UI-13 | Shell at 320, 375, 768, 1024, 1440 px | No horizontal scroll; bottom tabs below 1024 px with 44 px targets, sidebar from 1024 px (F01) | E |
 | UI-14 | No external request at runtime | Every network request on shell, login and 404 pages is same-origin; fonts are self-hosted (F01) | E |
 | UI-15 | 401 on any API call | Query caches cleared and browser sent to `/login?next=<validated path>`; the login call itself is exempt; never loops on `/login` (F01) | U |
+| UI-16 | Chart colour is the only difference between series (OQ-16) | Each series also has its own marker shape, an end-of-line label and a legend glyph; bars use decal patterns; forecasts are dashed; heat cells print their value (F02) | E |
+| UI-17 | Unknown, NaN or Infinity value in a chart, table, stat, gauge, range bar or sparkline | Shows a reason or "n/a", never 0, NaN or Infinity; CSV cell is empty (F02) | E |
+| UI-18 | Table with more than 100 rows | Rows are virtualized (a bounded number of rows in the DOM); sorting, pinned first column and keyboard navigation still work (F02) | E |
+| UI-19 | Theme changes while a chart is mounted | The chart is re-created with the new theme without reload, including when the attribute is set directly (F02) | E |
+| UI-20 | axe (wcag2a/aa) on every component story, both themes | Zero violations, including colour contrast in heat cells and chips (F02) | E |
 | API-30 | Refresh cooldown (B09) | A `mf_refresh` for a target whose last job finished < `REFRESH_COOLDOWN_MIN` ago gives 429 `RATE_LIMITED` with `details.retry_after_seconds` (= remaining cooldown) and a matching `Retry-After` header; allowed again after the cooldown | I |
 | API-31 | Global refresh limit (B09) | At `REFRESH_GLOBAL_PER_HOUR` on-demand jobs in the last hour the next request is 429 with `retry_after_seconds` = time until the oldest ages out; no row is created; `post_import` is exempt | I |
 | API-32 | Worker signal fails (B09) | Worker answers non-202 or is down: the request still returns 202, the row stays `queued`, nothing is retried with the same signature | I |
