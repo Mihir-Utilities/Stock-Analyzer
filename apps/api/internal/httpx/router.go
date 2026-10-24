@@ -7,6 +7,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
+
+	"github.com/india-analyzer/api/internal/auth"
 )
 
 // BasePath is the prefix of every API route (docs/03 title).
@@ -58,6 +60,14 @@ type Deps struct {
 	LoginLimiter   *Limiter
 	GeneralLimiter *Limiter
 
+	// ChangePwGate throttles wrong current-password guesses on POST /auth/change-password, per
+	// session and per IP (default 5 failures, 5 min block doubling to 1 h). Separate from the login lockout.
+	ChangePwGate *FailureGate
+
+	// TrustedProxyHops is TRUSTED_PROXY_HOPS: 0 ignores X-Forwarded-For (socket address); N takes
+	// the Nth entry from the right.
+	TrustedProxyHops int
+
 	// PingBackoff is the pause before the single readyz retry (SYS-01); default 750 ms.
 	PingBackoff time.Duration
 	// PingTimeout bounds one ping attempt; default 5 s.
@@ -81,6 +91,9 @@ func (d *Deps) defaults() {
 	if d.GeneralLimiter == nil {
 		d.GeneralLimiter = NewLimiter(120)
 	}
+	if d.ChangePwGate == nil {
+		d.ChangePwGate = NewFailureGate()
+	}
 	if d.PingBackoff <= 0 {
 		d.PingBackoff = 750 * time.Millisecond
 	}
@@ -94,7 +107,7 @@ func (d *Deps) defaults() {
 func NewRouter(d Deps) chi.Router {
 	d.defaults()
 	r := chi.NewRouter()
-	r.Use(RequestID(d.Log), Recoverer, AccessLog, SecurityHeaders, Timeout(d.Timeout))
+	r.Use(ClientIPMiddleware(d.TrustedProxyHops), RequestID(d.Log), Recoverer, AccessLog, SecurityHeaders, Timeout(d.Timeout))
 	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
 		WriteError(w, req, ErrNotFound("Route not found", nil))
 	})
@@ -136,6 +149,11 @@ func requireAuth(c SessionChecker) func(http.Handler) http.Handler {
 				if err != nil {
 					WriteError(w, r, err)
 					return
+				}
+				if s, ok := auth.SessionFrom(ctx); ok && s.Slid {
+					if ck, err := r.Cookie(SessionCookie); err == nil {
+						setSessionCookie(w, ck.Value, s.ExpiresAt) // keep the browser cookie in step with the DB row
+					}
 				}
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return

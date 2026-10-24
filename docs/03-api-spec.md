@@ -19,7 +19,7 @@ Claude Code must generate `openapi.yaml` from this file first, then implement ha
 { "error": { "code": "NOT_FOUND", "message": "Instrument not found", "details": { "symbol": "XYZ" } } }
 ```
 Codes: `BAD_REQUEST` 400, `UNAUTHENTICATED` 401, `FORBIDDEN` 403, `NOT_FOUND` 404, `CONFLICT` 409, `UNPROCESSABLE` 422 (validation, with `details.fields[]`), `RATE_LIMITED` 429 (with `Retry-After`), `DATA_UNAVAILABLE` 404 (valid target, no data yet; details: `reason`), `SOURCE_DOWN` 503, `INTERNAL` 500. A wrong method (405) and an oversized body (413) use `BAD_REQUEST`; routes not yet built return 501 `NOT_IMPLEMENTED`.
-- Auth: cookie `session` (httpOnly, Secure, SameSite=Lax, path `/`). All routes need it except `GET /healthz`, `POST /auth/login`, `POST /telegram/webhook`.
+- Auth: cookie `session` (httpOnly, Secure, SameSite=Lax, path `/`). All routes need it except `GET /healthz`, `POST /auth/login`, `POST /telegram/webhook`, `GET /broker/callback` (state-verified, section 14a).
 - CSRF: all non-GET requests must include header `X-Requested-With: fetch` (browsers cannot add it cross-site without CORS preflight; we send no CORS headers).
 - Pagination: cursor-based `?limit=&cursor=`; `limit` default 50, max 200 (larger values are clamped to 200; non-integer or < 1 is a 422); response `{"items":[...],"next_cursor":null|string}`.
 - Symbol path parameter: URL-encoded exact exchange symbol (`M%26M`, `BAJAJ-AUTO`); matching is case-insensitive; resolved through `instrument.symbol` then `symbol_alias.old_symbol` (alias -> 301-style response `{"redirect_symbol": "NEW"}` with HTTP 200 and `data.redirect_symbol`).
@@ -36,7 +36,9 @@ Codes: `BAD_REQUEST` 400, `UNAUTHENTICATED` 401, `FORBIDDEN` 403, `NOT_FOUND` 40
 | GET `/auth/me` | | `{ "authenticated": true, "telegram_linked": bool, "prefs": {...} }`; 401 if no session |
 | POST `/auth/change-password` | `{"current":"","new":""}` | New: min 12 chars, must differ from current; revokes other sessions |
 
-Session sliding: update `last_seen_at` and extend `expires_at` at most once per hour.
+Session sliding: update `last_seen_at` and extend `expires_at` at most once per hour; when the expiry is extended the response re-sets the `session` cookie (same token, new `Expires`/`Max-Age`) so the browser keeps it as long as the row.
+
+Client address (rate-limit key, session IP): `TRUSTED_PROXY_HOPS` (default 0). At 0, `X-Forwarded-For` is ignored and the socket address is used; at N the Nth entry from the right is used (shorter header or non-IP falls back to the socket address). Wrong `current` passwords on change-password are throttled per session and per IP (5 failures -> 429 `RATE_LIMITED` with `Retry-After`, block 5 min doubling to 1 h; blocked requests are not verified); they never count toward the login lockout.
 
 Implementation notes (B02):
 - Success body: `{"data":{"authenticated":true,"expires_at":"<RFC 3339>"}}`; logout and logout-all answer `{"data":{"ok":true}}` and clear the cookie; change-password answers `{"data":{"ok":true}}`. `prefs` in `/auth/me` is `app_user.display_prefs`.
