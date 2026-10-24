@@ -27,12 +27,13 @@ var (
 	reISODate   = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 	reDMYDate   = regexp.MustCompile(`^(\d{1,2})-(\d{1,2})-(\d{4})$`)
 	reDMonYDate = regexp.MustCompile(`^(\d{1,2})-([A-Za-z]{3})-(\d{4})$`)
-	reSymbol    = regexp.MustCompile(`^[A-Z0-9&-]{1,30}$`)
+	reSymbol    = regexp.MustCompile(`^[A-Z0-9][A-Z0-9&-]{0,29}$`)
 	reISIN      = regexp.MustCompile(`^IN[A-Z0-9]{10}$`)
 	reSeries    = regexp.MustCompile(`^[A-Z0-9]{1,10}$`)
 
-	reIntl     = regexp.MustCompile(`^\d{1,3}(,\d{3})+(\.\d+)?$`)
-	reIndian   = regexp.MustCompile(`^\d{1,2}(,\d{2})+,\d{3}(\.\d+)?$`)
+	reIntl     = regexp.MustCompile(`^[1-9]\d{0,2}(,\d{3})+(\.\d+)?$`)
+	reIndian   = regexp.MustCompile(`^[1-9]\d?(,\d{2})+,\d{3}(\.\d+)?$`)
+	reLeadZero = regexp.MustCompile(`^0+,\d+$`)
 	reEuropean = regexp.MustCompile(`^\d{1,3}(\.\d{3})+,\d+$`)
 )
 
@@ -41,6 +42,9 @@ var monthNames = map[string]time.Month{
 	"may": time.May, "jun": time.June, "jul": time.July, "aug": time.August,
 	"sep": time.September, "oct": time.October, "nov": time.November, "dec": time.December,
 }
+
+// DateFloor is the earliest accepted calendar date for any imported date (assumption B06a-18).
+var DateFloor = time.Date(1990, 1, 1, 0, 0, 0, 0, time.UTC)
 
 const dateHelp = "use YYYY-MM-DD, DD-MM-YYYY or DD-Mon-YYYY"
 
@@ -52,6 +56,9 @@ func ParseDate(s string) (time.Time, error) {
 		t := time.Date(y, time.Month(m), d, 0, 0, 0, 0, time.UTC)
 		if t.Year() != y || int(t.Month()) != m || t.Day() != d {
 			return time.Time{}, fmt.Errorf("%q is not a real calendar date", s)
+		}
+		if t.Before(DateFloor) {
+			return time.Time{}, fmt.Errorf("%q is before %s, the earliest accepted date", s, DateFloor.Format(time.DateOnly))
 		}
 		return t, nil
 	}
@@ -101,7 +108,7 @@ func CleanNumber(raw string) (string, error) {
 		out = strings.ReplaceAll(s, ",", "")
 	case strings.Contains(s, ","):
 		hint := ""
-		if reEuropean.MatchString(s) {
+		if reEuropean.MatchString(s) || reLeadZero.MatchString(s) {
 			hint = " (looks like a decimal comma)"
 		}
 		return "", fmt.Errorf("%q is ambiguous%s: a comma is only accepted as a thousands separator (1,234.56 or 1,23,456.78); write the decimal point as '.'", raw, hint)
@@ -193,7 +200,7 @@ func ValidateInstrumentFields(in InstrumentFields) (n NormalizedInstrument, errs
 	if sym == "" {
 		errs = append(errs, FieldIssue{"symbol", "REQUIRED", "symbol is required"})
 	} else {
-		up := strings.ToUpper(sym)
+		up := upperTrim(sym)
 		switch {
 		case !reSymbol.MatchString(up):
 			errs = append(errs, FieldIssue{"symbol", "SYMBOL_CHARSET", fmt.Sprintf("symbol %q must use only A-Z, 0-9, & and - (at most 30 characters)", sym)})
@@ -215,7 +222,7 @@ func ValidateInstrumentFields(in InstrumentFields) (n NormalizedInstrument, errs
 	default:
 		n.Name = name
 	}
-	if isin := strings.ToUpper(strings.TrimSpace(in.ISIN)); isin != "" {
+	if isin := upperTrim(in.ISIN); isin != "" {
 		if reISIN.MatchString(isin) {
 			n.ISIN = isin
 		} else {

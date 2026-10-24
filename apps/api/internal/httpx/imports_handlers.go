@@ -88,6 +88,7 @@ func mapImportError(err error) error {
 		app  *AppError
 		he   *importers.HasErrorsError
 		sl   *importers.SizeLimitError
+		uc   *importers.UploadCapError
 		ve   *importers.ValidationError
 		mbe  *http.MaxBytesError
 		file = func(msg string) error { return ErrValidation(FieldError{Field: "file", Message: msg}) }
@@ -110,6 +111,8 @@ func mapImportError(err error) error {
 	case errors.As(err, &sl):
 		return NewError(http.StatusUnprocessableEntity, "DB_SIZE_LIMIT", sl.Error(),
 			map[string]any{"limit_mb": sl.LimitMB, "current_mb": sl.CurrentMB, "estimated_growth_mb": sl.GrowthMB})
+	case errors.As(err, &uc):
+		return ErrRateLimited(uc.RetryAfterSeconds)
 	case errors.Is(err, importers.ErrTooManyRows):
 		return file("The file has more rows than this import kind allows")
 	case errors.Is(err, importers.ErrNotText):

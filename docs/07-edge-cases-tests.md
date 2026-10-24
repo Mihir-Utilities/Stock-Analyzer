@@ -110,6 +110,16 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | IMP-32 | `prices.csv` row uses a symbol that was renamed through `previous_symbol` | Row error "symbol OLD was renamed to NEW; use the new symbol"; never silently mapped | I |
 | IMP-33 | Lower-case symbol in `instruments.csv` / Add stock form; lower-case symbol in `prices.csv` | Instruments: upper-cased with a `SYMBOL_UPPERCASED` warning (same in the form); prices: matched case-insensitively | F |
 | IMP-34 | Validation and commit share one code path (`scanPrices`, `scanInstruments`) | The preview of validate equals what commit writes; commit re-validates against the current database and refuses if errors appeared since | I |
+| IMP-35 | Leading-zero comma number (`0,123`, `00,123`, `0,5`) | Rejected as a decimal comma, never read as 123; `1,234.56` and `1,23,456.78` still accepted | U (`TestCleanNumber`) |
+| IMP-36 | Date before 1990-01-01 (`0001-01-01`, `1800-01-01`) in prices or `listing_date` | Row error naming the floor; future price dates stay row errors | U (`TestParseDate`, `TestSymbolLookalikesRejectedInPrices`) |
+| IMP-37 | Look-alike letters in a symbol (dotless i, long s); leading `-`/`&`, lone `-`, `=` start | Symbol charset error on both the prices and the instruments path (ASCII-only normaliser) | U (`TestValidateInstrumentFields`) |
+| IMP-38 | Size guard near the limit: all-update re-import vs all-new file; the upload's own bytes | Growth = NEW rows x 130 B and the current upload is excluded: the re-import commits, the all-new file is `DB_SIZE_LIMIT` | I (`TestSizeGuardCountsOnlyNewRows`) |
+| IMP-39 | More than 10 outstanding validated uploads or 100 MB of them | 429 `RATE_LIMITED` with `Retry-After`; an expired upload frees its slot and expired rows are purged on every validate | I (`TestUploadCap`, `TestImportUploadCapAndBinaryHTTP`) |
+| IMP-40 | Commit with more than 10 upload ids or more than 50 MB of parts | 422 on `upload_ids` before any content is loaded; uploads kept | I (`TestCommitCaps`) |
+| IMP-41 | Same (symbol, date) with different values in two parts of one group | Commit refused with the row error count, nothing written; identical values only warn | I (`TestUploadGroupCommit`) |
+| IMP-42 | Text starting with `=`/`+`/`-`/`@` imported as a name; export | Stored verbatim; `SafeCSVCell` prefixes a quote on export | I (`TestFormulaTextStoredAndExportSafe`) |
+| IMP-43 | 300,000-row scan without a database; late-chunk failure of an instruments import; CRLF-only file; lone-CR file | Bounded heap; whole import rolled back; CRLF parses; lone CR refused with a plain message | U/I (`TestScanPricesStreamingMemoryBound`, `TestInstrumentsRollbackOnChunk`, `TestLineEndingsCRLFAndLoneCR`) |
+| JOB-ATOMIC | 40 parallel enqueues for different targets with `REFRESH_GLOBAL_PER_HOUR` = 5 | Exactly 5 jobs; the rest 429 (check and insert are atomic under an advisory lock) | I (`TestParallelEnqueueHonoursGlobalLimit`) |
 
 ## INS: instruments
 | ID | Scenario | Required behavior | Test |

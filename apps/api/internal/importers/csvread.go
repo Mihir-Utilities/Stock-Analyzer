@@ -69,6 +69,9 @@ func checkText(content []byte) error {
 		return fmt.Errorf("%w: UTF-16 is not supported; save the file as CSV (UTF-8)", ErrNotText)
 	case bytes.IndexByte(content, 0) >= 0:
 		return fmt.Errorf("%w: binary content found", ErrNotText)
+	case bytes.IndexByte(bytes.TrimRight(content, "\r"), '\r') >= 0 && bytes.IndexByte(content, '\n') < 0:
+		// Old Mac line endings: encoding/csv would read the whole file as one record.
+		return fmt.Errorf("%w: lines end with a lone carriage return (old Mac format); save the file as CSV with normal line endings", ErrNotText)
 	}
 	return nil
 }

@@ -73,7 +73,8 @@ func (s *Service) Validate(ctx context.Context, kind string, content []byte, gro
 		if err != nil {
 			return nil, err
 		}
-		rep, hdr, err = scanPrices(content, priceEnv{idx: idx, holidays: hol, today: s.today()}, lim, nil)
+		env := priceEnv{idx: idx, holidays: hol, today: s.today(), seen: map[dupKey]uint64{}}
+		rep, hdr, err = scanPrices(content, env, lim, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -83,7 +84,11 @@ func (s *Service) Validate(ctx context.Context, kind string, content []byte, gro
 		}
 		res.PricesAlreadyAdjusted = adj.Value
 		if rep != nil {
-			if err := s.priceGuards(ctx, idx, rep, res); err != nil {
+			newRows, err := newRowCount(ctx, s.pool, env.seen)
+			if err != nil {
+				return nil, err
+			}
+			if err := s.priceGuards(ctx, idx, rep, res, newRows); err != nil {
 				return nil, err
 			}
 		}
@@ -116,8 +121,8 @@ func (s *Service) Validate(ctx context.Context, kind string, content []byte, gro
 }
 
 // priceGuards fills the projected growth and the non-blocking warnings of the validate step.
-func (s *Service) priceGuards(ctx context.Context, idx *instrumentIndex, rep *scanReport, res *ValidateResult) error {
-	mb := roundTo(float64(rep.Valid)*bytesPerRow/float64(mib), 2)
+func (s *Service) priceGuards(ctx context.Context, idx *instrumentIndex, rep *scanReport, res *ValidateResult, newRows int) error {
+	mb := roundTo(float64(newRows)*bytesPerRow/float64(mib), 2)
 	res.EstimatedGrowthMB = &mb
 	if over := trackedOver(idx, rep.Symbols); over {
 		rep.Warnings.add(0, "symbol", fmt.Sprintf("this import would track more than %d stocks; the app keeps working, but watch the database size", TrackedWarnLimit))
@@ -126,10 +131,64 @@ func (s *Service) priceGuards(ctx context.Context, idx *instrumentIndex, rep *sc
 	if err != nil {
 		return err
 	}
-	if lim := int64(s.DBSoftLimitMB) * mib; cur >= lim || cur+int64(rep.Valid)*bytesPerRow > lim {
+	if lim := int64(s.DBSoftLimitMB) * mib; cur >= lim || cur+int64(newRows)*bytesPerRow > lim {
 		rep.Warnings.add(0, "", fmt.Sprintf("this file would make the database exceed %d MB; the commit will be refused. Trim history or import fewer rows", s.DBSoftLimitMB))
 	}
 	return nil
+}
+
+// newRowCount returns how many of the unique (instrument or series, date) keys of a file do not exist
+// yet: only those grow the database (docs/01 7.1 "new rows x ~130 bytes", IMP-23). An all-update
+// re-import therefore adds nothing (IMP-10).
+func newRowCount(ctx context.Context, db dbq.DBTX, keys map[dupKey]uint64) (int, error) {
+	const bars = `SELECT count(*) FROM unnest($1::int[], $2::date[]) AS t(i, d)
+		JOIN price_daily p ON p.instrument_id = t.i AND p.trade_date = t.d`
+	const series = `SELECT count(*) FROM unnest($1::text[], $2::date[]) AS t(c, d)
+		JOIN market_series m ON m.code = t.c AND m.trade_date = t.d`
+	var (
+		ids        []int32
+		days, sday []time.Time
+		codes      []string
+		existing   int
+	)
+	run := func(q string, args ...any) error {
+		var n int
+		if err := db.QueryRow(ctx, q, args...).Scan(&n); err != nil {
+			return err
+		}
+		existing += n
+		return nil
+	}
+	flush := func(force bool) error {
+		if len(ids) >= ChunkSize || (force && len(ids) > 0) {
+			if err := run(bars, ids, days); err != nil {
+				return err
+			}
+			ids, days = ids[:0], days[:0]
+		}
+		if len(codes) >= ChunkSize || (force && len(codes) > 0) {
+			if err := run(series, codes, sday); err != nil {
+				return err
+			}
+			codes, sday = codes[:0], sday[:0]
+		}
+		return nil
+	}
+	for k := range keys {
+		d := time.Unix(k.day*86400, 0).UTC()
+		if k.inst > 0 {
+			ids, days = append(ids, k.inst), append(days, d)
+		} else {
+			codes, sday = append(codes, k.sym), append(sday, d)
+		}
+		if err := flush(false); err != nil {
+			return 0, err
+		}
+	}
+	if err := flush(true); err != nil {
+		return 0, err
+	}
+	return len(keys) - existing, nil
 }
 
 func roundTo(v float64, places int) float64 {
@@ -157,32 +216,52 @@ func trackedOver(idx *instrumentIndex, symbols map[int32]bool) bool {
 
 // claimUploads atomically takes the uploads (deleting them inside the transaction, so a rollback
 // puts them back and a second concurrent commit finds nothing).
-func (s *Service) claimUploads(ctx context.Context, tx pgx.Tx, kind string, ids []string) ([][]byte, error) {
-	got := map[string][]byte{}
+//
+// It also returns the stored size of the claimed rows: the size guard excludes them, because the
+// upload being committed is about to be deleted and is not growth (IMP-23). The number of ids and
+// the total bytes are capped before any content is loaded (422).
+func (s *Service) claimUploads(ctx context.Context, tx pgx.Tx, kind string, ids []string) ([][]byte, int64, error) {
+	if len(ids) > MaxCommitParts {
+		return nil, 0, validation("upload_ids", fmt.Sprintf("a commit takes at most %d uploads", MaxCommitParts))
+	}
 	for _, id := range ids {
 		if !IsUUID(id) {
-			return nil, ErrUploadNotFound
+			return nil, 0, ErrUploadNotFound
 		}
+	}
+	var bytesTotal int64
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(octet_length(content)), 0) FROM import_upload WHERE id = ANY($1::uuid[]) AND expires_at > $2`,
+		ids, s.Now()).Scan(&bytesTotal); err != nil {
+		return nil, 0, err
+	}
+	if bytesTotal > MaxCommitBytes {
+		return nil, 0, validation("upload_ids", fmt.Sprintf("the uploads of one commit may total at most %d MB", MaxCommitBytes/mib))
+	}
+	got := map[string][]byte{}
+	var stored int64
+	for _, id := range ids {
 		var k string
 		var content []byte
-		err := tx.QueryRow(ctx, `DELETE FROM import_upload WHERE id = $1::uuid AND expires_at > $2 RETURNING kind, content`,
-			id, s.Now()).Scan(&k, &content)
+		var size int64
+		err := tx.QueryRow(ctx, `DELETE FROM import_upload WHERE id = $1::uuid AND expires_at > $2 RETURNING kind, content, pg_column_size(content)`,
+			id, s.Now()).Scan(&k, &content, &size)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrUploadNotFound
+			return nil, 0, ErrUploadNotFound
 		}
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		if k != kind {
-			return nil, validation("upload_id", fmt.Sprintf("the upload was validated as %q, not %q", k, kind))
+			return nil, 0, validation("upload_id", fmt.Sprintf("the upload was validated as %q, not %q", k, kind))
 		}
 		got[id] = content
+		stored += size
 	}
 	out := make([][]byte, 0, len(ids))
 	for _, id := range ids {
 		out = append(out, got[id])
 	}
-	return out, nil
+	return out, stored, nil
 }
 
 // Commit writes a validated upload (or the parts of a browser-split group) in ONE transaction and
@@ -209,14 +288,14 @@ func (s *Service) Commit(ctx context.Context, kind string, req CommitRequest) (*
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	parts, err := s.claimUploads(ctx, tx, kind, ids)
+	parts, stored, err := s.claimUploads(ctx, tx, kind, ids)
 	if err != nil {
 		return nil, err
 	}
 	var res *CommitResult
 	var symbols []string
 	if kind == KindPrices {
-		res, symbols, err = s.commitPrices(ctx, tx, parts)
+		res, symbols, err = s.commitPrices(ctx, tx, parts, stored)
 	} else {
 		res, err = s.commitInstruments(ctx, tx, parts)
 	}
@@ -427,8 +506,12 @@ UPDATE price_daily p SET suspect = true FROM flag f
 WHERE p.instrument_id = $1 AND p.trade_date = f.trade_date AND NOT p.suspect`
 
 // scanAll runs pass 1 (validate only) over every part and returns the merged report.
+// The parts share one duplicate map (env.seen), so a contradictory duplicate across parts is an error.
 func scanAllPrices(parts [][]byte, env priceEnv, lim Limits) (*scanReport, error) {
 	total := newReport()
+	if env.seen == nil {
+		env.seen = map[dupKey]uint64{}
+	}
 	for _, part := range parts {
 		rep, hdr, err := scanPrices(part, env, lim, nil)
 		if err != nil {
@@ -466,7 +549,7 @@ func mergeReport(dst, src *scanReport) {
 	}
 }
 
-func (s *Service) commitPrices(ctx context.Context, tx pgx.Tx, parts [][]byte) (*CommitResult, []string, error) {
+func (s *Service) commitPrices(ctx context.Context, tx pgx.Tx, parts [][]byte, ownUploadBytes int64) (*CommitResult, []string, error) {
 	idx, err := loadIndex(ctx, tx)
 	if err != nil {
 		return nil, nil, err
@@ -477,7 +560,9 @@ func (s *Service) commitPrices(ctx context.Context, tx pgx.Tx, parts [][]byte) (
 	}
 	env := priceEnv{idx: idx, holidays: hol, today: s.today()}
 	lim := s.Limits(KindPrices)
-	rep, err := scanAllPrices(parts, env, lim)
+	checkEnv := env
+	checkEnv.seen = map[dupKey]uint64{}
+	rep, err := scanAllPrices(parts, checkEnv, lim)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -495,7 +580,14 @@ func (s *Service) commitPrices(ctx context.Context, tx pgx.Tx, parts [][]byte) (
 	if err != nil {
 		return nil, nil, err
 	}
-	growth := int64(rep.Valid) * bytesPerRow
+	// Only NEW rows grow the database, and this commit's own import_upload bytes (about to be
+	// deleted, but still counted by pg_database_size) are not part of the current size (IMP-23).
+	newRows, err := newRowCount(ctx, tx, checkEnv.seen)
+	if err != nil {
+		return nil, nil, err
+	}
+	cur = max(0, cur-ownUploadBytes)
+	growth := int64(newRows) * bytesPerRow
 	if limit := int64(s.DBSoftLimitMB) * mib; cur >= limit || cur+growth > limit {
 		return nil, nil, &SizeLimitError{LimitMB: float64(s.DBSoftLimitMB), CurrentMB: roundTo(float64(cur)/float64(mib), 1), GrowthMB: roundTo(float64(growth)/float64(mib), 2)}
 	}

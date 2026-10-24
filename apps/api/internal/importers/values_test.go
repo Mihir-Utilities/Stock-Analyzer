@@ -21,11 +21,19 @@ func TestParseDate(t *testing.T) {
 			t.Errorf("ParseDate(%q) = %v, %v; want %s", in, got, err, want)
 		}
 	}
-	bad := []string{"01-25-2026", "2026/01/05", "2026-13-01", "30-02-2026", "29-02-2025", "05-Foo-2026", "", "5 Jan 2026", "20260105"}
+	// Date floor 1990-01-01 (assumption B06a-18): year 0000/0001/1800 and 31-Dec-1989 are rejected.
+	bad := []string{"01-25-2026", "2026/01/05", "2026-13-01", "30-02-2026", "29-02-2025", "05-Foo-2026", "", "5 Jan 2026", "20260105",
+		"0000-01-01", "0001-01-01", "1800-01-01", "01-01-1800", "01-Jan-0001", "1989-12-31"}
 	for _, in := range bad {
 		if _, err := ParseDate(in); err == nil {
 			t.Errorf("ParseDate(%q) accepted", in)
 		}
+	}
+	if got, err := ParseDate("1990-01-01"); err != nil || got.Format(time.DateOnly) != "1990-01-01" {
+		t.Errorf("the floor itself is accepted: %v %v", got, err)
+	}
+	if _, err := ParseDate("1800-01-01"); err == nil || !strings.Contains(err.Error(), "1990-01-01") {
+		t.Errorf("floor message: %v", err)
 	}
 	if _, err := ParseDate("01-25-2026"); err == nil || !strings.Contains(err.Error(), "MM-DD-YYYY") {
 		t.Errorf("MM-DD-YYYY message: %v", err)
@@ -37,6 +45,7 @@ func TestCleanNumber(t *testing.T) {
 	ok := map[string]string{
 		"1234.56": "1234.56", "1,234.56": "1234.56", "1,234": "1234", "12,34,567.80": "1234567.80",
 		"1,23,456.78": "123456.78", "1,00,00,000": "10000000", "-5": "-5", "0": "0", "100": "100", "12,345": "12345",
+		"0.5": "0.5", "0.123": "0.123", "999,999": "999999",
 	}
 	for in, want := range ok {
 		got, err := CleanNumber(in)
@@ -44,7 +53,9 @@ func TestCleanNumber(t *testing.T) {
 			t.Errorf("CleanNumber(%q) = %q, %v; want %q", in, got, err, want)
 		}
 	}
-	bad := []string{"1.234,56", "1234,56", "12,34", "12,3456", "1,2,3", ",5", "5,", "1,234,56", "1e5", "NaN", "Inf", "abc", "", "--1", "1 234", "+5", "1,234,5"}
+	bad := []string{"1.234,56", "1234,56", "12,34", "12,3456", "1,2,3", ",5", "5,", "1,234,56", "1e5", "NaN", "Inf", "abc", "", "--1", "1 234", "+5", "1,234,5",
+		// IMP-28/D-P: a leading-zero group is a decimal comma, never the thousands pattern.
+		"0,123", "00,123", "0,5", "0,123.45", "01,234", "0,12,345", "-0,123"}
 	for _, in := range bad {
 		if got, err := CleanNumber(in); err == nil {
 			t.Errorf("CleanNumber(%q) accepted as %q", in, got)
@@ -101,6 +112,13 @@ func TestValidateInstrumentFields(t *testing.T) {
 		{"missing symbol and name", InstrumentFields{"", " ", ""}, "", []string{"symbol:REQUIRED", "name:REQUIRED"}, nil, true},
 		{"malformed isin is a warning and stored NULL", InstrumentFields{"TCS", "Tata", "XX123"}, "TCS", nil, []string{"isin:ISIN_MALFORMED"}, true},
 		{"isin too long", InstrumentFields{"TCS", "Tata", "INE467B010299"}, "TCS", nil, []string{"isin:ISIN_MALFORMED"}, true},
+		// IMP-17 parity with prices: ASCII-only upper-casing, so look-alikes are a charset error.
+		{"dotless i is not folded to I", InstrumentFields{"ınfy", "Infosys", ""}, "", []string{"symbol:SYMBOL_CHARSET"}, nil, true},
+		{"long s is not folded to S", InstrumentFields{"ſbin", "SBI", ""}, "", []string{"symbol:SYMBOL_CHARSET"}, nil, true},
+		{"leading dash rejected", InstrumentFields{"-X", "x", ""}, "", []string{"symbol:SYMBOL_CHARSET"}, nil, true},
+		{"lone dash rejected", InstrumentFields{"-", "x", ""}, "", []string{"symbol:SYMBOL_CHARSET"}, nil, true},
+		{"leading ampersand rejected", InstrumentFields{"&X", "x", ""}, "", []string{"symbol:SYMBOL_CHARSET"}, nil, true},
+		{"formula start rejected", InstrumentFields{"=CMD|", "x", ""}, "", []string{"symbol:SYMBOL_CHARSET"}, nil, true},
 		{"lower case isin is normalised", InstrumentFields{"TCS", "Tata", "ine467b01029"}, "TCS", nil, nil, false},
 	}
 	for _, c := range cases {

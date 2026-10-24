@@ -240,3 +240,12 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | F02-6 | Visual-regression baselines are OS specific | Baselines committed for win32 only and the check runs with `VISUAL=1`; axe and behaviour specs run everywhere. Owner action: generate Linux baselines once in CI (`VISUAL=1 npx playwright test stories --update-snapshots`) before enabling `VISUAL=1` there | `tests/e2e/stories.spec.ts` |
 | F02-7 | Storybook shows system fonts (Inter comes from `next/font` which the Storybook preview does not load) | Left as is; contrast and layout are checked with the fallback font. Add the font to the Storybook preview if pixel-exact snapshots are wanted | `.storybook/preview.tsx` |
 | F02-8 | `@tanstack/react-table` latest major is v9 with a different API | Pinned to v8 (`^8.21.3`), the documented stable API | `package.json` |
+
+### B06a review follow-ups (continue the B06a table above)
+
+| ID | Topic | Decision / interim assumption | Where |
+|---|---|---|---|
+| B06a-18 | Date floor (review item 6) | Interim assumption: every imported date (prices, listing_date, and later kinds via `ParseDate`) must be on or after 1990-01-01 (same floor as the SIP `start`). Price dates after today (IST) were already row errors, stricter than "today+1". A future `listing_date` is still accepted (upcoming listing); ask the owner if it should be refused | `values.go` |
+| B06a-19 | Upload and commit caps (review items 3, 4) | Interim values, spec silent: 10 outstanding uploads, 100 MB outstanding, at most 10 ids and 50 MB per commit. Parts of a commit are still held in memory together (lazy per-part loading deferred; it would change the `commitPrices`/`commitInstruments` signatures B06b also edits) | `service.go`, `commit.go` |
+| B06a-20 | Amends B06a-10 and B06a-15 | B06a-10: growth is now NEW rows only (docs/01 7.1 wording) and the current upload's bytes are excluded from the size read. B06a-15: a contradictory duplicate across parts of one group is now an error (identical ones warn, later part wins) | `commit.go`, `prices.go` |
+| B06a-21 | Symbol charset (review nice-to-have) | A symbol must start with a letter or digit (`^[A-Z0-9][A-Z0-9&-]{0,29}$`): no leading `-`/`&`, no lone `-` | `values.go` |

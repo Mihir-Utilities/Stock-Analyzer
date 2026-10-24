@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/india-analyzer/api/internal/dbq"
@@ -34,6 +35,10 @@ type priceEnv struct {
 	idx      *instrumentIndex
 	holidays map[time.Time]bool
 	today    time.Time
+	// seen, when set, is shared by every part of a group so a contradictory duplicate across parts
+	// is caught (IMP-09); it also ends up holding the unique keys for the new-row count (IMP-23).
+	// Nil: a per-file map.
+	seen map[dupKey]uint64
 }
 
 type dupKey struct {
@@ -97,7 +102,10 @@ func scanPrices(content []byte, env priceEnv, lim Limits, onRow func(priceRow) e
 		return nil, hdr, err
 	}
 	rep := newReport()
-	seen := map[dupKey]uint64{}
+	seen := env.seen
+	if seen == nil {
+		seen = map[dupKey]uint64{}
+	}
 	unknown := map[string]string{} // symbol -> message, so a bad symbol costs one suggestion search
 	for {
 		rec, row, err := t.next()
@@ -261,8 +269,11 @@ func scanPriceRow(t *table, rec []string, row int, env priceEnv, rep *scanReport
 	return p, true
 }
 
+// upperTrim is the one symbol normaliser of every importer path: it trims white space and upper-
+// cases ASCII letters only, so look-alikes such as dotless i or long s (which Unicode upper-casing
+// would fold into I and S) stay non-ASCII and fail the symbol charset check (IMP-17 parity).
 func upperTrim(s string) string {
-	b := []byte(s)
+	b := []byte(strings.TrimSpace(s))
 	for i, c := range b {
 		if c >= 'a' && c <= 'z' {
 			b[i] = c - 32

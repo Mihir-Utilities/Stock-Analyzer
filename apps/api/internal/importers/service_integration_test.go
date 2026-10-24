@@ -406,6 +406,37 @@ func TestUploadGroupCommit(t *testing.T) {
 	if e.count(`SELECT count(*) FROM import_batch WHERE kind='prices' AND upload_group=$1::uuid`, grp) != 1 {
 		t.Error("one batch for the group")
 	}
+
+	// IMP-09 across parts: the same (symbol, date) with different values in two parts is an error at
+	// commit and nothing is written; identical values only warn and the later part wins.
+	grp2 := newUUID()
+	var part []string
+	for _, row := range []string{"AAA,2026-02-02,1,2,1,1,1\n", "AAA,2026-02-02,5,6,5,5,9\n"} {
+		v, err := e.svc.Validate(context.Background(), KindPrices, []byte(hdrP+row), grp2)
+		if err != nil || v.ErrorCount != 0 {
+			t.Fatalf("each part is valid alone: %+v %v", v, err)
+		}
+		part = append(part, v.UploadID)
+	}
+	var he *HasErrorsError
+	if _, err := e.svc.Commit(context.Background(), KindPrices, CommitRequest{UploadIDs: part, UploadGroup: grp2}); !errors.As(err, &he) || he.Count != 1 {
+		t.Fatalf("cross-part contradiction: %v", err)
+	}
+	if e.count(`SELECT count(*) FROM price_daily WHERE trade_date='2026-02-02'`) != 0 || e.count(`SELECT count(*) FROM import_upload`) != 2 {
+		t.Fatal("a refused group writes nothing and keeps its parts")
+	}
+	same := newUUID()
+	var part2 []string
+	for i := 0; i < 2; i++ {
+		v, err := e.svc.Validate(context.Background(), KindPrices, []byte(hdrP+"AAA,2026-02-03,1,2,1,1,1\n"), same)
+		if err != nil {
+			t.Fatal(err)
+		}
+		part2 = append(part2, v.UploadID)
+	}
+	if r, err := e.svc.Commit(context.Background(), KindPrices, CommitRequest{UploadIDs: part2, UploadGroup: same}); err != nil || r.Inserted != 1 || e.count(`SELECT count(*) FROM price_daily WHERE trade_date='2026-02-03'`) != 1 {
+		t.Fatalf("identical cross-part duplicate: %+v %v", r, err)
+	}
 }
 
 // IMP-22: chunked, atomic commit. A failure at the last chunk rolls everything back.
@@ -466,15 +497,15 @@ func TestPrices300kRows(t *testing.T) {
 	e.svc.LargePrices = true
 	e.setAdjusted(false)
 	var syms []string
-	for i := 0; i < 20; i++ {
-		syms = append(syms, fmt.Sprintf("S%02d", i))
+	for i := 0; i < 300; i++ {
+		syms = append(syms, fmt.Sprintf("S%03d", i))
 	}
 	e.stocks(syms...)
 	var b strings.Builder
 	b.WriteString(hdrP)
 	for _, sym := range syms {
-		d := time.Date(1960, 1, 1, 0, 0, 0, 0, time.UTC)
-		for n := 0; n < 15000; {
+		d := time.Date(2000, 1, 3, 0, 0, 0, 0, time.UTC)
+		for n := 0; n < 1000; {
 			if d.Weekday() != time.Saturday && d.Weekday() != time.Sunday {
 				fmt.Fprintf(&b, "%s,%s,100.00,101.50,99.25,100.75,1250000\n", sym, d.Format(time.DateOnly))
 				n++
@@ -539,17 +570,19 @@ func TestPrices300kRows(t *testing.T) {
 // IMP-23: projected-size guard and the tracked-stock warning.
 func TestSizeGuardAndTrackedWarning(t *testing.T) {
 	e := newEnv(t)
-	e.stocks("AAA")
+	e.stocks("AAA", "BBB")
 	e.setAdjusted(false)
 	var b strings.Builder
 	b.WriteString(hdrP)
-	d := time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC)
-	for n := 0; n < 10_000; { // ~1.24 MB estimated growth
-		if d.Weekday() != time.Saturday && d.Weekday() != time.Sunday {
-			fmt.Fprintf(&b, "AAA,%s,1,2,1,1,1\n", d.Format(time.DateOnly))
-			n++
+	for _, sym := range []string{"AAA", "BBB"} { // 10,000 new rows: ~1.24 MB estimated growth
+		d := time.Date(1990, 1, 1, 0, 0, 0, 0, time.UTC)
+		for n := 0; n < 5_000; {
+			if d.Weekday() != time.Saturday && d.Weekday() != time.Sunday {
+				fmt.Fprintf(&b, "%s,%s,1,2,1,1,1\n", sym, d.Format(time.DateOnly))
+				n++
+			}
+			d = d.AddDate(0, 0, 1)
 		}
-		d = d.AddDate(0, 0, 1)
 	}
 	big := b.String()
 	v := e.validate(KindPrices, big)
@@ -573,8 +606,9 @@ func TestSizeGuardAndTrackedWarning(t *testing.T) {
 	if _, err := e.commit(KindPrices, small.UploadID); err != nil {
 		t.Fatalf("a small file still fits: %v", err)
 	}
-	// At the limit even an update-only file is refused.
-	e.svc.DBSize = func(context.Context) (int64, error) { return limit, nil }
+	// At the limit even an update-only file is refused (the size read excludes this upload's own
+	// bytes, so the stub reports a size clearly past the limit).
+	e.svc.DBSize = func(context.Context) (int64, error) { return limit + 1<<20, nil }
 	again := e.validate(KindPrices, hdrP+"AAA,2026-01-05,1,2,1,1,1\n")
 	if _, err := e.commit(KindPrices, again.UploadID); !errors.As(err, &sl) {
 		t.Fatalf("at the limit: %v", err)
