@@ -52,6 +52,9 @@ func (rt route) handler(d Deps) http.Handler {
 	if h := priceHandler(rt, d); h != nil { // B04 (prices_handlers.go)
 		return h
 	}
+	if h := ownerDataHandler(rt, d); h != nil { // B05 (ownerdata_handlers.go)
+		return h
+	}
 	switch rt.Kind {
 	case kindHealthz:
 		return http.HandlerFunc(healthz)
