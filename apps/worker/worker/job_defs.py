@@ -4,7 +4,7 @@ and the worker-http handler for ``post_import``. Imported by ``__main__`` and ``
 
 from __future__ import annotations
 
-from worker import actions_db, analysis_db, jobs, mf_jobs
+from worker import actions_db, alerts_db, analysis_db, jobs, mf_jobs
 from worker.db import create_pool
 from worker.post_import import (
     PgPostImportStore,
@@ -13,11 +13,13 @@ from worker.post_import import (
     process_queued_work,
 )
 from worker.runner import JobContext, JobSpec
+from worker.telegram import OwnerNotifier
 
 DETECT_TIMEOUT_S = 10 * 60
 READJUST_TIMEOUT_S = 10 * 60
 COMPUTE_TIMEOUT_S = 10 * 60
 PROCESS_QUEUED_TIMEOUT_S = 20 * 60  # docs/04 3.13: the 20-minute workflow timeout
+EVALUATE_ALERTS_TIMEOUT_S = 8 * 60  # docs/04 section 2: evaluate_alerts (EOD) 8 min
 
 
 async def _symbols(ctx: JobContext) -> list[str]:
@@ -69,7 +71,10 @@ async def process_queued_jobs_job(ctx: JobContext) -> None:
     hooks = analysis_db.production_hooks(pool)
     try:
         summaries = await process_queued_work(
-            PgPostImportStore(pool), SymbolProcessor(pool, hooks=hooks), ctx, hooks=hooks
+            PgPostImportStore(pool),
+            SymbolProcessor(pool, notifier=OwnerNotifier(pool), hooks=hooks),
+            ctx,
+            hooks=hooks,
         )
         ctx.extra["jobs"] = summaries
         # docs/04 3.13: `predict` runs here once models exist (Phase 7, deferred by D-4).
@@ -98,12 +103,36 @@ async def compute_analysis_job(ctx: JobContext) -> None:
         await pool.close()
 
 
+async def evaluate_alerts_job(ctx: JobContext) -> None:
+    """docs/04 3.9, EOD run (19:30 IST): every active alert, then deliver what is pending."""
+    pool = await create_pool()
+    try:
+        if ctx.dry_run:
+            ctx.extra["alerts"] = int(
+                await pool.fetchval("SELECT count(*) FROM alert WHERE status = 'active'")
+            )
+            return
+        summary = await alerts_db.evaluate_alerts(pool, should_stop=ctx.past_deadline)
+        ctx.items_total = int(summary["alerts"])
+        ctx.items_failed = int(summary["errors"])
+        ctx.add_rows(int(summary["events"]))
+        ctx.extra["evaluate"] = summary
+        if summary.get("stopped_early"):
+            ctx.timed_out = True
+        ctx.extra["delivery"] = await alerts_db.deliver_alerts(pool)
+    finally:
+        await pool.close()
+
+
 def register_all() -> None:
     jobs.register_cli_job(JobSpec("compute_analysis", COMPUTE_TIMEOUT_S, compute_analysis_job))
     jobs.register_cli_job(JobSpec("detect_actions", DETECT_TIMEOUT_S, detect_actions_job))
     jobs.register_cli_job(JobSpec("readjust_prices", READJUST_TIMEOUT_S, readjust_prices_job))
     jobs.register_cli_job(
         JobSpec("process_queued_jobs", PROCESS_QUEUED_TIMEOUT_S, process_queued_jobs_job)
+    )
+    jobs.register_cli_job(
+        JobSpec("evaluate_alerts", EVALUATE_ALERTS_TIMEOUT_S, evaluate_alerts_job)
     )
     jobs.register_http_handler("post_import", post_import_handler)
     # D04: mutual fund jobs
