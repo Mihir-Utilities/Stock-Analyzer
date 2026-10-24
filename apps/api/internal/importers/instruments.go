@@ -128,7 +128,7 @@ func planInstrumentRow(t *table, rec []string, row int, idx *instrumentIndex, re
 		seen[op.Symbol] = row
 	}
 
-	if v := strings.ToUpper(t.get(rec, "series")); v != "" {
+	if v := upperTrim(t.get(rec, "series")); v != "" {
 		if !reSeries.MatchString(v) {
 			fail("series", fmt.Sprintf("series %q must be 1-10 letters or digits (for example EQ)", t.get(rec, "series")))
 		} else {
@@ -176,7 +176,7 @@ func planInstrumentRow(t *table, rec []string, row int, idx *instrumentIndex, re
 			}
 		}
 	}
-	prev := strings.ToUpper(t.get(rec, "previous_symbol"))
+	prev := upperTrim(t.get(rec, "previous_symbol"))
 	if prev != "" && !reSymbol.MatchString(prev) {
 		fail("previous_symbol", fmt.Sprintf("previous_symbol %q must use only A-Z, 0-9, & and -", t.get(rec, "previous_symbol")))
 		prev = ""

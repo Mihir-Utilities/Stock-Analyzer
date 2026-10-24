@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -289,6 +290,42 @@ func TestGlobalHourlyLimit429(t *testing.T) {
 		t.Fatalf("post_import blocked by the global limit: %v %v", created, err)
 	}
 	e.svc.Wait()
+}
+
+// The cooldown/global-hour check and the insert are atomic: 40 parallel enqueues for different
+// targets never exceed REFRESH_GLOBAL_PER_HOUR (check-then-insert race, B09 review).
+func TestParallelEnqueueHonoursGlobalLimit(t *testing.T) {
+	const limit, n = 5, 40
+	e := newJobEnv(t, jobs.Config{Cooldown: 15 * time.Minute, GlobalHour: limit})
+	var created, limited, other atomic.Int32
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		e.seedScheme(300000 + i)
+	}
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, ok, err := e.svc.Enqueue(context.Background(), jobs.KindMFRefresh, strconv.Itoa(300000+i))
+			var rl *jobs.RateLimitedError
+			switch {
+			case err == nil && ok:
+				created.Add(1)
+			case errors.As(err, &rl):
+				limited.Add(1)
+			default:
+				other.Add(1)
+			}
+		}(i)
+	}
+	wg.Wait()
+	e.svc.Wait()
+	if created.Load() != limit || limited.Load() != n-limit || other.Load() != 0 {
+		t.Fatalf("created %d, limited %d, other %d; want %d, %d, 0", created.Load(), limited.Load(), other.Load(), limit, n-limit)
+	}
+	if c := e.count(`kind='mf_refresh'`); c != limit {
+		t.Fatalf("%d rows, want %d", c, limit)
+	}
 }
 
 // BRK-12: manual price mode.

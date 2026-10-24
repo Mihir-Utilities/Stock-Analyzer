@@ -53,6 +53,13 @@ const (
 	TrackedWarnLimit = 400
 	// WarnTrackedOver400 is the commit warning code.
 	WarnTrackedOver400 = "TRACKED_OVER_400"
+
+	// Upload store caps (assumption B06a-19). MaxOutstandingUploads and MaxOutstandingBytes bound the
+	// unexpired import_upload rows; a commit takes at most MaxCommitParts uploads and MaxCommitBytes.
+	MaxOutstandingUploads = 10
+	MaxOutstandingBytes   = 100 * mib
+	MaxCommitParts        = 10
+	MaxCommitBytes        = 50 * mib
 )
 
 // Sentinel and typed errors; the HTTP layer maps them to the envelope of docs/03 section 1.
@@ -83,6 +90,14 @@ type SizeLimitError struct {
 
 func (e *SizeLimitError) Error() string {
 	return fmt.Sprintf("This file would make the database exceed %.0f MB; trim history or import fewer rows", e.LimitMB)
+}
+
+// UploadCapError: too many (or too many bytes of) validated uploads are waiting for a commit; the
+// HTTP layer answers 429 with Retry-After (seconds until the oldest upload expires).
+type UploadCapError struct{ RetryAfterSeconds int }
+
+func (e *UploadCapError) Error() string {
+	return "importers: too many validated uploads are waiting; commit one or wait for it to expire"
 }
 
 // ValidationError carries field-level problems (422 details.fields).
@@ -158,17 +173,43 @@ func newUUID() string {
 // IsUUID reports whether s is a canonical lower-case UUID.
 func IsUUID(s string) bool { return reUUID.MatchString(strings.ToLower(s)) }
 
+// putUpload stores a validated file. Expired rows are purged first, then the outstanding (unexpired)
+// uploads are capped by count and bytes (they live in the database and count toward the Neon size
+// budget); a full store answers UploadCapError (429 + Retry-After). The advisory lock serialises
+// concurrent validates so the cap cannot be overshot.
 func (s *Service) putUpload(ctx context.Context, kind string, content []byte) (string, error) {
 	now := s.Now()
-	// Lazy cleanup next to the housekeeping job (docs/04 3.10): expired rows never pile up.
-	if _, err := s.pool.Exec(ctx, `DELETE FROM import_upload WHERE expires_at <= $1`, now); err != nil {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
 		return "", err
 	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('import_upload'))`); err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM import_upload WHERE expires_at <= $1`, now); err != nil {
+		return "", err
+	}
+	var n int
+	var total int64
+	var oldest *time.Time
+	if err := tx.QueryRow(ctx, `SELECT count(*), COALESCE(sum(octet_length(content)), 0), min(expires_at) FROM import_upload`).Scan(&n, &total, &oldest); err != nil {
+		return "", err
+	}
+	if n >= MaxOutstandingUploads || total+int64(len(content)) > MaxOutstandingBytes {
+		wait := int(time.Minute / time.Second)
+		if oldest != nil {
+			wait = max(1, int(oldest.Sub(now).Seconds())+1)
+		}
+		return "", &UploadCapError{RetryAfterSeconds: wait}
+	}
 	id := newUUID()
-	_, err := s.pool.Exec(ctx,
+	if _, err := tx.Exec(ctx,
 		`INSERT INTO import_upload (id, kind, content, created_at, expires_at) VALUES ($1::uuid, $2, $3, $4, $5)`,
-		id, kind, content, now, now.Add(uploadTTL))
-	return id, err
+		id, kind, content, now, now.Add(uploadTTL)); err != nil {
+		return "", err
+	}
+	return id, tx.Commit(ctx)
 }
 
 func (s *Service) getUpload(ctx context.Context, db dbq.DBTX, id, kind string) ([]byte, error) {

@@ -67,6 +67,7 @@ type Config struct {
 
 // Service creates and reads refresh jobs.
 type Service struct {
+	db  dbq.DBTX
 	q   *dbq.Queries
 	sig Signaler
 	cfg Config
@@ -80,7 +81,7 @@ type Service struct {
 
 // New builds a Service over a pgx pool. sig may be nil (no signal is sent).
 func New(db dbq.DBTX, sig Signaler, cfg Config, log zerolog.Logger) *Service {
-	return &Service{q: dbq.New(db), sig: sig, cfg: cfg, log: log, Now: time.Now, signalTimeout: 15 * time.Second}
+	return &Service{db: db, q: dbq.New(db), sig: sig, cfg: cfg, log: log, Now: time.Now, signalTimeout: 15 * time.Second}
 }
 
 // Wait blocks until in-flight worker signals finish (graceful shutdown, tests).
@@ -108,7 +109,41 @@ func (s *Service) Enqueue(ctx context.Context, kind, target string) (Job, bool, 
 	default:
 		return Job{}, false, fmt.Errorf("jobs: kind %q is not enqueued on demand", kind)
 	}
-	active, err := s.q.GetActiveRefreshJob(ctx, dbq.GetActiveRefreshJobParams{Kind: kind, Target: target})
+	// The cooldown and global-hour checks and the insert run in one transaction under an advisory
+	// lock, so parallel enqueues for different targets cannot all pass the count and overshoot
+	// REFRESH_GLOBAL_PER_HOUR (check-then-insert race). The worker signal fires after the commit.
+	q := s.q
+	var tx pgx.Tx
+	if b, ok := s.db.(interface {
+		Begin(context.Context) (pgx.Tx, error)
+	}); ok {
+		var err error
+		if tx, err = b.Begin(ctx); err != nil {
+			return Job{}, false, err
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('refresh_job_enqueue'))`); err != nil {
+			return Job{}, false, err
+		}
+		q = dbq.New(tx)
+	}
+	j, created, err := s.enqueueChecked(ctx, q, kind, target)
+	if err != nil {
+		return Job{}, false, err
+	}
+	if tx != nil {
+		if err := tx.Commit(ctx); err != nil {
+			return Job{}, false, err
+		}
+	}
+	if created {
+		s.fire(j.ID)
+	}
+	return j, created, nil
+}
+
+func (s *Service) enqueueChecked(ctx context.Context, q *dbq.Queries, kind, target string) (Job, bool, error) {
+	active, err := q.GetActiveRefreshJob(ctx, dbq.GetActiveRefreshJobParams{Kind: kind, Target: target})
 	if err == nil {
 		return toJob(active), false, nil
 	}
@@ -116,7 +151,7 @@ func (s *Service) Enqueue(ctx context.Context, kind, target string) (Job, bool, 
 		return Job{}, false, err
 	}
 	now := s.Now()
-	last, err := s.q.LastFinishedRefreshJobAt(ctx, dbq.LastFinishedRefreshJobAtParams{Kind: kind, Target: target})
+	last, err := q.LastFinishedRefreshJobAt(ctx, dbq.LastFinishedRefreshJobAtParams{Kind: kind, Target: target})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return Job{}, false, err
 	}
@@ -125,7 +160,7 @@ func (s *Service) Enqueue(ctx context.Context, kind, target string) (Job, bool, 
 			return Job{}, false, &RateLimitedError{RetryAfterSeconds: ceilSeconds(left)}
 		}
 	}
-	times, err := s.q.ListRefreshJobTimesSince(ctx, pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true})
+	times, err := q.ListRefreshJobTimesSince(ctx, pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true})
 	if err != nil {
 		return Job{}, false, err
 	}
@@ -134,7 +169,7 @@ func (s *Service) Enqueue(ctx context.Context, kind, target string) (Job, bool, 
 		oldest := times[len(times)-s.cfg.GlobalHour].Time
 		return Job{}, false, &RateLimitedError{RetryAfterSeconds: ceilSeconds(oldest.Add(time.Hour).Sub(now))}
 	}
-	return s.insert(ctx, kind, target, nil)
+	return s.insertRow(ctx, q, kind, target, nil)
 }
 
 // PostImportResult is the initial refresh_job.result of a post_import job (docs/04 3.12).
@@ -169,9 +204,18 @@ func (s *Service) MFSchemeExists(ctx context.Context, code int32) (bool, error) 
 }
 
 func (s *Service) insert(ctx context.Context, kind, target string, result []byte) (Job, bool, error) {
-	row, err := s.q.InsertRefreshJob(ctx, dbq.InsertRefreshJobParams{Kind: kind, Target: target, Result: result})
+	j, created, err := s.insertRow(ctx, s.q, kind, target, result)
+	if created {
+		s.fire(j.ID)
+	}
+	return j, created, err
+}
+
+// insertRow inserts without signalling the worker (the caller fires after its commit).
+func (s *Service) insertRow(ctx context.Context, q *dbq.Queries, kind, target string, result []byte) (Job, bool, error) {
+	row, err := q.InsertRefreshJob(ctx, dbq.InsertRefreshJobParams{Kind: kind, Target: target, Result: result})
 	if errors.Is(err, pgx.ErrNoRows) { // lost the race: the unique active-job index kept one row (API-06)
-		active, aerr := s.q.GetActiveRefreshJob(ctx, dbq.GetActiveRefreshJobParams{Kind: kind, Target: target})
+		active, aerr := q.GetActiveRefreshJob(ctx, dbq.GetActiveRefreshJobParams{Kind: kind, Target: target})
 		if aerr != nil {
 			return Job{}, false, aerr
 		}
@@ -180,9 +224,7 @@ func (s *Service) insert(ctx context.Context, kind, target string, result []byte
 	if err != nil {
 		return Job{}, false, err
 	}
-	j := toJob(row)
-	s.fire(j.ID)
-	return j, true, nil
+	return toJob(row), true, nil
 }
 
 // fire signals worker-http without blocking the request. A failure only logs: the row stays

@@ -214,6 +214,31 @@ func truncate(s string) string {
 	return s
 }
 
+// A full upload store answers 429 with Retry-After (B06a review); a real UTF-16LE CSV and a real
+// xlsx-like zip are refused with the file field.
+func TestImportUploadCapAndBinaryHTTP(t *testing.T) {
+	e := newImportEnv(t)
+	for i := 0; i < importers.MaxOutstandingUploads; i++ {
+		e.validate("prices", pHdr)
+	}
+	r := e.upload("prices", upload{filename: "p.csv", ctype: "text/csv", content: pHdr}, e.cookie, true)
+	if r.Code != 429 || errCode(t, r) != CodeRateLimited || r.Header().Get("Retry-After") == "" {
+		t.Fatalf("cap: %d %s %q", r.Code, r.Body.String(), r.Header().Get("Retry-After"))
+	}
+
+	u16 := []byte{0xFF, 0xFE}
+	for i := 0; i < len(pHdr); i++ { // ASCII header
+		u16 = append(u16, pHdr[i], 0)
+	}
+	xlsx := "PK\x03\x04" + strings.Repeat("\x00", 40) + "xl/workbook.xml"
+	for name, content := range map[string]string{"utf16 csv": string(u16), "xlsx bytes": xlsx} {
+		r := e.upload("instruments", upload{filename: "i.csv", ctype: "text/csv", content: content}, e.cookie, true)
+		if r.Code != 422 || errCode(t, r) != "UNPROCESSABLE" {
+			t.Errorf("%s: %d %s", name, r.Code, truncate(r.Body.String()))
+		}
+	}
+}
+
 // IMP-11, IMP-25, IMP-10 and the commit contract, end to end over HTTP.
 func TestImportCommitHTTP(t *testing.T) {
 	e := newImportEnv(t)

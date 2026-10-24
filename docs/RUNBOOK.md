@@ -184,3 +184,12 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Failure mode: if the Playwright web server fails with "already used", a previous run left `next start` (port 3100) or `scripts/serve-static.mjs` (port 6100) running; stop that process and re-run.
 - Failure mode: a chart shows a red "could not be drawn" banner when ECharts throws on an option; the data table (Show data) and CSV still work, so no data is lost while it is fixed.
 - Licences checked for S15: echarts 6.1.0 Apache-2.0, zrender BSD-3-Clause, lucide-react ISC, Inter OFL-1.1, @tanstack/react-table and react-virtual MIT.
+
+## 23. Import review fixes (B06a review)
+
+- Upload store: at most 10 unexpired `import_upload` rows and 100 MB; a further validate answers 429 `RATE_LIMITED` with `Retry-After` (seconds to the oldest expiry). Expired rows are purged on every validate. Failure mode: if the owner is blocked, commit the waiting uploads or wait; `DELETE FROM import_upload` clears them by hand.
+- A commit takes at most 10 uploads and 50 MB in total (422 on `upload_ids`); parts are still loaded in memory together (up to 50 MB).
+- `DB_SIZE_LIMIT` now counts only NEW (symbol, date) rows x 130 B and excludes the commit's own upload bytes, so re-importing the same file near the limit works. Validate shows the same figure in `estimated_growth_mb`.
+- Contradictory duplicates are detected across the parts of one group (commit error count); dates before 1990-01-01 are row errors; symbols are ASCII-only (`ınfy` is an error, not INFY).
+- `refresh_job` enqueue (cooldown, global hourly limit, insert) runs in one transaction under advisory lock `hashtext('refresh_job_enqueue')`; post_import is unaffected.
+- Lone-CR files are refused with a plain message (save as CSV with normal line endings). The API has no CSV export yet; any future export must pass text cells through `importers.SafeCSVCell`.
