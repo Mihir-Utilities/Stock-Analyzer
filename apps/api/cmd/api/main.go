@@ -16,6 +16,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/india-analyzer/api/internal/actions"
 	"github.com/india-analyzer/api/internal/auth"
 	"github.com/india-analyzer/api/internal/config"
 	"github.com/india-analyzer/api/internal/egress"
@@ -80,6 +81,7 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 		MF:               mfService(pool, jobSvc),
 		Portfolio:        portfolio.New(pool),
 		Imports:          importService(cfg, pool, jobSvc, log),
+		Actions:          actions.New(pool, jobSvc, log),
 		TrustedProxyHops: cfg.TrustedProxyHops})
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),

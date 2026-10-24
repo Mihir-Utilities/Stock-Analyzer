@@ -265,3 +265,9 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 
 - Next.js was bumped from 16.4.0 to 16.4.1 (owner approved) because `next build` failed with `SecurityFatalError`: 16.0.0 to 16.4.0 are affected by GHSA-2464-fhr4-w9xw, GHSA-p3m5-59mp-jv5r and GHSA-673q-mjm6-r5xr. `eslint-config-next` moved to the same version.
 - The advisory gate runs inside `next build` (it queries the npm advisory service). Any future advisory against the installed Next.js version will fail the web CI job until it is bumped, so merge Renovate PRs for `next` promptly.
+
+## 33. Corporate action confirm/reject (B07)
+
+- `PATCH /stocks/{symbol}/actions/{id}` confirms or rejects a `detected` split/bonus candidate. Confirm needs `action_type` (split or bonus) and `ratio_num`/`ratio_den` (docs/05 8.2 conventions) and takes a row lock, so concurrent confirms change the row once. The response carries `multiplier` and a warning when it differs more than 3% from the detected 1/r.
+- After the commit the API queues `post_import` (target `action:<id>`, symbol in `result.remaining`) through the signed worker caller; the worker re-adjusts `adj_close` (confirmed actions with ex_date <= today IST, `src_adjusted=false` bars only) and recomputes analysis. A reject also queues it so the UNCONFIRMED_ACTION warning clears.
+- Failure modes: `POST_IMPORT_NOT_QUEUED` warning (decision saved; repeat the PATCH to retry, or run `python -m worker run readjust_prices --symbols X`); 409 "would adjust the history twice" means a manual or CSV split/bonus already sits on that ex-date: reject the detected candidate. A rejected date is never re-detected; to apply it anyway, enter the action manually.

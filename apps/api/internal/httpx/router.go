@@ -71,6 +71,9 @@ type Deps struct {
 	// price delete and trim); nil keeps them 501 stubs.
 	Imports ImportService
 
+	// Actions serves PATCH /stocks/{symbol}/actions/{id} (B07); nil keeps it a 501 stub.
+	Actions ActionService
+
 	// LoginLimiter (default 10/min per IP) guards POST /auth/login; GeneralLimiter (default
 	// 120/min) guards authenticated routes (docs/03 section 16).
 	LoginLimiter   *Limiter

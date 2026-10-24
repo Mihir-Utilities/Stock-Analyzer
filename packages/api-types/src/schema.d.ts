@@ -1049,7 +1049,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Confirm or reject a detected action. (docs/03 section 14) */
+        /** Confirm or reject a detected action; confirm queues the re-adjust and analysis job. (docs/03 section 14, B07) */
         patch: operations["patchStocksSymbolActionsId"];
         trace?: never;
     };
@@ -1481,6 +1481,15 @@ export interface components {
         ActionStatusPatch: {
             /** @enum {string} */
             status: "confirmed" | "rejected";
+            /**
+             * @description Required to confirm a detected candidate (owner chooses split or bonus, docs/05 8.2); not allowed with rejected.
+             * @enum {string}
+             */
+            action_type?: "split" | "bonus";
+            /** @description Final numerator (split: old face value; bonus: new shares); number or numeric string. Required to confirm a detected candidate. */
+            ratio_num?: number | string;
+            /** @description Final denominator (split: new face value; bonus: shares held). */
+            ratio_den?: number | string;
         };
     };
     responses: {
@@ -4650,7 +4659,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Done. data: {id, symbol, ex_date, action_type, status, ratio_num, ratio_den, multiplier (confirmed only), future_ex_date, changed (false for an idempotent repeat), warnings[{field,code,message}] (RATIO_DISAGREES_WITH_DETECTED when the multiplier is more than 3% from 1/r; POST_IMPORT_NOT_QUEUED), post_import_job_id}. 404 unknown symbol, id or an id of another stock; 409 rejected candidate confirmed, confirmed action rejected, different numbers on a confirmed candidate, or a confirmed split/bonus already on the same ex-date (never adjust twice). */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4660,6 +4669,16 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /** @description Conflict (envelope CONFLICT). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];

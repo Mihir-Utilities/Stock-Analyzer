@@ -2951,7 +2951,7 @@ paths:
       operationId: "patchStocksSymbolActionsId"
       tags:
         - "imports"
-      summary: "Confirm or reject a detected action. (docs/03 section 14)"
+      summary: "Confirm or reject a detected action; confirm queues the re-adjust and analysis job. (docs/03 section 14, B07)"
       parameters:
         - name: "symbol"
           in: "path"
@@ -2975,13 +2975,21 @@ paths:
               "$ref": "#/components/schemas/ActionStatusPatch"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Done. data: {id, symbol, ex_date, action_type, status, ratio_num, ratio_den, multiplier (confirmed only), future_ex_date, changed (false for an idempotent repeat), warnings[{field,code,message}] (RATIO_DISAGREES_WITH_DETECTED when the multiplier is more than 3% from 1/r; POST_IMPORT_NOT_QUEUED), post_import_job_id}. 404 unknown symbol, id or an id of another stock; 409 rejected candidate confirmed, confirmed action rejected, different numbers on a confirmed candidate, or a confirmed split/bonus already on the same ex-date (never adjust twice)."
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "409":
+          description: "Conflict (envelope CONFLICT)."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
         "422":
           "$ref": "#/components/responses/Unprocessable"
         "429":
@@ -3886,6 +3894,22 @@ components:
           enum:
             - "confirmed"
             - "rejected"
+        action_type:
+          type: "string"
+          enum:
+            - "split"
+            - "bonus"
+          description: "Required to confirm a detected candidate (owner chooses split or bonus, docs/05 8.2); not allowed with rejected."
+        ratio_num:
+          description: "Final numerator (split: old face value; bonus: new shares); number or numeric string. Required to confirm a detected candidate."
+          oneOf:
+            - type: "number"
+            - type: "string"
+        ratio_den:
+          description: "Final denominator (split: new face value; bonus: shares held)."
+          oneOf:
+            - type: "number"
+            - type: "string"
       required:
         - "status"
       additionalProperties: false
