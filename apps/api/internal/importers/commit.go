@@ -359,7 +359,7 @@ func (s *Service) afterCommit(ctx context.Context, res *CommitResult, symbols []
 	id, err := s.enqueue(ctx, res.BatchID, symbols)
 	if err != nil {
 		s.log.Warn().Err(err).Int64("batch_id", res.BatchID).Msg("post_import could not be queued")
-		res.Warnings = append(res.Warnings, "POST_IMPORT_NOT_QUEUED")
+		res.Warnings = append(res.Warnings, WarnPostImportNotQueued)
 		return
 	}
 	res.PostImportJobID = id

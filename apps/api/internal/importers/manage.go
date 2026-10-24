@@ -287,7 +287,7 @@ func (s *Service) DeletePrices(ctx context.Context, symbol, from, to string, con
 		return nil, err
 	}
 	res.BatchID = &batchID
-	res.JobID = s.queuePostImport(ctx, batchID, []string{canon})
+	res.JobID, _ = s.queuePostImport(ctx, batchID, []string{canon})
 	return res, nil
 }
 
@@ -297,13 +297,18 @@ func (s *Service) auditBatch(ctx context.Context, tx pgx.Tx, rows int, note stri
 	return id, err
 }
 
-func (s *Service) queuePostImport(ctx context.Context, batchID int64, symbols []string) *int64 {
+// WarnPostImportNotQueued is the warning code of a write that committed but whose post_import job
+// could not be queued (B06b-1).
+const WarnPostImportNotQueued = "POST_IMPORT_NOT_QUEUED"
+
+// queuePostImport returns the job id (nil when nothing needed queueing) and false when queueing failed.
+func (s *Service) queuePostImport(ctx context.Context, batchID int64, symbols []string) (*int64, bool) {
 	id, err := s.enqueue(ctx, batchID, symbols)
 	if err != nil {
 		s.log.Warn().Err(err).Int64("batch_id", batchID).Msg("post_import could not be queued")
-		return nil
+		return nil, false
 	}
-	return id
+	return id, true
 }
 
 // SymbolRows is the row count for one stock.
@@ -425,7 +430,7 @@ func (s *Service) Trim(ctx context.Context, symbols []string, before string, con
 	}
 	sort.Strings(affected)
 	res.BatchID = &batchID
-	res.JobID = s.queuePostImport(ctx, batchID, affected)
+	res.JobID, _ = s.queuePostImport(ctx, batchID, affected)
 	return res, nil
 }
 

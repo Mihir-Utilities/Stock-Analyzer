@@ -119,7 +119,7 @@ func verifySchema(t *testing.T, db *sql.DB) {
 	}
 }
 
-// TestMigrateUpDownUp covers: goose up, down to zero, up again; all DDL objects exist; pg_trgm.
+// TestMigrateUpDownUp (SYS-18) covers: goose up, down to zero, up again; all DDL objects exist; pg_trgm.
 func TestMigrateUpDownUp(t *testing.T) {
 	dsn := testdb.New(t)
 	db := testdb.OpenSQL(t, dsn)
@@ -155,11 +155,14 @@ func TestMigrateUpDownUp(t *testing.T) {
 	verifySchema(t, db)
 }
 
-// TestMigrationFiles checks naming, contiguity and Up/Down sections (forward-only discipline).
+// TestMigrationFiles (SYS-07, SYS-18) checks naming, contiguity and Up/Down sections (forward-only discipline).
 func TestMigrationFiles(t *testing.T) {
 	files, err := filepath.Glob(filepath.Join(testdb.MigrationsDir(), "*.sql"))
 	if err != nil || len(files) == 0 {
 		t.Fatalf("no migrations found: %v", err)
+	}
+	if len(files) < 12 {
+		t.Errorf("migrations 0001..0012 must all exist, found %d files", len(files))
 	}
 	sort.Strings(files)
 	re := regexp.MustCompile(`^(\d{4})_[a-z0-9_]+\.sql$`)

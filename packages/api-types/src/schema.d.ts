@@ -4248,7 +4248,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Done. data: {batch_id, removed (rows deleted), post_import_job_id (null when nothing was queued)}. The rows tagged with the batch are deleted; values the batch overwrote are NOT restored. 404 unknown batch; 409 for prices, instruments, holidays, instrument_meta and manual-entry batches (not undoable), for an already-undone batch and after the 30-day window. */
+            /** @description Done. data: {batch_id, removed (rows deleted), post_import_job_id (null when nothing was queued), warnings (POST_IMPORT_NOT_QUEUED, UNDO_REMOVED_NOTHING, UNDO_REMOVES_EARLIER_IMPORT), earlier_batch_ids}. The rows tagged with the batch are deleted; values the batch overwrote are NOT restored. 404 unknown batch; 409 UNDO_HAS_DEPENDENTS when a corporate action of the batch is used by a portfolio adjustment (nothing is changed); 409 for prices, instruments, holidays, instrument_meta and manual-entry batches (not undoable), for an already-undone batch and after the 30-day window. */
             200: {
                 headers: {
                     [name: string]: unknown;
