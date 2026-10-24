@@ -240,3 +240,16 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | F02-6 | Visual-regression baselines are OS specific | Baselines committed for win32 only and the check runs with `VISUAL=1`; axe and behaviour specs run everywhere. Owner action: generate Linux baselines once in CI (`VISUAL=1 npx playwright test stories --update-snapshots`) before enabling `VISUAL=1` there | `tests/e2e/stories.spec.ts` |
 | F02-7 | Storybook shows system fonts (Inter comes from `next/font` which the Storybook preview does not load) | Left as is; contrast and layout are checked with the fallback font. Add the font to the Storybook preview if pixel-exact snapshots are wanted | `.storybook/preview.tsx` |
 | F02-8 | `@tanstack/react-table` latest major is v9 with a different API | Pinned to v8 (`^8.21.3`), the documented stable API | `package.json` |
+
+## F03 assumptions (Claude, 2026-10-24; owner may overrule, none blocks)
+| # | Question | Choice made | Where |
+|---|---|---|---|
+| F03-1 | The task text says the palette calls `GET /search`; the contract has no such path | Stocks use `GET /stocks/index` (client ranking) with `GET /stocks?q=` as fallback; funds use `GET /mf/schemes?q=&limit=6` (plain scheme rows, default plan/option filters) | `lib/search/api.ts` |
+| F03-2 | Decimals for crore amounts are not specified | 0 decimals from 1,000 Cr, 2 below (so 0.4 Cr is not shown as 0); `L Cr` always 2 decimals | `lib/format/format.ts` |
+| F03-3 | `/stocks/index` has no sector and bit 1 (`broker_ok`) is always 0 | The sector chip and `No broker data` badge are not shown (the latter is also hidden in manual mode per the F03 amendment); `Suspended`, `Delisted`, `ETF/REIT` badges are shown | `SearchPalette.tsx` |
+| F03-4 | Fuzzy threshold applies to very short queries | Fuzzy (Jaro-Winkler >= 0.85, against symbol and each name word) runs only for 3+ normalised characters and only when fewer than 12 stronger matches exist; ties sort by shorter symbol, then alphabetical; a literal match beats a match that ignores `&` and `-` | `lib/search/rank.ts` |
+| F03-5 | Fund search trigger and size | Server fund search from 2 characters, 250 ms debounce, 6 results; the 12-result cap applies to stocks | `SearchPalette.tsx` |
+| F03-6 | Recents content | The last 8 picked results (stock or fund), not raw query text; stored in localStorage only | `lib/search/store.ts` |
+| F03-7 | A period end that is not Jun/Sep/Dec/Mar has no quarter label | Shows a dash with reason "period end is not a fiscal quarter end" instead of guessing (off-cycle reporters need a spec decision) | `fiscalQuarterLabel` |
+| F03-8 | `apiRequest` does not expose response headers, so the ETag cannot be compared in code | The browser HTTP cache sends `If-None-Match` itself; the code compares `generated_at` after a background revalidation once the cache is over 1 h old | `lib/search/store.ts` |
+| F03-9 | Playwright E-rows UI-05 (search 2,200 items) | Covered at unit level with 2,300 items (< 16 ms median per keystroke, open < 100 ms in jsdom); no browser E2E added in this task | `tests/unit/search-*.test.ts*` |

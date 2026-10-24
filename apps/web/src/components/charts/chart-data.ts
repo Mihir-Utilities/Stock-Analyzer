@@ -1,5 +1,6 @@
 import { categoricalPalette, colorTokens, type ThemeName } from "@/lib/theme/tokens";
 import { echartsTheme } from "@/lib/theme/echarts-theme";
+import { formatNumber } from "@/lib/format";
 
 // Chart data model and ECharts option builder (docs/06a sections 4-5). Everything here is pure
 // so it can be unit tested without a DOM. The same dataset feeds the chart and the "Show data"
@@ -19,7 +20,7 @@ export interface ChartSeries {
   estimated?: boolean;
   /** Index into the categorical palette; defaults to the series position (stable identity). */
   colorIndex?: number;
-  /** Per-series formatter from format.ts; defaults to String(). */
+  /** Per-series formatter from format.ts; defaults to format.ts formatNumber. */
   format?: (value: number) => string;
   nullReason?: string;
 }
@@ -75,7 +76,7 @@ export function escapeHtml(text: string): string {
 /** Text shown in a table cell or tooltip for a value, or the reason when unknown. */
 export function valueText(s: ChartSeries, v: number | null | undefined): string {
   if (!isKnown(v)) return s.nullReason ?? "No data";
-  const t = s.format ? s.format(v) : String(v);
+  const t = s.format ? s.format(v) : formatNumber(v).text;
   return s.estimated ? `${t} (est.)` : t;
 }
 

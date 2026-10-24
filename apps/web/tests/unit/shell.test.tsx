@@ -4,7 +4,10 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let mockPath = "/";
-vi.mock("next/navigation", () => ({ usePathname: () => mockPath }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => mockPath,
+  useRouter: () => ({ push: () => undefined }),
+}));
 vi.mock("next/link", () => ({
   default: ({
     href,

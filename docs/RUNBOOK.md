@@ -184,3 +184,10 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Failure mode: if the Playwright web server fails with "already used", a previous run left `next start` (port 3100) or `scripts/serve-static.mjs` (port 6100) running; stop that process and re-run.
 - Failure mode: a chart shows a red "could not be drawn" banner when ECharts throws on an option; the data table (Show data) and CSV still work, so no data is lost while it is fixed.
 - Licences checked for S15: echarts 6.1.0 Apache-2.0, zrender BSD-3-Clause, lucide-react ISC, Inter OFL-1.1, @tanstack/react-table and react-virtual MIT.
+
+## 23. Formatters, definitions and search palette (F03)
+
+- All text for numbers, dates and labels comes from `apps/web/src/lib/format` (every formatter returns `{ text, reason, direction }`; unknown gives an em dash plus the reason). Do not call `toFixed`, `toLocaleString` or `Intl` in components. The chart and table defaults now use `formatNumber`.
+- `src/lib/definitions.ts` is generated from `docs/05-analytics-spec.md` by `npm run gen:definitions` (in `apps/web`). Run it after editing a formula line in docs/05; a unit test fails when the file is stale, and generation fails (names the key) when a spec line the generator anchors on was reworded. Add a new definition by adding a row to `ENTRIES` in `scripts/gen-definitions.mjs`.
+- Search palette (`components/search/SearchPalette.tsx`, mounted in the top bar): the stock index (`GET /stocks/index`) is cached in IndexedDB (`analyzer-search`, key `stocks-index`) and recent picks in `localStorage` (`analyzer-recent-searches`). Failure mode: if the list looks old after an import, clear site data for the app or wait for the 1 h background revalidation; if `/stocks/index` fails the palette shows a notice and uses `GET /stocks?q=`; if `/mf/schemes` fails it shows "Fund search is unavailable right now." and stocks still work.
+- No new npm dependency (tests inject `fetch`; no MSW). Browser requests go only to same-origin `/api/v1/*`.

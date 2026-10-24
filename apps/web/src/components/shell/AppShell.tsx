@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { Footer } from "./Footer";
 import { icons, NavIcon } from "./icons";
+import { SearchPalette } from "@/components/search/SearchPalette";
 import { MarketStatusPill } from "./MarketStatusPill";
 import { isActive, moreNav, primaryNav, type NavItem } from "./nav";
 import { ThemeToggle } from "./ThemeToggle";
@@ -185,6 +186,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             Analyzer
           </span>
           <div className="flex min-w-0 items-center gap-2">
+            <SearchPalette />
             <MarketStatusPill />
             <ThemeToggle />
           </div>
