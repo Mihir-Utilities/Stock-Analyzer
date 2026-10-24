@@ -1,4 +1,4 @@
-# 07. Edge-Case Catalogue and Test Matrix (Safe Edition)
+﻿# 07. Edge-Case Catalogue and Test Matrix (Safe Edition)
 
 Gaps in numbering are intentional; IDs are stable references.
 
@@ -438,6 +438,8 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | UI-27 | Dialog and drawer focus | Tab ten times never moves focus onto the page behind a modal; Escape closes and returns focus to the trigger; a backdrop click does not dismiss a confirmation; a dialog the browser closes while its parent keeps `open` true is reported through onClose and re-opened (F02 review) | E |
 | UI-28 | Login redirect behind a proxy | The redirect is built from `request.nextUrl.clone()` with only path and query replaced; forwarded-host headers never change the target host (F01 review) | E |
 | UI-29 | Reduced motion | `prefers-reduced-motion: reduce` turns chart animation off and collapses CSS transition and animation durations; shared `ExternalLink` and a repo test keep `rel="noopener noreferrer"` on every `target="_blank"` (F01/F02 review) | E |
+| UI-30 | Dashboard cards when endpoints answer 501 or 404 | Every card renders an empty state with the reason (never 0, NaN or Infinity); index tiles show the BRK-16 reason; errors show Retry and the request id (F04) | U/E |
+| UI-31 | Login messaging | 401 for a wrong password and for a lockout show the identical message; 429 shows the Retry-After seconds; an open-redirect `next` falls back to `/` (SEC-01, F04) | U/E |
 | API-30 | Refresh cooldown (B09) | A `mf_refresh` for a target whose last job finished < `REFRESH_COOLDOWN_MIN` ago gives 429 `RATE_LIMITED` with `details.retry_after_seconds` (= remaining cooldown) and a matching `Retry-After` header; allowed again after the cooldown | I |
 | API-31 | Global refresh limit (B09) | At `REFRESH_GLOBAL_PER_HOUR` on-demand jobs in the last hour the next request is 429 with `retry_after_seconds` = time until the oldest ages out; no row is created; `post_import` is exempt | I |
 | API-32 | Worker signal fails (B09) | Worker answers non-202 or is down: the request still returns 202, the row stays `queued`, nothing is retried with the same signature | I |
