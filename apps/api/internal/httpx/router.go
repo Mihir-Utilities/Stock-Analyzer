@@ -64,6 +64,9 @@ type Deps struct {
 	// MF serves the /mf/* read routes (B10); nil keeps them 501 stubs.
 	MF MFService
 
+	// Portfolio serves /watchlist and /portfolio/* (B11); nil keeps them 501 stubs.
+	Portfolio PortfolioService
+
 	// Imports serves the B06a routes (/imports/*, /settings/prices-adjustment, POST /instruments,
 	// price delete and trim); nil keeps them 501 stubs.
 	Imports ImportService

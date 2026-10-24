@@ -184,3 +184,12 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Failure mode: if the Playwright web server fails with "already used", a previous run left `next start` (port 3100) or `scripts/serve-static.mjs` (port 6100) running; stop that process and re-run.
 - Failure mode: a chart shows a red "could not be drawn" banner when ECharts throws on an option; the data table (Show data) and CSV still work, so no data is lost while it is fixed.
 - Licences checked for S15: echarts 6.1.0 Apache-2.0, zrender BSD-3-Clause, lucide-react ISC, Inter OFL-1.1, @tanstack/react-table and react-virtual MIT.
+
+## 23. Watchlist and portfolio (B11)
+
+- Routes: `/watchlist` and `/portfolio/*` (docs/03 sections 11-12). Everything is computed on request from `portfolio_txn`, confirmed `corporate_action` rows, `portfolio_adjustment` overrides and `price_daily`; nothing is cached, so a prices import or an action confirmation shows on the next summary call.
+- Writes lock the instrument with `pg_advisory_xact_lock(7011, instrument_id)` and replay the whole symbol sequence before commit; a rejected edit changes nothing.
+- Idempotency: table `idempotency_key` keeps the response for 24 h; expired rows are purged on the next claim. A lost response is safe to retry with the same key.
+- Failure mode `HOLDINGS_INCONSISTENT` warning in the summary: stored transactions no longer pass the holdings check (for example a confirmed split was edited or removed after a sell). The symbol is excluded from totals; fix the action (or add an override) or the transactions.
+- Failure mode: totals show a null market value with `missing_price: SYM`: import a `prices.csv` containing that symbol.
+- Owner action: review warnings `REVIEW_NEEDED` (rights, buyback, merger, demerger, split_or_bonus) and `UNCONFIRMED_ACTION`; these are never applied to quantities automatically.

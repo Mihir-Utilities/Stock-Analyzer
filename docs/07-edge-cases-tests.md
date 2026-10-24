@@ -216,6 +216,12 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | PF-13 | Delisted holding | Kept, flagged | I |
 | PF-14 | Fee capitalization | In cost, reduces proceeds | U |
 | PF-15 | Symbol change | Follows alias | I |
+| PF-16 | Parallel retries with the same Idempotency-Key | Exactly one row, every call 201 with the same body | I |
+| PF-17 | Same key with a different body; expired key (> 24 h); malformed key | 409 CONFLICT; treated as new; 422 | I |
+| PF-18 | Owner override of an ex-date multiplier | Replaces the confirmed action of that date; an override that would oversell a stored sell is rejected 422 and not stored; a second override for the same date 409 | I |
+| PF-19 | Watchlist add/remove tracking (docs/03 section 11) | Add sets tracked with reason watchlist (never downgrades portfolio); remove keeps imported prices and keeps the stock tracked while portfolio or imported prices justify it; nothing is deleted | I |
+| PF-20 | Missing price or no open holding in the summary | Market value, unrealized and XIRR are null with a reason, warning MISSING_PRICE; never 0 | U/I |
+| PF-21 | Latest bar older than a confirmed split, or a split between the last two bars | LTP converted to current units so value stays invariant; day change null with reason `corporate_action_in_window` | U |
 
 ## ALR: alerts and Telegram
 | ID | Scenario | Required behavior | Test |
