@@ -260,3 +260,8 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Login redirect (`middleware.ts`) clones `request.nextUrl`. A relative `Location` header was tried and rejected: Next's middleware adapter throws `Invalid URL` (HTTP 500) on it. Behind Render the public `Host` header must be forwarded so the redirect stays on the public origin.
 - External links must use `ui/ExternalLink` (adds `rel="noopener noreferrer"`); `tests/unit/repo-guards.test.ts` fails on any other `target="_blank"`.
 - `npm run build` in `apps/web` currently ends with `SecurityFatalError` (the installed Next.js 16.4.0 is flagged by the advisory service); the compile and page generation steps pass and the output serves. Upgrading Next is a separate task.
+
+## 32. Next.js security bump and the advisory gate
+
+- Next.js was bumped from 16.4.0 to 16.4.1 (owner approved) because `next build` failed with `SecurityFatalError`: 16.0.0 to 16.4.0 are affected by GHSA-2464-fhr4-w9xw, GHSA-p3m5-59mp-jv5r and GHSA-673q-mjm6-r5xr. `eslint-config-next` moved to the same version.
+- The advisory gate runs inside `next build` (it queries the npm advisory service). Any future advisory against the installed Next.js version will fail the web CI job until it is bumped, so merge Renovate PRs for `next` promptly.
