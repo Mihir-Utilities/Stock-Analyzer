@@ -22,6 +22,8 @@ import {
 import { mergeWarnings, StockBanners } from "./StockBanners";
 import { StockHeader } from "./StockHeader";
 import { OverviewTab } from "./OverviewTab";
+import { AnalysisTab } from "./chart/AnalysisTab";
+import { ChartTab } from "./chart/ChartTab";
 
 export const TAB_IDS = [
   "overview",
@@ -176,7 +178,7 @@ function Inner({ symbol }: { symbol: string }) {
     router.replace(`/stocks/${encodeURIComponent(symbol)}?${next.toString()}`, { scroll: false });
   };
 
-  const overview = profile.flags.no_prices ? (
+  const noPricesEmpty = (
     <div data-testid="no-prices">
       <EmptyState
         message={profile.hint ?? `Import prices.csv for ${profile.symbol}.`}
@@ -191,6 +193,9 @@ function Inner({ symbol }: { symbol: string }) {
         }
       />
     </div>
+  );
+  const overview = profile.flags.no_prices ? (
+    noPricesEmpty
   ) : (
     <OverviewTab
       profile={profile}
@@ -200,6 +205,18 @@ function Inner({ symbol }: { symbol: string }) {
       eventsLoad={eventsLoad}
     />
   );
+  const tabContent = (id: TabId) => {
+    if (id === "overview") return overview;
+    if (id === "chart" || id === "analysis") {
+      if (profile.flags.no_prices) return noPricesEmpty;
+      return id === "chart" ? (
+        <ChartTab profile={profile} indicatorsLoad={indicatorsLoad} pageWarnings={warnings} />
+      ) : (
+        <AnalysisTab indicatorsLoad={indicatorsLoad} />
+      );
+    }
+    return <NotBuilt tab={TAB_LABELS[id]} />;
+  };
 
   return (
     <div className="flex flex-col gap-4" data-testid="stock-page">
@@ -230,7 +247,7 @@ function Inner({ symbol }: { symbol: string }) {
         tabs={TAB_IDS.map((id) => ({
           id,
           label: TAB_LABELS[id],
-          content: id === "overview" ? overview : <NotBuilt tab={TAB_LABELS[id]} />,
+          content: tabContent(id),
         }))}
       />
     </div>

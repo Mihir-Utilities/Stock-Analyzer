@@ -48,7 +48,12 @@ export function Heatmap({
   }
   return (
     <div data-testid="heatmap" className="flex flex-col gap-2">
-      <div className="overflow-x-auto">
+      <div
+        className="overflow-x-auto"
+        tabIndex={0}
+        role="region"
+        aria-label={`${label}, scrollable`}
+      >
         <table aria-label={label} className="border-separate border-spacing-0.5 text-caption">
           <thead>
             <tr>

@@ -51,7 +51,18 @@
     "null_reasons": "performance-missing",
     "units": "chart-performance",
     "warnings": "warning-*",
-    "series": "tab-*",
-    "analysis": "tab-*"
+    "series": "chart-main",
+    "analysis": "chart-drawdown"
+  },
+  "GET /stocks/{symbol}/prices": {
+    "bars": "chart-main",
+    "adjusted": "chart-basis",
+    "actions": "chart-main",
+    "range": "range-*",
+    "limited_history": "chart-depth",
+    "depth": "chart-depth",
+    "depth.first_bar": "chart-depth",
+    "depth.last_bar": "chart-depth",
+    "depth.bars": "chart-depth"
   }
 }
