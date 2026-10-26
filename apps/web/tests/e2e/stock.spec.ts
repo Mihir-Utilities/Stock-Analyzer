@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { setTheme } from "./theme";
 import type { MockReply } from "../mocks/imports-fixtures";
 import * as fx from "../mocks/stock-fixtures";
 
@@ -84,10 +85,7 @@ test.describe("axe and touch targets on the stock page", () => {
         await mockApi(page, true);
         await page.setViewportSize({ width, height: 900 });
         await page.goto("/stocks/TCS");
-        await page.evaluate((t) => {
-          localStorage.setItem("analyzer-theme", t);
-          document.documentElement.setAttribute("data-theme", t);
-        }, theme);
+        await setTheme(page, theme);
         await page.getByTestId("card-events").waitFor();
         await page.getByTestId("chart-performance").waitFor();
         await page.addScriptTag({ content: axeSource });

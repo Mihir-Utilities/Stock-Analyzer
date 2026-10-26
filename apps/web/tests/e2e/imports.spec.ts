@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { setTheme } from "./theme";
 import {
   adjustmentRawLikely,
   commitOk,
@@ -114,10 +115,7 @@ test.describe("axe in a real browser on the Import center", () => {
           await mockApi(page, invalidPrices);
           await page.setViewportSize({ width, height: 900 });
           await page.goto("/imports");
-          await page.evaluate((t) => {
-            localStorage.setItem("analyzer-theme", t);
-            document.documentElement.setAttribute("data-theme", t);
-          }, theme);
+          await setTheme(page, theme);
           if (state === "review") {
             await page.getByTestId("import-file").setInputFiles(csv);
             await page.getByTestId("wizard-next").click();

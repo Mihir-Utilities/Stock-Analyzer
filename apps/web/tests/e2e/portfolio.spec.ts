@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { setTheme } from "./theme";
 import { fail, type MockReply } from "../mocks/imports-fixtures";
 import * as fx from "../mocks/portfolio-fixtures";
 
@@ -152,10 +153,7 @@ test.describe("axe and touch targets on portfolio and watchlist", () => {
           await page.setViewportSize({ width, height: 900 });
           await page.emulateMedia({ reducedMotion: "reduce" });
           await page.goto(path);
-          await page.evaluate((t) => {
-            localStorage.setItem("analyzer-theme", t);
-            document.documentElement.setAttribute("data-theme", t);
-          }, theme);
+          await setTheme(page, theme);
           if (path === "/portfolio") {
             await page.getByTestId("pf-chart-breakdown").waitFor();
             await page.getByTestId("txn-table").waitFor();

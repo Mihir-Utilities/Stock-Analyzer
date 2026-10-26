@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { setTheme } from "./theme";
 import { WEB_ORIGIN } from "./ports";
 
 const axeSource = readFileSync(join(process.cwd(), "node_modules/axe-core/axe.min.js"), "utf8");
@@ -131,12 +132,8 @@ test.describe("dashboard with data", () => {
     await page.goto("/");
     await expect(page.getByTestId("watch-tile")).toHaveCount(2);
     await expect(page.getByTestId("dash-indices")).toHaveAttribute("data-state", "empty");
-    for (const theme of ["dark", "light"]) {
-      await page.evaluate((t) => {
-        localStorage.setItem("analyzer-theme", t);
-        document.documentElement.setAttribute("data-theme", t);
-      }, theme);
-      await page.waitForTimeout(500); // let colour transitions settle before sampling contrast
+    for (const theme of ["dark", "light"] as const) {
+      await setTheme(page, theme);
       expect(await axeViolations(page)).toEqual([]);
     }
     const small = await page.evaluate(() =>

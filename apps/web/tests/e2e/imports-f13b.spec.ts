@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { setTheme } from "./theme";
 import { commitOk, dbStatus, ok, stockIndex, type MockReply } from "../mocks/imports-fixtures";
 
 // F13b: remaining wizards, manual forms and the Batches tab. The API is not running in e2e; every
@@ -311,10 +312,7 @@ test.describe("axe on the F13b screens", () => {
           await mockApi(page);
           await page.setViewportSize({ width, height: 900 });
           await page.goto("/imports");
-          await page.evaluate((t) => {
-            localStorage.setItem("analyzer-theme", t);
-            document.documentElement.setAttribute("data-theme", t);
-          }, theme);
+          await setTheme(page, theme);
           if (state === "results-form" || state === "action-form") {
             await page.getByTestId("tab-forms").click();
             await page

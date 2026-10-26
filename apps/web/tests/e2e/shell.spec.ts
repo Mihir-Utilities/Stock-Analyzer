@@ -2,18 +2,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { WEB_ORIGIN } from "./ports";
+import { setTheme } from "./theme";
 
 const axeSource = readFileSync(join(process.cwd(), "node_modules/axe-core/axe.min.js"), "utf8");
 
 async function signIn(page: Page) {
   await page.context().addCookies([{ name: "session", value: "e2e-placeholder", url: WEB_ORIGIN }]);
-}
-
-async function setTheme(page: Page, theme: "dark" | "light") {
-  await page.evaluate((t) => {
-    localStorage.setItem("analyzer-theme", t);
-    document.documentElement.setAttribute("data-theme", t);
-  }, theme);
 }
 
 // Real-browser axe (colour contrast needs layout). Run with bypassCSP so the library can be
