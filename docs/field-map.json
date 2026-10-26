@@ -53,5 +53,50 @@
     "warnings": "warning-*",
     "series": "tab-*",
     "analysis": "tab-*"
+  },
+  "GET /imports/batches": {
+    "items.id": "batch-row-*",
+    "items.kind": "batch-row-*",
+    "items.row_count": "batch-row-*",
+    "items.warning_count": "batch-row-*",
+    "items.note": "batch-row-*",
+    "items.created_at": "batch-row-*",
+    "items.undone_at": "batch-undone-*",
+    "items.upload_group": "batches-table",
+    "next_cursor": "batches-table"
+  },
+  "POST /imports/batches/{id}/undo": {
+    "batch_id": "undo-result-heading",
+    "removed": "undo-removed",
+    "post_import_job_id": "undo-warning-POST_IMPORT_NOT_QUEUED",
+    "warnings": "undo-warning-*",
+    "earlier_batch_ids": "undo-warning-UNDO_REMOVES_EARLIER_IMPORT"
+  },
+  "POST /stocks/{symbol}/results": {
+    "batch_id": "results-saved-heading",
+    "inserted": "results-saved",
+    "updated": "results-saved",
+    "warnings": "manual-warning",
+    "post_import_job_id": "manual-warning"
+  },
+  "POST /stocks/{symbol}/shareholding": {
+    "batch_id": "shareholding-saved-heading",
+    "inserted": "shareholding-saved",
+    "updated": "shareholding-saved",
+    "warnings": "manual-warning",
+    "post_import_job_id": "manual-warning"
+  },
+  "POST /stocks/{symbol}/actions": {
+    "batch_id": "action-saved-heading",
+    "inserted": "action-saved",
+    "updated": "action-saved",
+    "warnings": "manual-warning",
+    "post_import_job_id": "manual-warning"
+  },
+  "DELETE /stocks/{symbol}/results": {
+    "deleted": "results-deleted-note",
+    "batch_id": "results-deleted-note",
+    "post_import_job_id": "results-deleted-warning",
+    "warnings": "results-deleted-warning"
   }
 }

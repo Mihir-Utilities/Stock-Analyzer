@@ -248,7 +248,7 @@ describe("Import center (SAF-05, rights notice)", () => {
     renderWith(<ImportCenter />, { "GET /admin/status": dbStatus(10) });
     expect(screen.getByTestId("rights-notice").textContent).toBe(RIGHTS_NOTICE);
     const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
-    expect(tabs).toEqual(["Upload", "Templates", "Manual forms", "Storage"]);
+    expect(tabs).toEqual(["Upload", "Templates", "Manual forms", "Batches", "Storage"]);
     expect(document.body.textContent?.toLowerCase()).not.toContain("screener");
   });
 

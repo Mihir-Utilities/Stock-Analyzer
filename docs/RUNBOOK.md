@@ -323,3 +323,11 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 
 - `playwright.config.ts` serves the production build on port 3100 and Storybook on 6100. If another process holds them, set `PW_PORT` / `PW_STORY_PORT` (defaults unchanged); the specs read the same variables through `apps/web/tests/e2e/ports.ts`.
 - The `/api` rewrite is baked in at `next build`. Locally use `npm run build:e2e` (builds with `API_BASE_URL=http://127.0.0.1:9`) so a Go API on localhost:8080 cannot answer e2e requests. CI has no API running, so plain `npm run build` is fine there.
+
+## 41. Import center: results, shareholding, actions, holidays, batches (F13b)
+
+- All ten importer kinds go through the same wizard (`ImportWizard`): upload, review (20 rows, row/column errors, warnings), commit with a ConfirmDialog. Only prices and instruments show growth and the adjustment choice. Holidays: commit replaces every stored holiday of each year in the file (no undo; import the whole year again to correct it).
+- Manual forms (Manual forms tab): Add stock, Results (quarterly or annual), Shareholding, Corporate action. They run the same rules in the browser as the Go importers (`lib/imports/entry-validate.ts`); if a rule changes in `apps/api/internal/importers`, change it there too (F13b-3). Calendar events have no API route yet (F13b-1).
+- Batches tab: Undo is offered for results, balance/cash-flow, fundamentals-long, shareholding and corporate-action batches younger than 30 days. An undo deletes the batch rows and never restores overwritten values. Failure modes: 409 `UNDO_HAS_DEPENDENTS` (a portfolio adjustment uses an action of the batch: remove the adjustment first), `POST_IMPORT_NOT_QUEUED` (saved, analytics not queued; any later import refreshes them), `UNDO_REMOVED_NOTHING`, `UNDO_REMOVES_EARLIER_IMPORT`.
+- Re-entering a manual period with fewer metrics keeps the older manual metrics; the results form says so and offers "Delete manual period" (`DELETE /stocks/{symbol}/results`; CSV values stay).
+- Tests: `npm test` (`import-f13b.test.tsx`); `npx playwright test tests/e2e/imports-f13b.spec.ts tests/e2e/imports.spec.ts` after `npm run build:e2e`. Flake seen while testing F13b and not caused by it: `shell.spec.ts` "dark / at 1440" axe colour-contrast on the Home nav item failed in about 1 of 4 repeats.

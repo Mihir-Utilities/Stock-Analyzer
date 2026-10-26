@@ -39,8 +39,9 @@ Build the wizard for every import kind, templates, manual forms and batch manage
 3. E2E with fixture files for every error type
 
 ## Acceptance criteria (all must be true)
-- [ ] IMP-01..IMP-14 UX paths verified
-- [ ] Undo of price batches is not offered
+- [x] IMP-01..IMP-14 UX paths verified (F13a: prices/instruments; F13b: the other eight kinds, manual forms, Batches tab; evidence: `import-f13b.test.tsx`, `imports-f13b.spec.ts`)
+- [x] Undo of price batches is not offered (also not for instruments, holidays, instrument_meta and manual-entry batches)
+- [ ] F13b: calendar event manual form not built, no write route exists (F13b-1 in `docs/OPEN_QUESTIONS.md`); everything else of the F13b half is done
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `IMP-01` (see `docs/07-edge-cases-tests.md`)

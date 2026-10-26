@@ -2,9 +2,10 @@
 
 import { Card } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/overlays";
-import { AddStockForm } from "./AddStockForm";
+import { BatchesTab } from "./BatchesTab";
 import { DeletePricesAction } from "./DeletePricesAction";
 import { ImportWizard, templateUrl } from "./ImportWizard";
+import { ManualForms } from "./ManualForms";
 import { StorageMeter } from "./StorageMeter";
 import { TrimHistory } from "./TrimHistory";
 import { IMPORT_KINDS } from "@/lib/imports/schemas";
@@ -16,6 +17,15 @@ export const RIGHTS_NOTICE =
 const TEMPLATE_TEXT: Record<(typeof IMPORT_KINDS)[number], string> = {
   instruments: "Your stock list: symbol and name, with optional ISIN, series, kind and status.",
   prices: "Daily prices: symbol, date, open, high, low, close, volume.",
+  holidays:
+    "Market holidays of one year: date, optional description and segment. The template has the header row only; type the dates from the exchange circular.",
+  results_quarterly: "Quarterly results, one row per stock, basis and quarter end (INR crore).",
+  results_annual: "Annual results, one row per stock, basis and year end (INR crore).",
+  balance_cashflow: "Annual balance sheet and cash flow, one row per stock, basis and year end.",
+  fundamentals_long: "Any fundamentals metric as one row each: symbol, basis, period, key, value.",
+  shareholding: "Shareholding pattern per quarter, in percent.",
+  corporate_actions: "Splits, bonuses, dividends and other actions with their ex-dates.",
+  instrument_meta: "Sector, industry, company type and index tags per stock.",
 };
 
 function TemplatesTab() {
@@ -36,10 +46,6 @@ function TemplatesTab() {
           </li>
         ))}
       </ul>
-      <p className="mt-3 text-body-sm text-text-2">
-        Templates for results, shareholding, corporate actions and holidays arrive with the next
-        import task.
-      </p>
     </Card>
   );
 }
@@ -59,7 +65,8 @@ export function ImportCenter() {
         tabs={[
           { id: "upload", label: "Upload", content: <ImportWizard /> },
           { id: "templates", label: "Templates", content: <TemplatesTab /> },
-          { id: "forms", label: "Manual forms", content: <AddStockForm /> },
+          { id: "forms", label: "Manual forms", content: <ManualForms /> },
+          { id: "batches", label: "Batches", content: <BatchesTab /> },
           {
             id: "storage",
             label: "Storage",
