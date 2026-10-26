@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, GitCompare, Plus, RefreshCw, Star } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Banner } from "@/components/ui/banners";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
 import { RangeBar } from "@/components/ui/RangeBar";
@@ -77,10 +77,17 @@ function RefreshButton({ symbol, onDone }: { symbol: string; onDone: () => void 
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<RefreshOutcome | null>(null);
+  const abort = useRef<AbortController | null>(null);
+  // Leaving the page stops the 3 minute poll and any later setState (F05R-4).
+  useEffect(() => () => abort.current?.abort(), []);
   const go = async () => {
+    abort.current?.abort();
+    const ctl = new AbortController();
+    abort.current = ctl;
     setBusy(true);
     setOutcome(null);
-    const o = await runRefresh(symbol);
+    const o = await runRefresh(symbol, undefined, ctl.signal);
+    if (ctl.signal.aborted) return;
     setBusy(false);
     setOutcome(o);
     if (o.kind === "ok") {
@@ -290,7 +297,7 @@ export function StockHeader({
             type="button"
             data-testid="header-alert"
             disabled
-            title={ALERT_UNAVAILABLE}
+            aria-describedby="header-alert-reason"
             className={btn}
           >
             <Bell size={16} strokeWidth={1.75} aria-hidden="true" />
@@ -300,7 +307,7 @@ export function StockHeader({
             type="button"
             data-testid="header-add-txn"
             disabled
-            title={TXN_UNAVAILABLE}
+            aria-describedby="header-txn-reason"
             className={btn}
           >
             <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
@@ -316,10 +323,17 @@ export function StockHeader({
           </Link>
           {!manual ? <RefreshButton symbol={profile.symbol} onDone={onRefreshed} /> : null}
         </div>
-        <p data-testid="header-actions-note" className="text-micro text-text-2">
-          Alert and Add transaction are switched off here until the alerts and portfolio screens
-          exist.
-        </p>
+        <ul
+          data-testid="header-actions-note"
+          className="flex flex-col gap-0.5 text-micro text-text-2"
+        >
+          <li id="header-alert-reason" data-testid="header-alert-reason">
+            {ALERT_UNAVAILABLE}
+          </li>
+          <li id="header-txn-reason" data-testid="header-txn-reason">
+            {TXN_UNAVAILABLE}
+          </li>
+        </ul>
       </section>
     </>
   );

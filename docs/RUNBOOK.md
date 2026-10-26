@@ -337,3 +337,12 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - `/login` mounts the waking banner itself (it is outside the app shell): a cold start shows "Waking up the server..." after 3 s while "Signing in..." is shown.
 - The staleness rule on the dashboard is weekends plus the 18:00 IST cut-off (docs/03 section 3 without a holiday list). A trading holiday can still show a correct import as stale until the web app reads the holiday list (F04R-9). Monday before 18:00 IST expects Friday's bar.
 - The broker countdown ticks every minute from the last `/broker/status` answer without extra requests; it is only shown when the broker is enabled. Reconnect links to `/settings` until F12 builds Connect (F04R-7).
+
+## 42. Stock page review fixes (F05R)
+
+- The UNCONFIRMED_ACTION sentence takes its percentage from the served bars, else from the detected action's ratio (`ratio_num/ratio_den - 1`, from `/events`); without either the clause is left out. If a banner lacks "price changed", check that `/events` returned the detected action with a ratio before suspecting the bars.
+- The soft flag comes only from `lib/stock/soft-flag-adapter.ts` (`getSoftFlags`, `getSoftFlagCoverage`). When the server flag arrives (D-W 3) replace those two bodies; nothing else changes.
+- Disabled actions show their reason as visible text (`aria-describedby`), never only a tooltip.
+- The watchlist star reads `GET /watchlist` (profile `tracked` is also set by opening a stock, so it is not membership). `docs/field-map.json` entries may be `conditional:<testid>|<condition>` or `not-rendered|<reason>`; the UI-09 test enforces both forms.
+- A symbol outside the API charset shows not-found with no request. Fundamentals and links load together with the other four calls.
+- Playwright UI-40 now measures every interactive element inside the stock page at 375 px (44 px). If it fails, add `touch-target` and a 44 px height to the control.

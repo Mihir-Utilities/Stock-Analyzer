@@ -7,6 +7,8 @@ import {
   headerPrice,
   humanReason,
   performanceRows,
+  ratioChange,
+  isValidSymbol,
   softFlags,
   unconfirmedCopy,
   unconfirmedDates,
@@ -199,12 +201,24 @@ describe("UI-09 field map", () => {
       ],
     ],
   ];
+  it("conditional fields are listed with their rendering condition", () => {
+    const entry = map["GET /stocks/{symbol}"]?.["broker_ok"] ?? "";
+    expect(entry).toMatch(/^conditional:header-refresh\|.*broker/);
+  });
   for (const [endpoint, fields] of cases) {
     it(`${endpoint}: every field is mapped to an existing data-testid`, () => {
       const m = map[endpoint] ?? {};
       for (const f of fields) {
-        const id = m[f];
-        expect(id, `${endpoint} field ${f} is not in docs/field-map.json`).toBeTruthy();
+        const entry = m[f];
+        expect(entry, `${endpoint} field ${f} is not in docs/field-map.json`).toBeTruthy();
+        // "not-rendered|reason": honest status, a reason is required (F05R-7).
+        if (entry!.startsWith("not-rendered|")) {
+          expect(entry!.length, `${f} needs a reason`).toBeGreaterThan("not-rendered|".length + 20);
+          continue;
+        }
+        // "conditional:<id>|condition": the id must exist in the source; the condition itself is
+        // asserted by the render test below.
+        const id = entry!.startsWith("conditional:") ? entry!.slice(12).split("|")[0] : entry;
         const base = (id as string).replace(/-\*$/, "");
         expect(src.includes(base), `data-testid ${id} (field ${f}) is not in the source`).toBe(
           true,
@@ -212,4 +226,70 @@ describe("UI-09 field map", () => {
       }
     });
   }
+});
+
+describe("F05R-1 ratioChange", () => {
+  const act = (o: Record<string, unknown>) => ({
+    id: 1,
+    ex_date: "2026-09-01",
+    type: "split_or_bonus",
+    status: "detected",
+    ...o,
+  });
+  it("is r - 1 of the matched fraction: 1/5 gives -80, 2/3 gives about -33.33", () => {
+    expect(ratioChange([act({ ratio_num: 1, ratio_den: 5 })], "2026-09-01")).toBeCloseTo(-80, 9);
+    expect(ratioChange([act({ ratio_num: 2, ratio_den: 3 })], "2026-09-01")).toBeCloseTo(
+      -33.333,
+      2,
+    );
+  });
+  it("is null without a usable ratio, another date, a confirmed row or no actions", () => {
+    expect(ratioChange([act({ ratio_num: null, ratio_den: null })], "2026-09-01")).toBeNull();
+    expect(ratioChange([act({ ratio_num: 1, ratio_den: 0 })], "2026-09-01")).toBeNull();
+    expect(ratioChange([act({ ratio_num: 1, ratio_den: 5 })], "2026-09-02")).toBeNull();
+    expect(
+      ratioChange([act({ status: "confirmed", ratio_num: 1, ratio_den: 5 })], "2026-09-01"),
+    ).toBeNull();
+    expect(ratioChange(null, "2026-09-01")).toBeNull();
+  });
+});
+
+describe("F05R-1 soft flag with the covered day missing from the served bars", () => {
+  const bars: Array<[string, number, number, number, number, number]> = [
+    ["2026-08-31", 1, 1, 1, 100, 1],
+    ["2026-09-02", 1, 1, 1, 20, 1],
+  ];
+  it("a covered date inside the gap explains the drop; an uncovered one does not", () => {
+    expect(softFlags(bars, new Set(["2026-09-01"]))).toEqual([]);
+    expect(softFlags(bars, new Set())).toHaveLength(1);
+    expect(softFlags(bars, new Set(["2026-09-03"]))).toHaveLength(1);
+  });
+});
+
+describe("F05R-3 runRefresh abort", () => {
+  it("returns aborted after the signal fires and stops polling", async () => {
+    const ctl = new AbortController();
+    let polls = 0;
+    const deps: RefreshDeps = {
+      start: async () => 1,
+      job: async () => {
+        polls++;
+        return { data: { status: "running" } };
+      },
+      sleep: async () => {
+        if (polls === 1) ctl.abort();
+      },
+      now: () => 0,
+    };
+    expect(await runRefresh("TCS", deps, ctl.signal)).toEqual({ kind: "aborted" });
+    expect(polls).toBe(1);
+  });
+});
+
+describe("F05R-9 symbol guard", () => {
+  it("accepts the API charset case-insensitively and rejects the rest", () => {
+    for (const s of ["TCS", "m&m", "BAJAJ-AUTO", "3MINDIA"]) expect(isValidSymbol(s)).toBe(true);
+    for (const s of ["", "-X", "&X", "A B", "../x", "A".repeat(31)])
+      expect(isValidSymbol(s)).toBe(false);
+  });
 });
