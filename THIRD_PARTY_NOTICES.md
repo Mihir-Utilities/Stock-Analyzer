@@ -424,7 +424,7 @@ Packages: 828
 | npm | debug | 2.6.9 | MIT | dev | ok |
 | npm | debug | 3.2.7 | MIT | dev | ok |
 | npm | debug | 4.4.3 | MIT | dev | ok |
-| npm | decimal.js | 10.6.0 | MIT | dev | ok |
+| npm | decimal.js | 10.6.0 | MIT | runtime | ok |
 | npm | deep-eql | 5.0.2 | MIT | dev | ok |
 | npm | deep-is | 0.1.4 | MIT | dev | ok |
 | npm | default-browser | 5.5.1 | MIT | dev | ok |
