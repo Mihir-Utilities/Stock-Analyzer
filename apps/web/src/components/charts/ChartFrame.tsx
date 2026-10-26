@@ -196,7 +196,7 @@ export function ChartFrame({
         : "empty"
       : state;
   const showBody = effective === "ready" || effective === "partial" || effective === "stale";
-  const sampled = dataset.x.length > 1000;
+  const sampled = !dataset.panes && dataset.x.length > 1000;
 
   const toolbarButton =
     "inline-flex h-9 touch-target items-center justify-center gap-1 rounded-control border border-border px-2 text-body-sm text-text-1 hover:bg-surface-3 aria-pressed:border-accent";
@@ -397,9 +397,9 @@ function LegendItem({
         )}
       >
         <LegendGlyph
-          symbol={s.kind === "bar" ? "rect" : seriesSymbol(position)}
+          symbol={s.kind === "bar" || s.kind === "candle" ? "rect" : seriesSymbol(position)}
           color={seriesColor(s, position, theme)}
-          dashed={Boolean(s.forecast)}
+          dashed={Boolean(s.forecast) || s.dash === "dashed" || s.dash === "dotted"}
         />
         {s.name}
         {s.unit ? <span className="text-text-2">({s.unit})</span> : null}

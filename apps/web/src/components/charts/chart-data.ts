@@ -1,6 +1,7 @@
 import { categoricalPalette, colorTokens, type ThemeName } from "@/lib/theme/tokens";
 import { echartsTheme } from "@/lib/theme/echarts-theme";
 import { formatNumber } from "@/lib/format";
+import { buildPaneOption } from "./pane-option";
 
 // Chart data model and ECharts option builder (docs/06a sections 4-5). Everything here is pure
 // so it can be unit tested without a DOM. The same dataset feeds the chart and the "Show data"
@@ -11,7 +12,13 @@ export interface ChartSeries {
   name: string;
   /** Unit for tooltips, table headers and CSV, e.g. "INR" or "%". */
   unit: string;
-  kind: "line" | "area" | "bar";
+  kind: "line" | "area" | "bar" | "candle";
+  /** Pane index (0 = main price pane). Only used when the dataset declares `panes`. */
+  pane?: number;
+  /** Candle series: [open, high, low, close] per x entry (null = no bar); `values` holds the close. */
+  ohlc?: ReadonlyArray<readonly [number, number, number, number] | null>;
+  /** Second encoding for overlapping lines next to colour. */
+  dash?: "solid" | "dashed" | "dotted";
   /** One value per x entry; null (or non-finite) = unknown, drawn as a gap and shown as a reason. */
   values: ReadonlyArray<number | null>;
   /** Forecast series are dashed, hatched and drawn in --exp. */
@@ -25,6 +32,26 @@ export interface ChartSeries {
   nullReason?: string;
 }
 
+/** One stacked panel sharing the x axis (price, volume, RSI ...). `weight` = relative height. */
+export interface ChartPane {
+  id: string;
+  name: string;
+  unit: string;
+  weight: number;
+}
+
+/** A labelled event on the price pane (corporate action); `index` points into `x`. */
+export interface ChartMarker {
+  index: number;
+  label: string;
+}
+
+/** A horizontal reference level on the price pane (support / resistance). */
+export interface ChartLevel {
+  price: number;
+  label: string;
+}
+
 export interface ChartDataset {
   xName: string;
   x: ReadonlyArray<string>;
@@ -33,6 +60,14 @@ export interface ChartDataset {
   asOf: string | null;
   /** Set when the plotted points are fewer than the source points. */
   downsampledFrom?: number;
+  /** Stacked panes sharing one x axis; when set the pane builder draws the chart. */
+  panes?: ReadonlyArray<ChartPane>;
+  markers?: ReadonlyArray<ChartMarker>;
+  levels?: ReadonlyArray<ChartLevel>;
+  /** Logarithmic price axis (main pane). */
+  logScale?: boolean;
+  /** Mouse wheel, drag and touch pinch zoom plus a slider. */
+  zoom?: boolean;
 }
 
 /** Marker shapes: the second encoding next to colour (OQ-16). Used in lines, legend and table. */
@@ -90,6 +125,7 @@ export interface BuildOptions {
 
 /** Plain option object (typed loosely on purpose: it is handed straight to echarts.setOption). */
 export function buildOption(data: ChartDataset, opts: BuildOptions): Record<string, unknown> {
+  if (data.panes && data.panes.length > 0) return buildPaneOption(data, opts);
   const theme = echartsTheme(opts.theme);
   const hidden = opts.hidden ?? new Set<string>();
   const many = data.x.length >= SHOW_SYMBOL_BELOW;
@@ -172,13 +208,38 @@ export function unitsOf(series: ReadonlyArray<ChartSeries>): string {
   return [...new Set(series.map((s) => s.unit).filter(Boolean))].join(" / ");
 }
 
-/** Everything the "Show data" table and CSV export need (UI-10 parity). */
+const OHLC_LABELS = ["Open", "High", "Low", "Close"] as const;
+
+function columnsOf(s: ChartSeries): string[] {
+  if (s.kind === "candle")
+    return OHLC_LABELS.map((l) => `${s.name} ${l.toLowerCase()} (${s.unit})`);
+  return [s.unit ? `${s.name} (${s.unit})` : s.name];
+}
+
+function cellsOf(s: ChartSeries, i: number): string[] {
+  if (s.kind === "candle") {
+    const o = s.ohlc?.[i];
+    return OHLC_LABELS.map((_, k) => valueText(s, o ? o[k] : null));
+  }
+  return [valueText(s, s.values[i])];
+}
+
+function markerText(data: ChartDataset, i: number): string {
+  return (data.markers ?? [])
+    .filter((m) => m.index === i)
+    .map((m) => m.label)
+    .join("; ");
+}
+
+/** Everything the "Show data" table and CSV export need (UI-10 parity): every plotted value. */
 export function tableModel(data: ChartDataset): { headers: string[]; rows: string[][] } {
-  const headers = [
-    data.xName,
-    ...data.series.map((s) => (s.unit ? `${s.name} (${s.unit})` : s.name)),
-  ];
-  const rows = data.x.map((x, i) => [x, ...data.series.map((s) => valueText(s, s.values[i]))]);
+  const hasMarkers = (data.markers ?? []).length > 0;
+  const headers = [data.xName, ...data.series.flatMap(columnsOf), ...(hasMarkers ? ["Event"] : [])];
+  const rows = data.x.map((x, i) => [
+    x,
+    ...data.series.flatMap((s) => cellsOf(s, i)),
+    ...(hasMarkers ? [markerText(data, i)] : []),
+  ]);
   return { headers, rows };
 }
 
@@ -187,13 +248,19 @@ export function csvModel(data: ChartDataset): {
   headers: string[];
   rows: Array<Array<string | number | null>>;
 } {
+  const hasMarkers = (data.markers ?? []).length > 0;
   const headers = tableModel(data).headers;
+  const num = (v: number | null | undefined) => (isKnown(v) ? v : null);
   const rows = data.x.map((x, i) => [
     x,
-    ...data.series.map((s) => {
-      const v = s.values[i];
-      return isKnown(v) ? v : null;
+    ...data.series.flatMap((s): Array<number | null> => {
+      if (s.kind === "candle") {
+        const o = s.ohlc?.[i];
+        return [0, 1, 2, 3].map((k) => num(o ? o[k] : null));
+      }
+      return [num(s.values[i])];
     }),
+    ...(hasMarkers ? [markerText(data, i)] : []),
   ]);
   return { headers, rows };
 }
