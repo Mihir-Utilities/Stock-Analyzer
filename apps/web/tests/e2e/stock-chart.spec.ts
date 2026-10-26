@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { setTheme } from "./theme";
 import * as cx from "../mocks/chart-fixtures";
 import type { MockReply } from "../mocks/imports-fixtures";
 import { ok } from "../mocks/imports-fixtures";
@@ -124,7 +125,13 @@ test("2,000 points render smoothly on a phone", async ({ page }) => {
   await expect(frame.getByTestId("chart-data-row")).toHaveCount(2000);
 });
 
-test("touch pinch zooms the chart (mobile emulation)", async ({ page, browserName }) => {
+test.describe("touch pinch", () => {
+  // The CDP touch events below need a touch-enabled context, otherwise Chrome may drop them.
+  test.use({ hasTouch: true });
+  test("zooms the chart (mobile emulation)", pinchZoom);
+});
+
+async function pinchZoom({ page, browserName }: { page: Page; browserName: string }) {
   test.skip(browserName !== "chromium", "CDP touch events");
   await signIn(page);
   await mockApi(page, 400);
@@ -132,6 +139,12 @@ test("touch pinch zooms the chart (mobile emulation)", async ({ page, browserNam
   await page.goto("/stocks/TCS?tab=chart");
   const canvas = page.getByTestId("chart-main").getByTestId("chart-canvas");
   await expect(canvas).toHaveAttribute("data-ready", "true", { timeout: 15_000 });
+  // Touch points are viewport coordinates: bring the chart fully into view first and measure it
+  // after the layout (fonts, banners) has settled, or the gesture can land on another element.
+  await canvas.scrollIntoViewIfNeeded();
+  await page.evaluate(
+    () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
+  );
   const box = await canvas.boundingBox();
   if (!box) throw new Error("no canvas box");
   const countLabels = () => canvas.locator("svg text").count();
@@ -152,13 +165,15 @@ test("touch pinch zooms the chart (mobile emulation)", async ({ page, browserNam
       { x: cxm - 20 - i * 12, y: cy },
       { x: cxm + 20 + i * 12, y: cy },
     ]);
+    await page.waitForTimeout(40); // a finger takes frames to move; the zoom handler is throttled
   }
   await touch("touchEnd", []);
-  await page.waitForTimeout(300);
-  const after = await canvas.locator("svg").first().innerHTML();
+  // The zoom redraw lands a few frames after touchEnd; under load a fixed 300 ms was not enough.
+  await expect
+    .poll(() => canvas.locator("svg").first().innerHTML(), { timeout: 10_000 })
+    .not.toEqual(before);
   expect(await countLabels()).toBeGreaterThan(0);
-  expect(after).not.toEqual(before);
-});
+}
 
 test.describe("axe and touch targets on the Chart and Analysis tabs", () => {
   test.use({ bypassCSP: true });
@@ -171,10 +186,7 @@ test.describe("axe and touch targets on the Chart and Analysis tabs", () => {
           await page.setViewportSize({ width, height: 900 });
           await page.emulateMedia({ reducedMotion: "reduce" });
           await page.goto(`/stocks/TCS?tab=${tab}`);
-          await page.evaluate((t) => {
-            localStorage.setItem("analyzer-theme", t);
-            document.documentElement.setAttribute("data-theme", t);
-          }, theme);
+          await setTheme(page, theme);
           if (tab === "chart") {
             await expect(page.getByTestId("chart-main")).toHaveAttribute("data-state", "ready");
             await expect(page.getByTestId("indicator-summary")).toContainText(
