@@ -65,13 +65,20 @@ export function istDate(now: Date): string {
   return new Date(now.getTime() + 330 * 60_000).toISOString().slice(0, 10);
 }
 
+/** A daily bar is final only after 18:00 IST (docs/03 section 3, docs/01 section 6.1). */
+export const BAR_FINAL_HOUR_IST = 18;
+
 /**
- * Last weekday on or before today (IST). The web app has no holiday list, so a trading holiday
- * can make a correct import look one day old; the chip then says "stale" conservatively
- * (assumption F04-4).
+ * Expected last trading date (docs/03 section 3 without a holiday list): today (IST) if it is a
+ * weekday and the clock is past 18:00 IST, else the previous weekday. The web app has no holiday
+ * list (assumption F04-4, F04R-9), so a trading holiday can make a correct import look one day
+ * old; the chip then says "stale" conservatively. Monday before 18:00 IST expects Friday.
  */
 export function expectedLastTradingDate(now: Date): string {
+  const ist = new Date(now.getTime() + 330 * 60_000);
   const d = new Date(`${istDate(now)}T00:00:00Z`);
+  const isWeekday = d.getUTCDay() !== 0 && d.getUTCDay() !== 6;
+  if (!(isWeekday && ist.getUTCHours() >= BAR_FINAL_HOUR_IST)) d.setUTCDate(d.getUTCDate() - 1);
   while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() - 1);
   return d.toISOString().slice(0, 10);
 }

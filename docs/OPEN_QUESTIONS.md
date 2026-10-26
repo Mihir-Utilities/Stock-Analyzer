@@ -425,3 +425,19 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | F05-10 | Tabs other than Overview | Routed by `?tab=` (unknown value falls back to Overview) but show "not built yet" until F06 to F09 and F08's Events/Data tabs. The `Tabs` component renders only the active panel | `StockPage.tsx` |
 | F05-11 | Sticky header on a phone | Only the compact bar (symbol, name, LTP, change) sticks, below the shell top bar; chips, range bar and actions scroll | `StockHeader.tsx` |
 | F05-12 | `docs/field-map.json` was `{}` and no coverage test existed | Filled for `/stocks/{symbol}` and `/indicators` as `{endpoint: {field: data-testid}}` (nested keys dotted, `*` suffix for templated ids); `stock-derive.test.ts` (UI-09) fails when a field is unmapped or its test id is not in the source. `/prices`, `/events`, `/links`, `/fundamentals` fields are mapped when F06 to F08 land | `docs/field-map.json` |
+
+## F04 review fixes (Claude, 2026-10-26; owner approved the items, values below are assumptions)
+
+| # | Question or gap | Interim assumption | Where |
+|---|---|---|---|
+| F04R-1 | `/login` has no AppShell, so a 70 s cold start showed only "Signing in..." | The login page mounts the same `WakingBanner` (UI-01) | `app/login/page.tsx` |
+| F04R-2 | `Card` flagged stale only when `state === "stale"`, so a partial card lost its stale chip | `Card` has an independent `stale` prop; partial and stale show together. The `stale` state still works | `Card.tsx`, `PortfolioCard.tsx`, `WatchlistCards.tsx` |
+| F04R-3 | The watchlist partial text printed "0 of N" when only stale | The message is built only when stocks lack a day change | `WatchlistCards.tsx` |
+| F04R-4 | Upcoming events have no source date; the chip showed today's date | The chip says "As of now" (the list is as of this page load). Replace when the API reports a calendar as-of | `ActivityCards.tsx` |
+| F04R-5 | Watchlist, broker and admin rows in the health strip had no Retry | Each error row shows the request id and a Retry for that query (not shown for 501/404 "not available yet") | `HealthStrip.tsx` |
+| F04R-6 | The broker countdown was a static snapshot | Shown only when `enabled=true` (manual mode shows "Manual price mode"); minutes left = snapshot minus whole minutes since it was fetched, ticking once a minute, floored at 0, no extra request | `HealthStrip.tsx` |
+| F04R-7 | Reconnect links to `/settings`, but Connect/Reconnect belongs to F12 | Kept as a link until F12; never shown in manual mode (needs `enabled=true`). Assumption added to the F04 table: F04-12 | `HealthStrip.tsx` |
+| F04R-8 | Raw API strings were printed | Known alert kinds, delivery statuses and job statuses have labels; others are humanised ("half_done" becomes "Half done"); event types change only when they contain `_` or `-` (owner text such as "AGM" stays) | `lib/dashboard/labels.ts` |
+| F04R-9 | Staleness was weekend-only and treated Monday morning as needing Monday's bar | `GET /market/holidays` exists but its item fields are not specified (docs/03 section 8, openapi `SuccessEnvelope`) and the server route is a stub, so no call is added. Rule now follows docs/03 section 3 without holidays: today only after 18:00 IST, else the previous weekday. D-L's 4-day rule for a missing year is not applied (the web app cannot know it); revisit when the holiday list shape is specified | `lib/dashboard/state.ts` |
+| F04R-10 | 10 event requests kept the card loading until all answered | Still the first 10 symbols (F04-7, no batch endpoint exists); the card renders what has answered and says how many are still being checked (partial) | `ActivityCards.tsx` |
+| F04R-11 | Day change delta had no `+` | The delta and value texts get a `+` for gains (local to the card; `formatInr` has no signed option) | `PortfolioCard.tsx` |

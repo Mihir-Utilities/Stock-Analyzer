@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { Banner } from "@/components/ui/banners";
 import { Card } from "@/components/ui/Card";
 import { AsOfChip } from "@/components/ui/chips";
 import { useAdminStatus, useBrokerStatus, useWatchlist } from "@/lib/dashboard/queries";
+import { jobNameLabel, jobStatusLabel } from "@/lib/dashboard/labels";
 import {
   asOfText,
   describeError,
@@ -36,6 +38,49 @@ function Row({
   );
 }
 
+/** Error text with the request id (describeError) and a Retry that refetches only this row. */
+function RowError({
+  error,
+  what,
+  onRetry,
+  testId,
+}: {
+  error: unknown;
+  what: string;
+  onRetry: () => void;
+  testId: string;
+}) {
+  const u = describeError(error, what);
+  return (
+    <>
+      <span data-testid={`${testId}-error`} className="text-text-2">
+        {u.message}
+      </span>
+      {u.state === "error" ? (
+        <button
+          type="button"
+          data-testid={`${testId}-retry`}
+          onClick={onRetry}
+          className="h-9 touch-target rounded-control border border-border px-3 text-body-sm text-text-1 hover:bg-surface-3"
+        >
+          Retry
+        </button>
+      ) : null}
+    </>
+  );
+}
+
+/** Ticks once a minute (no requests) so a countdown computed from a snapshot keeps moving. */
+function useMinuteTick(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, [active]);
+  return now;
+}
+
 /** Last price import, price mode / broker countdown, MF freshness and last job status. */
 export function HealthStrip() {
   const watch = useWatchlist();
@@ -50,6 +95,12 @@ export function HealthStrip() {
   const nav = lastNavDate(funds);
 
   const b = broker.data?.data;
+  const tick = useMinuteTick(b?.enabled === true);
+  // Minutes left at fetch time minus whole minutes elapsed since (F04R-6); never negative.
+  const minutesLeft =
+    b?.minutes_left === null || b?.minutes_left === undefined
+      ? null
+      : Math.max(0, b.minutes_left - Math.floor(Math.max(0, tick - broker.dataUpdatedAt) / 60_000));
   const brokerExpired =
     b?.enabled === true && (b.connected === false || b.needs_reconnect === true);
 
@@ -73,9 +124,12 @@ export function HealthStrip() {
           {watch.isPending ? (
             <span className="text-text-2">Loading</span>
           ) : watch.isError ? (
-            <span className="text-text-2">
-              {describeError(watch.error, "Price import date").message}
-            </span>
+            <RowError
+              error={watch.error}
+              what="Price import date"
+              onRetry={() => void watch.refetch()}
+              testId="health-import"
+            />
           ) : (
             <>
               <AsOfChip asOf={asOfText(lastImport)} stale={importStale} />
@@ -92,14 +146,17 @@ export function HealthStrip() {
           {broker.isPending ? (
             <span className="text-text-2">Loading</span>
           ) : broker.isError ? (
-            <span className="text-text-2">
-              {describeError(broker.error, "Broker status").message}
-            </span>
+            <RowError
+              error={broker.error}
+              what="Broker status"
+              onRetry={() => void broker.refetch()}
+              testId="health-broker"
+            />
           ) : b && b.enabled ? (
             <span>
-              {b.minutes_left === null || b.minutes_left === undefined
+              {minutesLeft === null
                 ? "Broker session: time left unknown"
-                : `Broker session: ${formatCount(b.minutes_left).text} min left`}
+                : `Broker session: ${formatCount(minutesLeft).text} min left`}
             </span>
           ) : (
             <span>Manual price mode: prices come from your imports.</span>
@@ -123,10 +180,15 @@ export function HealthStrip() {
           {admin.isPending ? (
             <span className="text-text-2">Loading</span>
           ) : admin.isError ? (
-            <span className="text-text-2">{describeError(admin.error, "Job status").message}</span>
+            <RowError
+              error={admin.error}
+              what="Job status"
+              onRetry={() => void admin.refetch()}
+              testId="health-job"
+            />
           ) : job ? (
             <span>
-              {job.job ?? "job"}: {job.status ?? "status unknown"}
+              {jobNameLabel(job.job)}: {job.status ? jobStatusLabel(job.status) : "Status unknown"}
               {job.finished_at ? `, ${formatDateTime(job.finished_at).text}` : ""}
             </span>
           ) : (

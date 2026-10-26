@@ -322,4 +322,11 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 ## 40. Playwright ports and the e2e build
 
 - `playwright.config.ts` serves the production build on port 3100 and Storybook on 6100. If another process holds them, set `PW_PORT` / `PW_STORY_PORT` (defaults unchanged); the specs read the same variables through `apps/web/tests/e2e/ports.ts`.
-- The `/api` rewrite is baked in at `next build`. Locally use `npm run build:e2e` (builds with `API_BASE_URL=http://127.0.0.1:9`) so a Go API on localhost:8080 cannot answer e2e requests. CI has no API running, so plain `npm run build` is fine there.
+- The `/api` rewrite is baked in at `next build`. Locally use `npm run build:e2e` (builds with `API_BASE_URL=http://127.0.0.1:9`) so a Go API on localhost:8080 cannot answer e2e requests. CI also runs `npm run build:e2e` after the plain build (section 41), so the Playwright run serves the dead-port build.
+
+## 41. F04 review fixes and the CI e2e build
+
+- The CI web job runs `npm run build` (compile check), `npm run build-storybook`, then `npm run build:e2e`; the last build replaces `.next`, so `npm run test:e2e` serves the build whose `/api` rewrite points at `127.0.0.1:9`. The e2e test "unmocked API calls fail fast" proves nothing answers on that address; if it fails, a build without `API_BASE_URL` is being served.
+- `/login` mounts the waking banner itself (it is outside the app shell): a cold start shows "Waking up the server..." after 3 s while "Signing in..." is shown.
+- The staleness rule on the dashboard is weekends plus the 18:00 IST cut-off (docs/03 section 3 without a holiday list). A trading holiday can still show a correct import as stale until the web app reads the holiday list (F04R-9). Monday before 18:00 IST expects Friday's bar.
+- The broker countdown ticks every minute from the last `/broker/status` answer without extra requests; it is only shown when the broker is enabled. Reconnect links to `/settings` until F12 builds Connect (F04R-7).

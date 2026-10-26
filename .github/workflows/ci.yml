@@ -135,6 +135,9 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run build-storybook
+      # The Playwright run must serve the e2e build: it bakes the /api rewrite to a closed port, so
+      # an unmocked call fails fast. It runs after the plain build and replaces its .next output.
+      - run: npm run build:e2e
       # Browser tests (UI-03, SEC-06, no external requests, axe) use the runner's Chrome.
       - run: npm run test:e2e
 

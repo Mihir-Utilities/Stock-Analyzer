@@ -75,9 +75,12 @@ export function PortfolioCard() {
   }
   const value = parseMoney(p.totals.market_value);
   const day = parseMoney(p.totals.day_change);
+  const dayFmt = formatInr(day);
+  // Signed text (+ for gains) so the direction is not carried by colour alone.
+  const dayText = dayFmt.direction === "up" ? `+${dayFmt.text}` : dayFmt.text;
   const warnings = q.data.warnings.map((w) => w.message);
   const partial = value === null || p.allocation_excludes_unpriced === true || warnings.length > 0;
-  const state = partial ? "partial" : q.data.meta?.stale === true ? "stale" : "ready";
+  const stale = q.data.meta?.stale === true;
   const partialMessage = [
     value === null ? (p.totals.market_value_reason ?? "Some holdings have no price.") : null,
     p.allocation_excludes_unpriced === true
@@ -90,7 +93,8 @@ export function PortfolioCard() {
   return (
     <Card
       title={title}
-      state={state}
+      state={partial ? "partial" : "ready"}
+      stale={stale}
       message={partialMessage}
       source={PORTFOLIO_SOURCE}
       asOf={asOf}
@@ -106,8 +110,8 @@ export function PortfolioCard() {
         />
         <Stat
           label="Day change"
-          value={day === null ? null : formatInr(day).text}
-          delta={day === null ? undefined : { value: day, text: formatInr(day).text }}
+          value={day === null ? null : dayText}
+          delta={day === null ? undefined : { value: day, text: dayText }}
           definition={<DefinitionTip term="day_change" />}
           nullReason={p.totals.day_change_reason ?? "needs two imported bars"}
           source={PORTFOLIO_SOURCE}

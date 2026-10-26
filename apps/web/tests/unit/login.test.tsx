@@ -1,6 +1,8 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import LoginPage from "@/app/login/page";
 import { LOGIN_ERROR, LoginForm } from "@/components/login/LoginForm";
+import { WAKING_MESSAGE } from "@/lib/api/waking";
 import { createMockFetch, type Handler } from "../mocks/mock-fetch";
 
 const assign = vi.fn();
@@ -93,5 +95,53 @@ describe("login form (docs/06 section 6.1, SEC-01)", () => {
     fireEvent.click(screen.getByTestId("login-submit"));
     expect(screen.getByRole("alert").textContent).toContain("Enter your password");
     expect(mock.calls).toHaveLength(0);
+  });
+});
+
+// F04R-1 (UI-01): /login is outside AppShell, so the page mounts the waking banner itself.
+describe("login page cold start (UI-01)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("shows the waking text when /auth/login takes longer than 3 s", async () => {
+    vi.useFakeTimers();
+    let release: (r: Response) => void = () => undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>((resolve) => (release = resolve))),
+    );
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { search: "", assign },
+    });
+    render(<LoginPage />);
+    expect(screen.queryByTestId("waking-banner")).toBeNull();
+    fireEvent.change(screen.getByTestId("login-password"), { target: { value: "pw" } });
+    fireEvent.click(screen.getByTestId("login-submit"));
+    expect(screen.getByTestId("login-submit").textContent).toBe("Signing in...");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_900);
+    });
+    expect(screen.queryByTestId("waking-banner")).toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_100);
+    });
+    expect(screen.getByTestId("waking-banner").textContent).toContain(WAKING_MESSAGE);
+    await act(async () => {
+      release(new Response(JSON.stringify({ data: { authenticated: true } }), { status: 200 }));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.queryByTestId("waking-banner")).toBeNull();
+  });
+
+  it("a 429 without Retry-After gives a generic wait message, never NaN", async () => {
+    setup({ status: 429, body: { error: { code: "RATE_LIMITED", message: "slow" } } });
+    await submit();
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toContain("Wait a moment and try again"),
+    );
+    expect(document.body.textContent).not.toMatch(/NaN|undefined|null/);
   });
 });
