@@ -3,16 +3,12 @@
 import Link from "next/link";
 import { Banner } from "@/components/ui/banners";
 import { formatDate, formatPercent } from "@/lib/format";
-import {
-  changeOn,
-  softFlags,
-  coveredDates,
-  unconfirmedCopy,
-  unconfirmedDates,
-} from "@/lib/stock/derive";
+import { changeOn, ratioChange, unconfirmedCopy, unconfirmedDates } from "@/lib/stock/derive";
 import {
   ACTION_DECISION_AVAILABLE,
   ACTION_DECISION_UNAVAILABLE_REASON,
+  getSoftFlagCoverage,
+  getSoftFlags,
   SOFT_FLAG_DISMISS_AVAILABLE,
   SOFT_FLAG_DISMISS_UNAVAILABLE_REASON,
 } from "@/lib/stock/soft-flag-adapter";
@@ -60,7 +56,9 @@ export function StockBanners({
   const f = profile.freshness;
   const unconfirmed = unconfirmedDates(warnings);
   const others = warnings.filter((w) => w.code !== "UNCONFIRMED_ACTION");
-  const soft = bars ? softFlags(bars, coveredDates(confirmedMarkers, warnings, eventActions)) : [];
+  const soft = bars
+    ? getSoftFlags(bars, getSoftFlagCoverage(confirmedMarkers, warnings, eventActions))
+    : [];
   return (
     <div className="flex flex-col gap-2" data-testid="stock-banners">
       {profile.price_mode !== "broker" ? (
@@ -96,14 +94,14 @@ export function StockBanners({
       {unconfirmed.map((d) => (
         <div key={d} data-testid="unconfirmed-action" className="flex flex-col gap-2">
           <Banner tone="warn" testId="unconfirmed-banner">
-            {unconfirmedCopy(d, bars ? changeOn(bars, d) : null)}
+            {unconfirmedCopy(d, (bars ? changeOn(bars, d) : null) ?? ratioChange(eventActions, d))}
           </Banner>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               data-testid="action-confirm"
               disabled={!ACTION_DECISION_AVAILABLE}
-              title={ACTION_DECISION_UNAVAILABLE_REASON}
+              aria-describedby={ACTION_DECISION_AVAILABLE ? undefined : `action-reason-${d}`}
               className={small}
             >
               Confirm
@@ -112,13 +110,19 @@ export function StockBanners({
               type="button"
               data-testid="action-reject"
               disabled={!ACTION_DECISION_AVAILABLE}
-              title={ACTION_DECISION_UNAVAILABLE_REASON}
+              aria-describedby={ACTION_DECISION_AVAILABLE ? undefined : `action-reason-${d}`}
               className={small}
             >
               Reject
             </button>
             {!ACTION_DECISION_AVAILABLE ? (
-              <span className="text-caption text-text-2">{ACTION_DECISION_UNAVAILABLE_REASON}</span>
+              <span
+                id={`action-reason-${d}`}
+                data-testid="action-reason"
+                className="text-caption text-text-2"
+              >
+                {ACTION_DECISION_UNAVAILABLE_REASON}
+              </span>
             ) : null}
           </div>
         </div>
@@ -135,7 +139,7 @@ export function StockBanners({
               type="button"
               data-testid="soft-flag-dismiss"
               disabled={!SOFT_FLAG_DISMISS_AVAILABLE}
-              title={SOFT_FLAG_DISMISS_UNAVAILABLE_REASON}
+              aria-describedby={SOFT_FLAG_DISMISS_AVAILABLE ? undefined : `soft-reason-${s.date}`}
               className={small}
             >
               Dismiss
@@ -148,7 +152,11 @@ export function StockBanners({
               Add corporate action
             </Link>
             {!SOFT_FLAG_DISMISS_AVAILABLE ? (
-              <span className="text-caption text-text-2">
+              <span
+                id={`soft-reason-${s.date}`}
+                data-testid="soft-flag-reason"
+                className="text-caption text-text-2"
+              >
                 {SOFT_FLAG_DISMISS_UNAVAILABLE_REASON}
               </span>
             ) : null}

@@ -146,6 +146,10 @@ function kindLabel(kind: string): string {
   }
 }
 
+/** Symbols as the API accepts them (docs/01 6, B06a-21); matching is case-insensitive (docs/03). */
+export const STOCK_SYMBOL = /^[A-Z0-9][A-Z0-9&-]{0,29}$/;
+export const isValidSymbol = (s: string): boolean => STOCK_SYMBOL.test(s.toUpperCase());
+
 // ---- banners --------------------------------------------------------------------------------
 
 const ISO_DATE = /\d{4}-\d{2}-\d{2}/;
@@ -168,6 +172,22 @@ export function changeOn(bars: ReadonlyArray<Bar>, date: string): number | null 
   const prev = bars[i - 1];
   if (i < 1 || !cur || !prev || prev[4] === 0) return null;
   return (cur[4] / prev[4] - 1) * 100;
+}
+
+/**
+ * Price change in percent implied by a DETECTED action's own ratio (docs/01 3.7: ratio_num/den come
+ * from the matched fraction r = C_t/C_(t-1), so the change is r - 1: 1/5 gives -80). Used when the
+ * day's bar is not served (suspect rows are never served, BRK-08). Null without a usable ratio.
+ */
+export function ratioChange(
+  actions: ReadonlyArray<CorporateAction> | null,
+  date: string,
+): number | null {
+  const a = (actions ?? []).find((x) => x.ex_date === date && x.status === "detected");
+  const n = a?.ratio_num;
+  const d = a?.ratio_den;
+  if (typeof n !== "number" || typeof d !== "number" || n <= 0 || d <= 0) return null;
+  return (n / d - 1) * 100;
 }
 
 /**
@@ -209,7 +229,10 @@ export function softFlags(
     if (!cur || !prev || prev[4] <= 0) continue;
     // Rounded so an exact 20% drop is not missed by float error (0.8 - 1 = -0.19999999999999996).
     const pct = Math.round((cur[4] / prev[4] - 1) * 100 * 1e6) / 1e6;
-    if (pct <= -SOFT_FLAG_DROP_PCT && !covered.has(cur[0]) && !dismissed.has(cur[0])) {
+    // A covered date that falls in the gap before this bar (its own row is suspect and not served,
+    // BRK-08) already explains the drop seen between the two served bars.
+    const explained = [...covered].some((c) => c > prev[0] && c <= cur[0]);
+    if (pct <= -SOFT_FLAG_DROP_PCT && !explained && !dismissed.has(cur[0])) {
       out.push({ date: cur[0], dropPct: pct });
     }
   }

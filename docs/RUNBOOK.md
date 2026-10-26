@@ -323,3 +323,12 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 
 - `playwright.config.ts` serves the production build on port 3100 and Storybook on 6100. If another process holds them, set `PW_PORT` / `PW_STORY_PORT` (defaults unchanged); the specs read the same variables through `apps/web/tests/e2e/ports.ts`.
 - The `/api` rewrite is baked in at `next build`. Locally use `npm run build:e2e` (builds with `API_BASE_URL=http://127.0.0.1:9`) so a Go API on localhost:8080 cannot answer e2e requests. CI has no API running, so plain `npm run build` is fine there.
+
+## 41. Stock page review fixes (F05R)
+
+- The UNCONFIRMED_ACTION sentence takes its percentage from the served bars, else from the detected action's ratio (`ratio_num/ratio_den - 1`, from `/events`); without either the clause is left out. If a banner lacks "price changed", check that `/events` returned the detected action with a ratio before suspecting the bars.
+- The soft flag comes only from `lib/stock/soft-flag-adapter.ts` (`getSoftFlags`, `getSoftFlagCoverage`). When the server flag arrives (D-W 3) replace those two bodies; nothing else changes.
+- Disabled actions show their reason as visible text (`aria-describedby`), never only a tooltip.
+- The watchlist star reads `GET /watchlist` (profile `tracked` is also set by opening a stock, so it is not membership). `docs/field-map.json` entries may be `conditional:<testid>|<condition>` or `not-rendered|<reason>`; the UI-09 test enforces both forms.
+- A symbol outside the API charset shows not-found with no request. Fundamentals and links load together with the other four calls.
+- Playwright UI-40 now measures every interactive element inside the stock page at 375 px (44 px). If it fails, add `touch-target` and a 44 px height to the control.

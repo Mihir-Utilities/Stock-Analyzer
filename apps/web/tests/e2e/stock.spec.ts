@@ -30,7 +30,17 @@ async function mockApi(page: Page, drop = false) {
       "GET /stocks/TCS": fx.profile(
         fx.withFreshness({ prices_stale: true, holidays_missing: true }),
       ),
-      "GET /stocks/TCS/prices": fx.prices({ drops: drop ? { 40: 0.75 } : {} }),
+      "GET /stocks/TCS/prices": fx.prices(
+        { drops: drop ? { 40: 0.75 } : {} },
+        drop
+          ? [
+              {
+                code: "UNCONFIRMED_ACTION",
+                message: `Possible split on ${fx.bars(70)[20]![0]} not yet confirmed`,
+              },
+            ]
+          : [],
+      ),
       "GET /stocks/TCS/indicators": fx.indicatorsFull(),
       "GET /stocks/TCS/events": fx.events,
       "GET /stocks/TCS/links": fx.links,
@@ -94,15 +104,25 @@ test.describe("axe and touch targets on the stock page", () => {
         });
         expect(violations).toEqual([]);
         if (width === 375) {
+          // UI-40: every interactive element of the stock page (not only those with a test id),
+          // including the unconfirmed-action and soft-flag controls, is at least 44 px.
           const small = await page.evaluate(() =>
-            Array.from(document.querySelectorAll("button[data-testid], a[data-testid]"))
-              .filter((el) => el.getAttribute("data-testid") !== "skip-link")
-              .map((el) => ({ id: el.getAttribute("data-testid"), r: el.getBoundingClientRect() }))
+            Array.from(
+              document.querySelectorAll(
+                '[data-testid="stock-page"] :is(a[href], button, input, select, textarea, summary, [role="tab"], [role="button"], [tabindex]:not([tabindex="-1"]))',
+              ),
+            )
+              .map((el) => ({
+                id: el.getAttribute("data-testid") ?? el.tagName.toLowerCase(),
+                r: el.getBoundingClientRect(),
+              }))
               .filter(
                 (x) => x.r.width > 0 && x.r.height > 0 && (x.r.width < 43.5 || x.r.height < 43.5),
               )
               .map((x) => `${x.id}: ${Math.round(x.r.width)}x${Math.round(x.r.height)}`),
           );
+          expect(await page.getByTestId("action-confirm").count()).toBe(1);
+          expect(await page.getByTestId("soft-flag-dismiss").count()).toBe(1);
           expect(small).toEqual([]);
           const { scrollWidth, clientWidth } = await page.evaluate(() => ({
             scrollWidth: document.documentElement.scrollWidth,

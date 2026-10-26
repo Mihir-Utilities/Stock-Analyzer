@@ -84,4 +84,5 @@ export async function startRefresh(symbol: string): Promise<number> {
   return id;
 }
 
-export const getJob = (id: number) => apiRequest(`/jobs/${id}`, { schema: jobSchema });
+export const getJob = (id: number, signal?: AbortSignal) =>
+  apiRequest(`/jobs/${id}`, { schema: jobSchema, ...(signal ? { signal } : {}) });

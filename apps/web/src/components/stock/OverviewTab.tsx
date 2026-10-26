@@ -1,6 +1,5 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { ChartFrame } from "@/components/charts/ChartFrame";
 import type { ChartDataset } from "@/components/charts/chart-data";
 import { Card } from "@/components/ui/Card";
@@ -18,18 +17,17 @@ import {
   formatNumber,
   formatPercent,
 } from "@/lib/format";
-import { getFundamentals, getLinks, stockKeys } from "@/lib/stock/api";
 import { humanReason, performanceRows, weekRange } from "@/lib/stock/derive";
-import { toLoad, type Load } from "@/lib/stock/load";
+import type { Load } from "@/lib/stock/load";
 import type {
   Bar,
   EventsData,
   FundamentalsKpi,
   IndicatorsData,
+  LinksData,
   Score,
   StockProfile,
 } from "@/lib/stock/schemas";
-import { STALE_TIME } from "@/components/shell/Providers";
 
 const OWNER = "Owner data (manual entry or CSV import)";
 
@@ -522,13 +520,7 @@ function isHttps(url: string): boolean {
 
 // ---- Research links ------------------------------------------------------------------------
 
-export function LinksCard({ symbol }: { symbol: string }) {
-  const q = useQuery({
-    queryKey: stockKeys.links(symbol),
-    queryFn: () => getLinks(symbol),
-    staleTime: STALE_TIME.analysis,
-  });
-  const load = toLoad(q);
+export function LinksCard({ load }: { load: Load<LinksData> }) {
   if (load.state !== "ready") {
     return (
       <Card
@@ -578,25 +570,22 @@ export function OverviewTab({
   pricesLoad,
   indicatorsLoad,
   eventsLoad,
+  fundamentalsLoad,
+  linksLoad,
 }: {
   profile: StockProfile;
   bars: ReadonlyArray<Bar> | null;
   pricesLoad: Load<unknown>;
   indicatorsLoad: Load<IndicatorsData>;
   eventsLoad: Load<EventsData>;
+  fundamentalsLoad: Load<FundamentalsKpi>;
+  linksLoad: Load<LinksData>;
 }) {
-  const symbol = profile.symbol;
-  const fq = useQuery({
-    queryKey: stockKeys.fundamentals(symbol),
-    queryFn: () => getFundamentals(symbol),
-    staleTime: STALE_TIME.fundamentals,
-  });
-  const fundamentals = toLoad(fq);
   const indicators = indicatorsLoad.state === "ready" ? indicatorsLoad.data : null;
   return (
     <div className="grid grid-cols-1 gap-4 desktop:grid-cols-2" data-testid="overview">
       <div className="desktop:col-span-2">
-        <KpiGrid profile={profile} indicators={indicators} fundamentals={fundamentals} />
+        <KpiGrid profile={profile} indicators={indicators} fundamentals={fundamentalsLoad} />
       </div>
       <div className="desktop:col-span-2">
         <GaugesCard profile={profile} indicators={indicatorsLoad} />
@@ -606,7 +595,7 @@ export function OverviewTab({
       <EventsCard load={eventsLoad} />
       <div className="flex flex-col gap-4">
         <CompanyCard profile={profile} />
-        <LinksCard symbol={symbol} />
+        <LinksCard load={linksLoad} />
       </div>
     </div>
   );

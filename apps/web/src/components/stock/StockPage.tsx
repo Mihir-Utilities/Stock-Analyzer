@@ -11,12 +11,23 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Tabs, ToastProvider, useToast } from "@/components/ui/overlays";
 import { STALE_TIME } from "@/components/shell/Providers";
 import { ApiError } from "@/lib/api/client";
-import { getEvents, getIndicators, getPrices, getProfile, stockKeys } from "@/lib/stock/api";
+import {
+  getEvents,
+  getFundamentals,
+  getIndicators,
+  getLinks,
+  getPrices,
+  getProfile,
+  stockKeys,
+} from "@/lib/stock/api";
+import { isValidSymbol } from "@/lib/stock/derive";
 import { toLoad } from "@/lib/stock/load";
 import {
   isRedirect,
   type EventsData,
+  type FundamentalsKpi,
   type IndicatorsData,
+  type LinksData,
   type PricesData,
 } from "@/lib/stock/schemas";
 import { mergeWarnings, StockBanners } from "./StockBanners";
@@ -129,6 +140,20 @@ function Inner({ symbol }: { symbol: string }) {
     enabled: profile !== null,
   });
 
+  // Started together with prices, indicators and events (no waterfall behind the Overview tab).
+  const fundamentalsQ = useQuery({
+    queryKey: stockKeys.fundamentals(symbol),
+    queryFn: () => getFundamentals(symbol),
+    staleTime: STALE_TIME.fundamentals,
+    enabled: profile !== null,
+  });
+  const linksQ = useQuery({
+    queryKey: stockKeys.links(symbol),
+    queryFn: () => getLinks(symbol),
+    staleTime: STALE_TIME.analysis,
+    enabled: profile !== null,
+  });
+
   if (profileQ.isPending || redirect) {
     return (
       <div className="flex flex-col gap-3" data-testid="stock-loading" aria-busy="true">
@@ -160,6 +185,8 @@ function Inner({ symbol }: { symbol: string }) {
     ? toLoad<IndicatorsData>(indicatorsQ)
     : ({ state: "unavailable", reason: "no prices imported for this stock" } as const);
   const eventsLoad = toLoad<EventsData>(eventsQ);
+  const fundamentalsLoad = toLoad<FundamentalsKpi>(fundamentalsQ);
+  const linksLoad = toLoad<LinksData>(linksQ);
   const bars = pricesLoad.state === "ready" ? pricesLoad.data.bars : null;
   const indicators = indicatorsLoad.state === "ready" ? indicatorsLoad.data : null;
   const warnings = mergeWarnings([
@@ -198,6 +225,8 @@ function Inner({ symbol }: { symbol: string }) {
       pricesLoad={pricesLoad}
       indicatorsLoad={indicatorsLoad}
       eventsLoad={eventsLoad}
+      fundamentalsLoad={fundamentalsLoad}
+      linksLoad={linksLoad}
     />
   );
 
@@ -238,6 +267,8 @@ function Inner({ symbol }: { symbol: string }) {
 }
 
 export function StockPage({ symbol }: { symbol: string }) {
+  // A symbol outside the API charset can never exist: say so without calling the API.
+  if (!isValidSymbol(symbol)) return <NotFound symbol={symbol.slice(0, 40)} />;
   return (
     <ToastProvider>
       <Inner symbol={symbol} />

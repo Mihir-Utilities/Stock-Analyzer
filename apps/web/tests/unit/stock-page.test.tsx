@@ -127,7 +127,8 @@ describe("stock header (BRK-12, SYS-14 header part, UI-02)", () => {
     renderStock(base());
     const alert = await screen.findByTestId("header-alert");
     expect(alert).toBeDisabled();
-    expect(alert).toHaveAttribute("title", expect.stringContaining("not built"));
+    const reason = document.getElementById(alert.getAttribute("aria-describedby") ?? "");
+    expect(reason).toHaveTextContent("not built");
     expect(screen.getByTestId("header-compare")).toHaveAttribute("href", "/compare?symbols=TCS");
   });
 });

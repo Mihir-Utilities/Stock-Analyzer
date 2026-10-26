@@ -22,19 +22,34 @@ export type RefreshOutcome =
   | { kind: "rate_limited"; minutes: number }
   | { kind: "broker_session_missing" }
   | { kind: "failed"; message: string }
-  | { kind: "timeout" };
+  | { kind: "timeout" }
+  | { kind: "aborted" };
 
 export interface RefreshDeps {
   start: (symbol: string) => Promise<number>;
-  job: (id: number) => Promise<{ data: { status: string; error?: string | null | undefined } }>;
-  sleep: (ms: number) => Promise<void>;
+  job: (
+    id: number,
+    signal?: AbortSignal,
+  ) => Promise<{ data: { status: string; error?: string | null | undefined } }>;
+  /** Resolves after `ms`, or early when `signal` aborts (it never rejects). */
+  sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
   now: () => number;
 }
 
 const realDeps: RefreshDeps = {
   start: startRefresh,
   job: getJob,
-  sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+  sleep: (ms, signal) =>
+    new Promise((resolve) => {
+      if (signal?.aborted) return resolve();
+      const done = () => {
+        clearTimeout(t);
+        signal?.removeEventListener("abort", done);
+        resolve();
+      };
+      const t = setTimeout(done, ms);
+      signal?.addEventListener("abort", done, { once: true });
+    }),
   now: () => Date.now(),
 };
 
@@ -43,7 +58,9 @@ const ACTIVE = new Set(["queued", "running"]);
 export async function runRefresh(
   symbol: string,
   deps: RefreshDeps = realDeps,
+  signal?: AbortSignal,
 ): Promise<RefreshOutcome> {
+  if (signal?.aborted) return { kind: "aborted" };
   let id: number;
   try {
     id = await deps.start(symbol);
@@ -55,15 +72,19 @@ export async function runRefresh(
     }
     return { kind: "failed", message: e instanceof ApiError ? e.message : "Refresh failed." };
   }
+  if (signal?.aborted) return { kind: "aborted" };
   const started = deps.now();
   while (deps.now() - started < REFRESH_TIMEOUT_MS) {
-    await deps.sleep(REFRESH_POLL_MS);
+    await deps.sleep(REFRESH_POLL_MS, signal);
+    if (signal?.aborted) return { kind: "aborted" };
     let job: Awaited<ReturnType<RefreshDeps["job"]>>;
     try {
-      job = await deps.job(id);
+      job = await deps.job(id, signal);
     } catch (e) {
+      if (signal?.aborted) return { kind: "aborted" };
       return { kind: "failed", message: e instanceof ApiError ? e.message : "Refresh failed." };
     }
+    if (signal?.aborted) return { kind: "aborted" };
     const { status, error } = job.data;
     if (status === "ok") return { kind: "ok" };
     if (!ACTIVE.has(status)) {
