@@ -95,8 +95,13 @@ export function WatchlistHeatCard() {
   return (
     <Card
       title={title}
-      state={missing > 0 ? "partial" : stale ? "stale" : "ready"}
-      message={`${missing} of ${stocks.length} stocks have no day change (at least two imported bars are needed).${stale ? " Prices are stale." : ""}`}
+      state={missing > 0 ? "partial" : "ready"}
+      stale={stale}
+      message={
+        missing > 0
+          ? `${missing} of ${stocks.length} stocks have no day change (at least two imported bars are needed).${stale ? " Prices are stale." : ""}`
+          : undefined
+      }
       source={WATCH_SOURCE}
       asOf={asOfText(last)}
       testId="dash-watchlist"

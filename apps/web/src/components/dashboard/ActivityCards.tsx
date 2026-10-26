@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Timeline, type TimelineItem } from "@/components/ui/Timeline";
 import { useAlertEvents, useUpcomingEvents, useWatchlist } from "@/lib/dashboard/queries";
+import { alertKindLabel, deliveryStatusLabel, eventTypeLabel } from "@/lib/dashboard/labels";
 import { asOfText, describeError, istDate } from "@/lib/dashboard/state";
 import { formatDate, formatDateTime } from "@/lib/format";
 
@@ -45,7 +46,9 @@ export function UpcomingEventsCard() {
       />
     );
   }
-  if (events.some((e) => e.isPending)) {
+  const pending = events.filter((e) => e.isPending);
+  // Nothing has answered yet: skeleton. Once any symbol answered the card renders what it has.
+  if (pending.length === events.length) {
     return <Card title={title} state="loading" testId="dash-events" />;
   }
   const failed = events.filter((e) => e.isError);
@@ -59,7 +62,7 @@ export function UpcomingEventsCard() {
         id: `${symbol}-${c.event_date}-${c.type}`,
         sortKey: `${c.event_date}-${symbol}`,
         date: formatDate(c.event_date).text,
-        kind: c.type,
+        kind: eventTypeLabel(c.type),
         title: symbol,
         detail: typeof c.details === "string" ? c.details : undefined,
       });
@@ -79,7 +82,7 @@ export function UpcomingEventsCard() {
       />
     );
   }
-  if (items.length === 0 && failed.length === 0) {
+  if (items.length === 0 && failed.length === 0 && pending.length === 0) {
     return (
       <Card
         title={title}
@@ -93,10 +96,20 @@ export function UpcomingEventsCard() {
   return (
     <Card
       title={title}
-      state={failed.length > 0 ? "partial" : "ready"}
-      message={`${failed.length} of ${events.length} stocks could not be checked for events.`}
+      state={failed.length > 0 || pending.length > 0 ? "partial" : "ready"}
+      message={[
+        failed.length > 0
+          ? `${failed.length} of ${events.length} stocks could not be checked for events.`
+          : null,
+        pending.length > 0
+          ? `${pending.length} of ${events.length} stocks are still being checked.`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" ")}
       source={EVENTS_SOURCE}
-      asOf={asOfText(today)}
+      // No source date exists for owner-entered events: the list is as of this load (F04R-4).
+      asOf="now"
       testId="dash-events"
     >
       <Timeline items={items.slice(0, EVENTS_SHOWN)} emptyMessage="No upcoming events." />
@@ -164,10 +177,10 @@ export function AlertsCard() {
             className="flex flex-wrap items-baseline gap-x-2 text-body-sm"
           >
             <span className="font-medium text-text-1">{targetLabel(e.target)}</span>
-            <span className="text-text-2">{e.kind}</span>
+            <span className="text-text-2">{alertKindLabel(e.kind)}</span>
             <time className="num text-caption text-text-2">{formatDateTime(e.fired_at).text}</time>
             <span className="rounded-chip border border-border px-2 text-micro text-text-2">
-              Delivery: {e.delivery_status}
+              Delivery: {deliveryStatusLabel(e.delivery_status)}
             </span>
           </li>
         ))}

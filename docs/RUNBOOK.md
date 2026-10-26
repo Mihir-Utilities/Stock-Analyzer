@@ -330,3 +330,10 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - **Symptom `ADJUSTMENT_DUPLICATE_ACTION`** (job result of `post_import` / `readjust_prices` under `adjust.warnings`, and the stock warnings): two confirmed rows of the same type share an ex-date. The worker applied only the lowest id, so prices are right; check with `SELECT id, action_type, ratio_num, ratio_den, purpose_text FROM corporate_action WHERE instrument_id = (SELECT id FROM instrument WHERE symbol = 'X') AND status = 'confirmed' ORDER BY ex_date, id;`. Holdings quantities (portfolio) still multiply both rows until an override is added for that date (B07R-6).
 - **PATCH confirm warnings:** `ADJUSTMENT_SKIPPED_SRC_ADJUSTED` means the ex-date bars were imported as already adjusted, so the confirmation leaves prices unchanged (D-K); `RATIO_EXTREME` means a multiplier above 100 or below 0.01: re-check the ratio.
 - Confirm, manual insert and CSV commit take a transaction advisory lock on (instrument, ex-date); a very slow confirm can delay an insert for the same date, nothing else.
+
+## 41. F04 review fixes and the CI e2e build
+
+- The CI web job runs `npm run build` (compile check), `npm run build-storybook`, then `npm run build:e2e`; the last build replaces `.next`, so `npm run test:e2e` serves the build whose `/api` rewrite points at `127.0.0.1:9`. The e2e test "unmocked API calls fail fast" proves nothing answers on that address; if it fails, a build without `API_BASE_URL` is being served.
+- `/login` mounts the waking banner itself (it is outside the app shell): a cold start shows "Waking up the server..." after 3 s while "Signing in..." is shown.
+- The staleness rule on the dashboard is weekends plus the 18:00 IST cut-off (docs/03 section 3 without a holiday list). A trading holiday can still show a correct import as stale until the web app reads the holiday list (F04R-9). Monday before 18:00 IST expects Friday's bar.
+- The broker countdown ticks every minute from the last `/broker/status` answer without extra requests; it is only shown when the broker is enabled. Reconnect links to `/settings` until F12 builds Connect (F04R-7).

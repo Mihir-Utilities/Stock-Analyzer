@@ -153,3 +153,35 @@ test.describe("dashboard with data", () => {
     expect(overflow).toBe(false);
   });
 });
+
+// F04R-1 (UI-01): /login is outside the app shell, so it carries its own waking banner.
+test.describe("login cold start (UI-01)", () => {
+  test.use({ bypassCSP: true });
+
+  test("a slow /auth/login shows the waking text after 3 s", async ({ page }) => {
+    await page.route("**/api/v1/auth/login", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 4_500));
+      await route.fulfill(fail(401, "UNAUTHENTICATED"));
+    });
+    await page.goto("/login");
+    await page.getByTestId("login-password").fill("x");
+    await page.getByTestId("login-submit").click();
+    await expect(page.getByTestId("waking-banner")).toContainText("Waking up the server", {
+      timeout: 4_000,
+    });
+    await expect(page.getByTestId("form-field-error")).toContainText("Invalid credentials");
+  });
+});
+
+// CI gap: the build Playwright serves must have the dead-port API address baked in
+// (`npm run build:e2e`). An unmocked /api call then fails fast instead of reaching a local API.
+test.describe("unmocked API calls", () => {
+  test("fail fast because nothing answers on the baked API address", async ({ page }) => {
+    await signIn(page);
+    const started = Date.now();
+    const res = await page.request.get("/api/v1/watchlist", { maxRedirects: 0, timeout: 10_000 });
+    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(res.status()).toBeGreaterThanOrEqual(500);
+    expect(res.headers()["content-type"] ?? "").not.toContain("application/json");
+  });
+});

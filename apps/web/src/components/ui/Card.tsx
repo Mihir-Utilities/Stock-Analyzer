@@ -13,6 +13,8 @@ export interface CardProps {
   state?: ViewState;
   source?: string;
   asOf?: string | null;
+  /** Staleness independent of `state`: a partial card can also be stale (both are shown). */
+  stale?: boolean;
   /** Empty: one sentence. Error: message. Partial: what is missing. */
   message?: string;
   onRetry?: () => void;
@@ -32,6 +34,7 @@ export function Card({
   state = "ready",
   source,
   asOf = null,
+  stale = false,
   message,
   onRetry,
   children,
@@ -76,6 +79,7 @@ export function Card({
       </>
     );
   }
+  const isStale = stale || state === "stale";
   return (
     <section
       data-testid={testId}
@@ -91,10 +95,10 @@ export function Card({
         {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
       </header>
       {body}
-      {state !== "loading" && (source || asOf !== null || state === "stale") ? (
+      {state !== "loading" && (source || asOf !== null || isStale) ? (
         <footer className="mt-3 flex flex-wrap gap-2">
           {source ? <SourceChip source={source} /> : null}
-          <AsOfChip asOf={asOf} stale={state === "stale"} />
+          <AsOfChip asOf={asOf} stale={isStale} />
         </footer>
       ) : null}
     </section>
