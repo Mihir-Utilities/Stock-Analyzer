@@ -225,7 +225,13 @@ func TestUndo(t *testing.T) {
 
 	// 30-day window.
 	old := e.mustCommit(KindShareholding, shareHdr+"AAA,2026-03-31,50,20,15,9,3,1,14,,,\n")
-	e.now.Store(e.svc.Now().Add(31 * 24 * time.Hour))
+	// import_batch.created_at is the database clock, not the pinned test clock: advance from it, or
+	// the test passes only on the day the pinned date was chosen (it failed once real time moved on).
+	var created time.Time
+	if err := e.pool.QueryRow(ctx, `SELECT created_at FROM import_batch WHERE id = $1`, old.BatchID).Scan(&created); err != nil {
+		t.Fatal(err)
+	}
+	e.now.Store(created.Add(31 * 24 * time.Hour))
 	if _, err := e.svc.Undo(ctx, old.BatchID); !errors.Is(err, ErrUndoExpired) {
 		t.Errorf("expired window: %v", err)
 	}
