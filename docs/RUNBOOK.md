@@ -323,3 +323,10 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 
 - `playwright.config.ts` serves the production build on port 3100 and Storybook on 6100. If another process holds them, set `PW_PORT` / `PW_STORY_PORT` (defaults unchanged); the specs read the same variables through `apps/web/tests/e2e/ports.ts`.
 - The `/api` rewrite is baked in at `next build`. Locally use `npm run build:e2e` (builds with `API_BASE_URL=http://127.0.0.1:9`) so a Go API on localhost:8080 cannot answer e2e requests. CI has no API running, so plain `npm run build` is fine there.
+
+## B07 review fixes: duplicate ex-date actions (interim rules B07R-1..3)
+
+- **Symptom `DUPLICATE_EX_DATE_ACTION`** (manual entry or CSV commit): another confirmed or pending split/bonus exists for that stock and ex-date. The row is stored as entered. There is no delete-action route yet, so fix it by re-entering the intended row with the same ex-date, type and purpose (it updates in place) or by rejecting the pending candidate.
+- **Symptom `ADJUSTMENT_DUPLICATE_ACTION`** (job result of `post_import` / `readjust_prices` under `adjust.warnings`, and the stock warnings): two confirmed rows of the same type share an ex-date. The worker applied only the lowest id, so prices are right; check with `SELECT id, action_type, ratio_num, ratio_den, purpose_text FROM corporate_action WHERE instrument_id = (SELECT id FROM instrument WHERE symbol = 'X') AND status = 'confirmed' ORDER BY ex_date, id;`. Holdings quantities (portfolio) still multiply both rows until an override is added for that date (B07R-6).
+- **PATCH confirm warnings:** `ADJUSTMENT_SKIPPED_SRC_ADJUSTED` means the ex-date bars were imported as already adjusted, so the confirmation leaves prices unchanged (D-K); `RATIO_EXTREME` means a multiplier above 100 or below 0.01: re-check the ratio.
+- Confirm, manual insert and CSV commit take a transaction advisory lock on (instrument, ex-date); a very slow confirm can delay an insert for the same date, nothing else.

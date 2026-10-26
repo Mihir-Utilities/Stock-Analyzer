@@ -4614,7 +4614,7 @@ export interface operations {
                     "application/json": components["schemas"]["SuccessEnvelope"];
                 };
             };
-            /** @description Saved as a confirmed action. data: {id, batch_id, inserted, updated, warnings[{field, code, message}], post_import_job_id}. A repeat of the same stock, ex_date, type and purpose updates the one row (200). A future ex_date is stored. 404 unknown or old symbol; 422 with details.fields. */
+            /** @description Saved as a confirmed action. data: {id, batch_id, inserted, updated, warnings[{field, code, message}] (DUPLICATE_EX_DATE_ACTION when another confirmed or pending split/bonus exists for the same stock and ex-date; the row is still stored), post_import_job_id}. A repeat of the same stock, ex_date, type and purpose updates the one row (200). A future ex_date is stored. 404 unknown or old symbol; 422 with details.fields. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -4660,7 +4660,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Done. data: {id, symbol, ex_date, action_type, status, ratio_num, ratio_den, multiplier (confirmed only), future_ex_date, changed (false for an idempotent repeat), warnings[{field,code,message}] (RATIO_DISAGREES_WITH_DETECTED when the multiplier is more than 3% from 1/r; POST_IMPORT_NOT_QUEUED), post_import_job_id}. 404 unknown symbol, id or an id of another stock; 409 rejected candidate confirmed, confirmed action rejected, different numbers on a confirmed candidate, or a confirmed split/bonus already on the same ex-date (never adjust twice). */
+            /** @description Done. data: {id, symbol, ex_date, action_type, status, ratio_num, ratio_den, multiplier (confirmed only), future_ex_date, changed (false for an idempotent repeat), warnings[{field,code,message}] (RATIO_DISAGREES_WITH_DETECTED when the multiplier is more than 3% from 1/r; RATIO_EXTREME when the multiplier is above 100 or below 0.01; ADJUSTMENT_SKIPPED_SRC_ADJUSTED when the ex-date bars were imported as already adjusted; POST_IMPORT_NOT_QUEUED), post_import_job_id}. 404 unknown symbol, id or an id of another stock; 409 rejected candidate confirmed, confirmed action rejected, different numbers on a confirmed candidate, or a confirmed split/bonus already on the same ex-date (never adjust twice). */
             200: {
                 headers: {
                     [name: string]: unknown;

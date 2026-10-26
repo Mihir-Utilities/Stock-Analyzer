@@ -18,6 +18,7 @@ import asyncpg
 from worker.analytics.actions import (
     FLAG_LARGE_DROP,
     WARN_CONFLICT,
+    WARN_DUPLICATE_ACTION,
     WARN_UNCONFIRMED,
     Bar,
     Detection,
@@ -176,6 +177,14 @@ async def stock_warnings(pool: asyncpg.Pool, instrument_id: int) -> list[str]:
     )
     if conflict:
         codes.append(WARN_CONFLICT)
+    duplicate = await pool.fetchval(
+        "SELECT EXISTS (SELECT 1 FROM corporate_action WHERE instrument_id = $1 "
+        "AND status = 'confirmed' AND action_type IN ('split','bonus') "
+        "GROUP BY ex_date, action_type HAVING count(*) > 1)",
+        instrument_id,
+    )
+    if duplicate:
+        codes.append(WARN_DUPLICATE_ACTION)
     return codes
 
 
@@ -195,15 +204,31 @@ async def readjust_history(
         raise LookupError(f"unknown symbol {symbol}")
     as_of = as_of or ist_today()
     rows = await pool.fetch(
-        "SELECT ex_date, action_type, ratio_num, ratio_den FROM corporate_action "
-        "WHERE instrument_id = $1 AND status = 'confirmed' ORDER BY ex_date",
+        "SELECT id, ex_date, action_type, ratio_num, ratio_den FROM corporate_action "
+        "WHERE instrument_id = $1 AND status = 'confirmed' ORDER BY ex_date, id",
         instrument_id,
     )
     pairs: list[tuple[date, Decimal]] = []
     review: list[str] = []
+    warnings: list[str] = []
+    applied_keys: set[tuple[date, str]] = set()
     for r in rows:
         mult = qty_multiplier(r["action_type"], r["ratio_num"], r["ratio_den"])
         if mult is not None:
+            key = (r["ex_date"], r["action_type"])
+            if key in applied_keys:
+                # B07R-1: adjustment_steps multiplies same-day pairs, so a second confirmed row of
+                # the same type and ex-date would adjust the history twice: the earliest id wins.
+                if WARN_DUPLICATE_ACTION not in warnings:
+                    warnings.append(WARN_DUPLICATE_ACTION)
+                log.warning(
+                    "duplicate confirmed %s on %s skipped (id %s)",
+                    r["action_type"],
+                    r["ex_date"],
+                    r["id"],
+                )
+                continue
+            applied_keys.add(key)
             pairs.append((r["ex_date"], mult))
         elif r["action_type"] in (
             "split",
@@ -222,6 +247,7 @@ async def readjust_history(
             "rows_updated": None,
             "actions_applied": len(steps),
             "review_needed": review,
+            "warnings": warnings,
         }
     status = await pool.execute(
         "UPDATE price_daily p SET adj_close = n.new_adj FROM ("
@@ -240,6 +266,7 @@ async def readjust_history(
         "rows_updated": int(status.split()[-1]),
         "actions_applied": len(steps),
         "review_needed": review,
+        "warnings": warnings,
     }
 
 

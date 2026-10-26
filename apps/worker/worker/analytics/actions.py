@@ -33,6 +33,7 @@ EPS = 1e-9  # boundary values (exactly 3%, exactly -20%) must not flip on float 
 FLAG_LARGE_DROP = "large_one_day_drop"
 WARN_UNCONFIRMED = "UNCONFIRMED_ACTION"
 WARN_CONFLICT = "ADJUSTMENT_CONFLICT"
+WARN_DUPLICATE_ACTION = "ADJUSTMENT_DUPLICATE_ACTION"
 
 
 @dataclass(frozen=True)

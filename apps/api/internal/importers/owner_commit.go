@@ -39,6 +39,10 @@ func (s *Service) commitOwner(ctx context.Context, tx pgx.Tx, kind string, parts
 		}
 	}
 	res := &CommitResult{Inserted: sink.inserted, Updated: sink.updated, Warnings: []string{}}
+	if len(sink.dupes) > 0 { // B07R-1: stored as entered, one warning per file
+		res.Warnings = append(res.Warnings, WarnDuplicateExDateAction)
+		warnings += len(sink.dupes)
+	}
 	symbols := make([]string, 0, len(sink.symbols))
 	for sym := range sink.symbols {
 		symbols = append(symbols, sym)

@@ -139,7 +139,7 @@ func (d actData) warned(code string) bool {
 
 const split102 = `{"status":"confirmed","action_type":"split","ratio_num":10,"ratio_den":"2"}`
 
-// ACT-03: confirming a detected candidate stores the owner's type and numbers, sets the
+// ACT-26 (and ACT-03): confirming a detected candidate stores the owner's type and numbers, sets the
 // multiplier the portfolio math uses and queues the re-adjust and analysis chain.
 func TestACT03_ConfirmSplitQueuesReadjust(t *testing.T) {
 	e := newActEnv(t)
@@ -198,7 +198,7 @@ func TestACT03_RealJobEnqueue(t *testing.T) {
 	}
 }
 
-// ACT-04: rejecting is sticky; a rejected candidate cannot be confirmed, a repeat reject is a no-op.
+// ACT-26 (reject): rejecting is sticky; a rejected candidate cannot be confirmed, a repeat reject is a no-op.
 func TestACT04_RejectIsSticky(t *testing.T) {
 	e := newActEnv(t)
 	inst := e.stock("TCS")
@@ -252,6 +252,7 @@ func TestACT06_MultiplierDisagreesWarns(t *testing.T) {
 	}
 }
 
+// ACT-27: (see also TestACT27b_* in actions_review_integration_test.go)
 // ACT-09: the unique key forbids duplicate rows; a double confirm (even concurrent) changes one
 // row once, and a confirmed split on the same ex-date blocks confirming the detected twin (never
 // adjust twice, B06b-12).
@@ -332,6 +333,7 @@ func TestACT10_FutureExDateFlagged(t *testing.T) {
 	}
 }
 
+// ACT-26 (validation 422 and the refusals above) and ACT-28 (IDOR 404, 401 without a session, 403 without CSRF).
 func TestB07_ValidationAuthAndIDOR(t *testing.T) {
 	e := newActEnv(t)
 	tcs, infy := e.stock("TCS"), e.stock("INFY")
@@ -381,7 +383,7 @@ func TestB07_ValidationAuthAndIDOR(t *testing.T) {
 	}
 }
 
-// A queue failure never undoes the owner's decision; a repeat retries the enqueue.
+// ACT-28: a queue failure never undoes the owner's decision; a repeat retries the enqueue.
 func TestB07_QueueFailureKeepsDecision(t *testing.T) {
 	e := newActEnv(t)
 	inst := e.stock("TCS")
