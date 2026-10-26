@@ -53,6 +53,8 @@ def test_clean_tree_passes(tmp_path: Path) -> None:
         ),
         ("apps/api/internal/b.go", "func PlaceOrder() {}\n", "order-method"),
         ("apps/worker/worker/adapters/b.py", "def cancel_order(): ...\n", "order-method"),
+        ("apps/worker/requirements.txt", "stocksymbol==1.0\n", "nse-library"),
+        ("apps/worker/uv.lock", 'name = "stocksymbol"\n', "nse-library"),
         ("apps/api/go.sum", "github.com/x/gnews v1.0.0 h1:abc\n", "news-rss"),
     ],
 )
@@ -61,6 +63,20 @@ def test_forbidden_items_are_detected(tmp_path: Path, rel: str, text: str, rule:
     found = dl.scan(tmp_path)
     assert [v.rule for v in found] == [rule], found
     assert found[0].path == rel
+
+
+@pytest.mark.parametrize(
+    ("rel", "text"),
+    [
+        ("apps/web/src/a.ts", "export const isStockSymbol = (s: string) => true;\n"),
+        ("apps/web/src/b.ts", "const stockSymbol = 'TCS';\n"),
+        ("apps/worker/worker/c.py", "def stocksymbol_ok(): ...\n"),
+        ("apps/worker/pyproject.toml", 'dependencies = ["isStockSymbol-helper"]\n'),
+    ],
+)
+def test_stock_symbol_identifiers_pass(tmp_path: Path, rel: str, text: str) -> None:
+    write(tmp_path, rel, text)
+    assert dl.scan(tmp_path) == []
 
 
 def test_exemptions(tmp_path: Path) -> None:

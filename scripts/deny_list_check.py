@@ -41,13 +41,20 @@ RULES: list[tuple[str, re.Pattern[str], str]] = [
     ),
     (
         "nse-library",
-        re.compile(r"nsepython|nsepy|nsetools|jugaad[-_]?data|nselib|bsedata|stocksymbol", re.I),
+        re.compile(r"nsepython|nsepy|nsetools|jugaad[-_]?data|nselib|bsedata", re.I),
         "NSE/BSE scraping library",
     ),
     (
         "nse-bse-host",
         re.compile(r"nseindia|bseindia|nsearchives|nse-india", re.I),
         "NSE/BSE website or endpoint",
+    ),
+    (
+        "nse-library",
+        # PyPI package name; whole token and lowercase only, and only in dependency manifests
+        # (see MANIFEST_ONLY), so identifiers such as isStockSymbol never match.
+        re.compile(r"(?<![\w-])stocksymbol(?![\w-])"),
+        "NSE/BSE scraping library (dependency)",
     ),
     ("screener-host", re.compile(r"screener\.in\b", re.I), "Screener.in fetch path"),
     (
@@ -134,6 +141,13 @@ EXEMPT = {
     "scripts/tests/test_deny_list.py",
 }
 
+# Patterns (by why-text) that apply only to dependency manifest and lock files.
+MANIFEST_ONLY = {"NSE/BSE scraping library (dependency)"}
+_MANIFEST_NAME = re.compile(
+    r"(^|/)(requirements[^/]*\.txt|pyproject\.toml|uv\.lock|poetry\.lock|Pipfile(\.lock)?"
+    r"|package(-lock)?\.json|go\.mod|go\.sum)$"
+)
+
 _JOIN_LITERALS = re.compile(r"[\"'`]\s*(?:\+|\.\s*join\(\s*\[?)?\s*[\"'`]")
 _UNICODE_ESC = re.compile(r"\\u([0-9a-fA-F]{4})")
 _HEX_ESC = re.compile(r"\\x([0-9a-fA-F]{2})")
@@ -203,14 +217,17 @@ def _views(text: str) -> Iterator[tuple[str, str]]:
 
 def scan_text(rel: str, text: str) -> list[Violation]:
     found: dict[tuple[int, str], Violation] = {}
+    manifest = bool(_MANIFEST_NAME.search(rel))
     for number, line in enumerate(text.splitlines(), 1):
-        for rule, pattern, _why in RULES:
+        for rule, pattern, why in RULES:
+            if why in MANIFEST_ONLY and not manifest:
+                continue
             if pattern.search(line):
                 found.setdefault((number, rule), Violation(rel, number, rule, line))
     raw_rules = {rule for _, rule in found}
     for view, variant in _views(text):
-        for rule, pattern, _why in RULES:
-            if rule in raw_rules:
+        for rule, pattern, why in RULES:
+            if rule in raw_rules or (why in MANIFEST_ONLY and not manifest):
                 continue
             match = pattern.search(variant)
             if match:
