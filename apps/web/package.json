@@ -25,6 +25,7 @@
     "@tanstack/react-query": "^5.104.3",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.14.22",
+    "decimal.js": "^10.6.0",
     "echarts": "^6.1.0",
     "lucide-react": "^1.58.0",
     "next": "^16.4.1",

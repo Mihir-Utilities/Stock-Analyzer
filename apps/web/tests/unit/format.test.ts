@@ -30,6 +30,12 @@ describe("UI-24: formatInr (Indian grouping)", () => {
     expect(formatInr(100000).text).toBe("₹1,00,000.00");
     expect(formatInr(123456789012).text).toBe("₹1,23,45,67,89,012.00");
   });
+  it("signed adds + to gains only (P&L amounts); zero and losses are unchanged", () => {
+    expect(formatInr(5000, { signed: true }).text).toBe("+₹5,000.00");
+    expect(formatInr(-5000, { signed: true }).text).toBe("-₹5,000.00");
+    expect(formatInr(0, { signed: true }).text).toBe("₹0.00");
+    expect(formatInr(null, { signed: true }).text).toBe("—");
+  });
   it("handles zero, negative, tiny and negative zero", () => {
     expect(formatInr(0).text).toBe("₹0.00");
     expect(formatInr(-0).text).toBe("₹0.00");

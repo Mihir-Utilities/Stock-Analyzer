@@ -119,11 +119,15 @@ export function formatCount(
   return formatNumber(v, { ...o, decimals: 0 });
 }
 
-/** `₹12,34,567.89`; negatives as `-₹1,234.50`. */
-export function formatInr(v: number | null | undefined, o: NumberOpts = {}): Formatted {
+/** `₹12,34,567.89`; negatives as `-₹1,234.50`; `signed` adds `+` to gains (P&L amounts). */
+export function formatInr(
+  v: number | null | undefined,
+  o: NumberOpts & { signed?: boolean } = {},
+): Formatted {
   if (!isKnown(v)) return unknown(o.reason);
   const r = render(v, o.decimals ?? 2, o.grouping ?? groupingPreference);
-  return known(`${r.negative ? "-" : ""}${RUPEE}${r.body}`, r.direction);
+  const sign = r.negative ? "-" : o.signed && r.direction === "up" ? "+" : "";
+  return known(`${sign}${RUPEE}${r.body}`, r.direction);
 }
 
 /** Crore amounts: `₹1,23,456 Cr`; from 1,00,000 Cr as `₹1.23 L Cr` (docs/06 section 3). */
