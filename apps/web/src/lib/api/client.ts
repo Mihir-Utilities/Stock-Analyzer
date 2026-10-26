@@ -43,6 +43,8 @@ export interface RequestOptions<S extends z.ZodType> {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   query?: Record<string, string | number | boolean | undefined>;
+  /** Extra request headers (e.g. `Idempotency-Key`); never used for credentials. */
+  headers?: Record<string, string>;
   signal?: AbortSignal;
   /** The login call answers 401 for a wrong password; that must not trigger the session redirect. */
   skipUnauthorizedHandler?: boolean;
@@ -81,7 +83,7 @@ export function createApiClient(deps: ClientDeps = {}) {
   ): Promise<ApiResult<z.infer<S>>> {
     const fetchImpl = deps.fetchImpl ?? globalThis.fetch.bind(globalThis);
     const method = options.method ?? "GET";
-    const headers: Record<string, string> = { Accept: "application/json" };
+    const headers: Record<string, string> = { Accept: "application/json", ...options.headers };
     if (method !== "GET") headers["X-Requested-With"] = "fetch"; // CSRF header, docs/03 section 1
     // A FormData body (file upload) gets its multipart boundary from the browser: no Content-Type.
     const isForm = typeof FormData !== "undefined" && options.body instanceof FormData;

@@ -323,3 +323,13 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 
 - `playwright.config.ts` serves the production build on port 3100 and Storybook on 6100. If another process holds them, set `PW_PORT` / `PW_STORY_PORT` (defaults unchanged); the specs read the same variables through `apps/web/tests/e2e/ports.ts`.
 - The `/api` rewrite is baked in at `next build`. Locally use `npm run build:e2e` (builds with `API_BASE_URL=http://127.0.0.1:9`) so a Go API on localhost:8080 cannot answer e2e requests. CI has no API running, so plain `npm run build` is fine there.
+
+## 41. Portfolio and watchlist screens (F11)
+
+- Routes `/portfolio` and `/watchlist`. Data: `GET /portfolio/summary?include_exited=` (60 s), `/portfolio/txns` (paged 50), `/portfolio/adjustments`, `/watchlist`, and `/market/holidays?year=` (only for the weekend or holiday warning; a 501 means weekends only). Writes: `POST/PATCH/DELETE /portfolio/txns`, `POST /portfolio/adjustments`, `POST/PATCH/DELETE /watchlist`. Every write invalidates the portfolio, watchlist and dashboard queries.
+- Money is a decimal string end to end; sums use `decimal.js` (`lib/portfolio/decimal.ts`). Never add `parseFloat` or `Number()` arithmetic on money; `displayNumber` is only for `lib/format`.
+- A saved transaction sends `Idempotency-Key` (one per submit attempt, reused for a retry of the same values). A 409 on a save means the key was used for different values; edit and save again. A timeout or 5xx on save is safe to retry with the same button.
+- LTP is the latest valid close from imported files (manual price mode); the page says so. Unknown values show a dash with a reason. `REVIEW_NEEDED` (confirmed action not applied), `UNCONFIRMED_ACTION`, `HOLDINGS_INCONSISTENT`, `MISSING_PRICE` and `DELISTED_HOLDING` warnings from the API appear as banners with the server's message.
+- Not available yet (see F11-2, F11-7): growth vs benchmark, drawdown, treemap or waterfall charts, and removing an adjustment override (the button is disabled with its reason until the route exists).
+- Failure modes: if the summary shows "could not be loaded" with a request id, check the API log for that id. A fully sold stock is hidden unless "Show fully sold positions" is ticked; its realized P&L stays in the totals.
+- Tests: `npm test` (`portfolio-lib.test.ts`, `portfolio-page.test.tsx`), `npx playwright test tests/e2e/portfolio.spec.ts` after `npm run build:e2e`.
