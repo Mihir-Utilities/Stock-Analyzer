@@ -18,6 +18,7 @@ import {
   type ImportKind,
   type ValidateResult,
 } from "@/lib/imports/schemas";
+import { UNDOABLE_KINDS } from "@/lib/imports/batches";
 import { DB_SOFT_LIMIT_MB, exceedsLimit, sizeGuardMessage } from "@/lib/imports/storage";
 import { AdjustmentChoice } from "./AdjustmentChoice";
 import { Fmt } from "./Fmt";
@@ -34,7 +35,30 @@ export const DEFAULT_LIMIT_TEXT = "Default limit: 5 MB and 50,000 rows per file.
 const KIND_LABEL: Record<ImportKind, string> = {
   instruments: "Stock list (instruments.csv)",
   prices: "Daily prices (prices.csv)",
+  holidays: "Market holidays for a year (holidays.csv)",
+  results_quarterly: "Quarterly results (results_quarterly.csv)",
+  results_annual: "Annual results (results_annual.csv)",
+  balance_cashflow: "Balance sheet and cash flow (balance_cashflow.csv)",
+  fundamentals_long: "Fundamentals, long format (fundamentals_long.csv)",
+  shareholding: "Shareholding (shareholding.csv)",
+  corporate_actions: "Corporate actions (corporate_actions.csv)",
+  instrument_meta: "Sector, industry and index tags (instrument_meta.csv)",
 };
+
+/** What a commit does and whether it can be undone, per kind (docs/01 section 7, B06b-4). */
+function commitEffect(kind: ImportKind): string {
+  if (kind === "prices") return "Prices are written to the database and analytics are recomputed. ";
+  if (kind === "instruments") return "Stocks are added or updated; nothing is deleted. ";
+  if (kind === "holidays")
+    return "For every year in the file, all stored holidays of that year are replaced by the rows of the file. ";
+  if (kind === "instrument_meta")
+    return "Sector, industry and company type are updated (an empty cell keeps the stored value) and index tags in the file replace those of that stock. ";
+  return "Values are saved (a value already stored for the same period is overwritten) and analytics are refreshed. ";
+}
+
+export function undoable(kind: ImportKind): boolean {
+  return UNDOABLE_KINDS.includes(kind);
+}
 
 const COMMIT_WARNING_TEXT: Record<string, string> = {
   TRACKED_OVER_400:
@@ -218,6 +242,13 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
           <Fmt f={formatCount(validation.error_count)} /> errors,{" "}
           <Fmt f={formatCount(validation.warning_count)} /> warnings.
         </p>
+        {kind === "holidays" ? (
+          <Banner tone="info" testId="import-holidays-note">
+            Committing replaces every stored holiday of each year in this file with the rows of this
+            file (the preview shows the first 20). Import the whole year. A date that falls on a
+            weekend is kept with a warning.
+          </Banner>
+        ) : null}
         {commitError ? (
           <Banner tone="error" testId="import-commit-error">
             {commitError.code === "DB_SIZE_LIMIT" ? sizeGuardMessage() : commitError.message}
@@ -280,7 +311,10 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
         </h2>
         <p className="text-body-sm text-text-2">
           <Fmt f={formatCount(validation?.rows ?? null)} /> rows go in as one batch, in one
-          transaction. This batch cannot be undone; re-import corrected data to change it.
+          transaction.{" "}
+          {undoable(kind)
+            ? "You can undo this batch for 30 days on the Batches tab; values it overwrote are not restored."
+            : "This batch cannot be undone; re-import corrected data to change it."}
         </p>
         {commitError ? (
           <Banner tone="error" testId="import-commit-error">
@@ -375,10 +409,10 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
         title={`Commit ${formatCount(validation?.rows ?? null).text} rows?`}
         message={
           <>
-            {kind === "prices"
-              ? "Prices are written to the database and analytics are recomputed. "
-              : "Stocks are added or updated; nothing is deleted. "}
-            This batch cannot be undone.
+            {commitEffect(kind)}
+            {undoable(kind)
+              ? "You can undo it for 30 days; overwritten values are not restored."
+              : "This batch cannot be undone."}
           </>
         }
         confirmLabel="Commit"
@@ -439,8 +473,11 @@ function ImportResult({
         </Banner>
       ))}
       <p className="text-body-sm text-text-2" data-testid="result-undo-note">
-        {kind === "prices" ? "Price" : "Instrument"} batches cannot be undone. To fix a mistake,
-        import corrected data or use Trim history on the Storage tab.
+        {undoable(kind)
+          ? "To reverse this import, use Undo on the Batches tab within 30 days. Values this batch overwrote are not restored."
+          : kind === "prices"
+            ? "Price batches cannot be undone. To fix a mistake, import corrected data or use Trim history on the Storage tab."
+            : `${kind === "instruments" ? "Instrument batches" : "This kind of batch"} cannot be undone. To fix a mistake, import corrected data.`}
       </p>
       <div>
         <button

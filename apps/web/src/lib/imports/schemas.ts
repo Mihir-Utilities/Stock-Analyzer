@@ -3,7 +3,18 @@ import { z } from "zod";
 // Zod schemas for the import endpoints (docs/03 sections 4 and 14, openapi.yaml). Only the fields
 // the screens read are listed; unknown extra fields are ignored.
 
-export const IMPORT_KINDS = ["instruments", "prices"] as const;
+export const IMPORT_KINDS = [
+  "instruments",
+  "prices",
+  "holidays",
+  "results_quarterly",
+  "results_annual",
+  "balance_cashflow",
+  "fundamentals_long",
+  "shareholding",
+  "corporate_actions",
+  "instrument_meta",
+] as const;
 export type ImportKind = (typeof IMPORT_KINDS)[number];
 
 export const rowIssueSchema = z.object({
@@ -89,3 +100,53 @@ export const adminDbSchema = z.object({
     warn_level: z.enum(["ok", "70", "85", "95", "limit"]).optional(),
   }),
 });
+
+/** `GET /imports/batches` item (docs/03 section 14). */
+export const batchSchema = z.object({
+  id: z.number(),
+  kind: z.string(),
+  upload_group: z.string().nullable(),
+  row_count: z.number(),
+  warning_count: z.number(),
+  note: z.string().nullable(),
+  created_at: z.string(),
+  undone_at: z.string().nullable(),
+});
+export type Batch = z.infer<typeof batchSchema>;
+export const batchListSchema = z.object({
+  items: z.array(batchSchema),
+  next_cursor: z.string().nullable().optional(),
+});
+
+export const undoResultSchema = z.object({
+  batch_id: z.number(),
+  removed: z.number(),
+  post_import_job_id: z.number().nullable(),
+  warnings: z.array(z.string()),
+  earlier_batch_ids: z.array(z.number()),
+});
+export type UndoResult = z.infer<typeof undoResultSchema>;
+
+/** Manual entry answer (201, or 200 when only updated): warnings are `{field, code, message}`. */
+export const manualWarningSchema = z.object({
+  field: z.string(),
+  code: z.string(),
+  message: z.string(),
+});
+export const manualResultSchema = z.object({
+  id: z.number().optional(),
+  batch_id: z.number(),
+  inserted: z.number(),
+  updated: z.number(),
+  warnings: z.array(manualWarningSchema),
+  post_import_job_id: z.number().nullable(),
+});
+export type ManualResult = z.infer<typeof manualResultSchema>;
+
+export const manualDeleteSchema = z.object({
+  deleted: z.number(),
+  batch_id: z.number().nullable(),
+  post_import_job_id: z.number().nullable(),
+  warnings: z.array(z.string()),
+});
+export type ManualDelete = z.infer<typeof manualDeleteSchema>;

@@ -1,6 +1,10 @@
 import { apiRequest } from "@/lib/api/client";
 import {
   adjustmentCheckSchema,
+  batchListSchema,
+  manualDeleteSchema,
+  manualResultSchema,
+  undoResultSchema,
   adminDbSchema,
   commitResultSchema,
   deletePreviewSchema,
@@ -126,4 +130,63 @@ export async function fetchStockIndex() {
 export async function fetchDbStatus() {
   const r = await apiRequest("/admin/status", { schema: adminDbSchema });
   return { db: r.data.db, asOf: r.meta?.as_of ?? null };
+}
+
+export async function fetchBatches(limit = 50) {
+  const r = await apiRequest("/imports/batches", { query: { limit }, schema: batchListSchema });
+  return r.data.items;
+}
+
+export async function undoBatch(id: number) {
+  const r = await apiRequest(`/imports/batches/${id}/undo`, {
+    method: "POST",
+    schema: undoResultSchema,
+  });
+  return r.data;
+}
+
+const stockPath = (symbol: string, tail: string) =>
+  `/stocks/${encodeURIComponent(symbol.trim())}/${tail}`;
+
+export async function postResults(symbol: string, body: Record<string, unknown>) {
+  const r = await apiRequest(stockPath(symbol, "results"), {
+    method: "POST",
+    body,
+    schema: manualResultSchema,
+  });
+  return r.data;
+}
+
+export async function postShareholding(symbol: string, body: Record<string, unknown>) {
+  const r = await apiRequest(stockPath(symbol, "shareholding"), {
+    method: "POST",
+    body,
+    schema: manualResultSchema,
+  });
+  return r.data;
+}
+
+export async function postAction(symbol: string, body: Record<string, unknown>) {
+  const r = await apiRequest(stockPath(symbol, "actions"), {
+    method: "POST",
+    body,
+    schema: manualResultSchema,
+  });
+  return r.data;
+}
+
+export async function deleteManualResults(
+  symbol: string,
+  period: { periodType: string; periodEnd: string; basis: string },
+) {
+  const r = await apiRequest(stockPath(symbol, "results"), {
+    method: "DELETE",
+    query: {
+      period_type: period.periodType,
+      period_end: period.periodEnd,
+      basis: period.basis,
+    },
+    schema: manualDeleteSchema,
+  });
+  return r.data;
 }
