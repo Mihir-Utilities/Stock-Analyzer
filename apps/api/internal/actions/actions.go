@@ -89,6 +89,13 @@ type Result struct {
 // Tolerance is the 3% band of docs/05 8.2 between the owner's multiplier and the detected 1/r.
 var Tolerance = decimal.RequireFromString("0.03")
 
+// ExtremeHigh and ExtremeLow bound a plausible multiplier; outside them RATIO_EXTREME is raised
+// (B07R-2, interim thresholds; the ratio is still accepted).
+var (
+	ExtremeHigh = decimal.NewFromInt(100)
+	ExtremeLow  = decimal.RequireFromString("0.01")
+)
+
 // Multiplier is the quantity multiplier of docs/05 8.2: split num/den, bonus (num+den)/den.
 func Multiplier(actionType string, num, den decimal.Decimal) (decimal.Decimal, bool) {
 	if !num.IsPositive() || !den.IsPositive() {
@@ -145,6 +152,22 @@ func (s *Service) Patch(ctx context.Context, symbol string, id int64, in Patch) 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	// Serialise with manual/CSV inserts for the same (instrument, ex-date) before any row lock, so
+	// the duplicate check below cannot be raced (B07R-1). The ex-date of a row never changes.
+	var lockInst int32
+	var lockDay time.Time
+	err = tx.QueryRow(ctx, `SELECT a.instrument_id, a.ex_date FROM corporate_action a JOIN instrument i ON i.id = a.instrument_id
+		WHERE a.id = $1 AND i.symbol = $2`, id, strings.ToUpper(strings.TrimSpace(symbol))).Scan(&lockInst, &lockDay)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, &NotFoundError{What: "corporate action"}
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := importers.LockActionDate(ctx, tx, lockInst, lockDay); err != nil {
+		return nil, err
+	}
+
 	var r row
 	var n, d *string
 	err = tx.QueryRow(ctx, `SELECT a.instrument_id, i.symbol, a.ex_date, a.action_type, a.status, a.ratio_num::text, a.ratio_den::text,
@@ -173,6 +196,11 @@ func (s *Service) Patch(ctx context.Context, symbol string, id int64, in Patch) 
 	}
 	if err != nil {
 		return nil, err
+	}
+	if status == "confirmed" {
+		if err := s.skippedSrcAdjusted(ctx, tx, &r, res); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
@@ -256,10 +284,31 @@ func (s *Service) confirm(ctx context.Context, tx pgx.Tx, id int64, r *row, typ 
 			Message: "The multiplier " + mult.StringFixed(4) + " differs by more than 3% from the one implied by the detected price change (" +
 				r.den.Div(*r.num).StringFixed(4) + "). Check the ratio"})
 	}
+	if mult.GreaterThan(ExtremeHigh) || mult.LessThan(ExtremeLow) {
+		res.Warnings = append(res.Warnings, Warning{Field: "ratio_num", Code: "RATIO_EXTREME",
+			Message: "The multiplier " + mult.StringFixed(4) + " is outside " + ExtremeLow.String() + " to " + ExtremeHigh.String() + ". Check the ratio"})
+	}
 	r.actionType, r.num, r.den = typ, &num, &den
 	res.Changed = true
 	fill(res, r, "confirmed")
 	s.flagFuture(r, res)
+	return nil
+}
+
+// skippedSrcAdjusted adds ADJUSTMENT_SKIPPED_SRC_ADJUSTED when a bar at the ex-date or the bar
+// before it was imported as already adjusted: the worker never multiplies those bars (D-K), so the
+// confirmation is a no-op on prices there (B07R-3, interim; same bars as ADJUSTMENT_CONFLICT).
+func (s *Service) skippedSrcAdjusted(ctx context.Context, tx pgx.Tx, r *row, res *Result) error {
+	var skipped bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM price_daily p WHERE p.instrument_id = $1 AND p.src_adjusted
+		AND p.trade_date IN ($2::date, (SELECT max(q.trade_date) FROM price_daily q WHERE q.instrument_id = $1 AND q.trade_date < $2::date)))`,
+		r.instID, r.exDate).Scan(&skipped); err != nil {
+		return err
+	}
+	if skipped {
+		res.Warnings = append(res.Warnings, Warning{Code: "ADJUSTMENT_SKIPPED_SRC_ADJUSTED",
+			Message: "Prices around " + r.exDate.Format(time.DateOnly) + " were imported as already adjusted, so confirming does not change them. Check which file is raw"})
+	}
 	return nil
 }
 

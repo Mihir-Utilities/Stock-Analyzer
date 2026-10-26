@@ -55,16 +55,18 @@ async def add_action(
     num: int,
     den: int,
     status: str = "confirmed",
+    purpose: str = "",
 ) -> None:
     await pool.execute(
         "INSERT INTO corporate_action (instrument_id, ex_date, action_type, status, ratio_num, "
-        "ratio_den, source) VALUES ($1, $2, $3, $4, $5, $6, 'manual')",
+        "ratio_den, purpose_text, source) VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual')",
         iid,
         ex_date,
         action_type,
         status,
         Decimal(num),
         Decimal(den),
+        purpose,
     )
 
 
@@ -226,6 +228,30 @@ async def test_act03_readjust_applies_confirmed_split_in_one_pass_and_is_idempot
     undone = await actions_db.readjust_history(pg_full, "SPL", as_of=date(2026, 12, 31))
     assert undone["rows_updated"] == 40
     assert all(c == a for c, a in await adj_closes(pg_full, iid))
+
+
+async def test_act27b_two_confirmed_same_type_rows_on_one_ex_date_apply_once_with_warning(
+    pg_full: asyncpg.Pool,
+) -> None:
+    """B07R-1: adjustment_steps multiplies same-day pairs, so the worker must drop the later row."""
+    bars = make_series(60, jumps={40: (0.2, 5.0)})
+    iid = await seed(pg_full, "DUP", bars)
+    ex = bars[40].trade_date
+    await add_action(pg_full, iid, ex, "split", 10, 2)  # earliest id: applied
+    await add_action(pg_full, iid, ex, "split", 5, 1, purpose="Stock split again")  # ignored
+    res = await actions_db.readjust_history(pg_full, "DUP", as_of=date(2026, 12, 31))
+    assert res["actions_applied"] == 1
+    assert res["warnings"] == ["ADJUSTMENT_DUPLICATE_ACTION"]
+    for i, (close, adj) in enumerate(await adj_closes(pg_full, iid)):
+        expected = close / 5 if i < 40 else close  # once (x5), never x25
+        assert adj == pytest.approx(expected, rel=1e-12), i
+    assert "ADJUSTMENT_DUPLICATE_ACTION" in await actions_db.stock_warnings(pg_full, iid)
+    # a split and a bonus on one day are different types: both still combine (docs/05 8.2)
+    await pg_full.execute("DELETE FROM corporate_action WHERE purpose_text <> ''")
+    await add_action(pg_full, iid, ex, "bonus", 1, 1)
+    both = await actions_db.readjust_history(pg_full, "DUP", as_of=date(2026, 12, 31))
+    assert both["warnings"] == []
+    assert "ADJUSTMENT_DUPLICATE_ACTION" not in await actions_db.stock_warnings(pg_full, iid)
 
 
 async def test_act12_mixed_src_adjusted_bars_never_adjusted_twice(pg_full: asyncpg.Pool) -> None:

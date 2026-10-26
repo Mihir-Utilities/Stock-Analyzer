@@ -57,6 +57,7 @@ type ownerSink struct {
 	inserted, updated int
 	symbols           map[string]bool
 	actionIDs         []int64
+	dupes             []DuplicateAction // split/bonus ex-dates that now hold more than one row (B07R-1)
 
 	fi         []int32
 	fb, fp, fk []string
@@ -251,7 +252,14 @@ func (k *ownerSink) flushAction() error {
 		ids[i], days[i], types[i], purpose[i] = op.Inst, op.N.ExDate, op.N.Type, op.N.Purpose
 		num[i], den[i], amt[i] = op.N.RatioNum, op.N.RatioDen, op.N.Amount
 	}
+	if err := k.lockActionDays(); err != nil {
+		return err
+	}
+	before := len(k.actionIDs)
 	if err := k.count(k.tx.Query(k.ctx, upsertAction, ids, days, types, num, den, amt, purpose, k.source, k.batchID)); err != nil {
+		return err
+	}
+	if err := k.checkDuplicateDays(k.actionIDs[before:]); err != nil {
 		return err
 	}
 	k.ac = nil

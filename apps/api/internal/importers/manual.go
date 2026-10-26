@@ -99,6 +99,10 @@ func (s *Service) writeManual(ctx context.Context, ref stockRef, note string, ro
 		id := sink.actionIDs[0]
 		res.ID = &id
 	}
+	for _, d := range sink.dupes {
+		res.Warnings = append(res.Warnings, issue("ex_date", WarnDuplicateExDateAction,
+			fmt.Sprintf("another split or bonus (action id %d) already exists for %s on %s; the history is adjusted by the earliest one only", d.ID, d.Symbol, d.ExDate)))
+	}
 	var queued bool
 	res.PostImportJobID, queued = s.queuePostImport(ctx, batchID, []string{ref.Symbol})
 	if !queued {
