@@ -450,8 +450,10 @@ func TestALR64LinkCodeStorage(t *testing.T) {
 	if n != 1 || !bytes.Equal(hash, want[:]) {
 		t.Fatalf("stored rows %d, hash match %v", n, bytes.Equal(hash, want[:]))
 	}
+	// bytea position, not convert_from(): a random digest holds a zero byte 12% of the time, which no
+	// text encoding accepts (this test failed intermittently on that).
 	var plain int
-	if err := e.pool.QueryRow(context.Background(), `SELECT count(*) FROM telegram_link_code WHERE convert_from(code_hash, 'LATIN1') ILIKE '%' || $1 || '%'`, norm).Scan(&plain); err != nil || plain != 0 {
+	if err := e.pool.QueryRow(context.Background(), `SELECT count(*) FROM telegram_link_code WHERE position($1::bytea in code_hash) > 0 OR position($2::bytea in code_hash) > 0`, []byte(strings.ToUpper(norm)), []byte(strings.ToLower(norm))).Scan(&plain); err != nil || plain != 0 {
 		t.Fatalf("plaintext code found in the table (%d, %v)", plain, err)
 	}
 
