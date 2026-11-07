@@ -25,6 +25,8 @@ export interface ChartSeries {
   forecast?: boolean;
   /** Estimated values are marked in the table and tooltip. */
   estimated?: boolean;
+  /** Line/area series sharing a stack name are stacked (ownership composition). */
+  stack?: string;
   /** Index into the categorical palette; defaults to the series position (stable identity). */
   colorIndex?: number;
   /** Per-series formatter from format.ts; defaults to format.ts formatNumber. */
@@ -161,6 +163,7 @@ export function buildOption(data: ChartDataset, opts: BuildOptions): Record<stri
         showSymbol: !many,
         sampling: sampling ? "lttb" : undefined,
         connectNulls: false,
+        stack: s.stack,
         itemStyle: { color },
         lineStyle: { color, width: 2, type: s.forecast ? "dashed" : "solid" },
         areaStyle: s.kind === "area" ? { color, opacity: s.forecast ? 0.12 : 0.18 } : undefined,

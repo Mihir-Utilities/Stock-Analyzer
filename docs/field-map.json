@@ -109,5 +109,63 @@
     "batch_id": "results-deleted-note",
     "post_import_job_id": "results-deleted-warning",
     "warnings": "results-deleted-warning"
+  },
+  "GET /stocks/{symbol}/shareholding": {
+    "quarters": "chart-ownership-stack",
+    "promoter": "ownership-table",
+    "fii": "ownership-table",
+    "dii": "ownership-table",
+    "mf": "ownership-table",
+    "insurance": "ownership-table",
+    "govt": "ownership-table",
+    "public": "ownership-table",
+    "pledged": "chart-ownership-pledge",
+    "unit": "ownership-table",
+    "qoq_change": "chart-ownership-qoq",
+    "qoq_reason": "qoq-reason",
+    "latest_filed_on": "ownership-dates",
+    "mf_available": "mf-missing-note",
+    "note": "not-rendered|the fixed sentence MF_MISSING_COPY states the same fact in the spec's words, so the API note is not repeated (F08-5)",
+    "reason": "ownership-empty",
+    "entry_hint": "ownership-empty",
+    "source": "ownership-meta",
+    "last_updated": "ownership-dates"
+  },
+  "GET /stocks/{symbol}/events": {
+    "actions": "timeline",
+    "actions.id": "detected-action",
+    "actions.ex_date": "timeline",
+    "actions.record_date": "timeline",
+    "actions.type": "timeline",
+    "actions.status": "timeline",
+    "actions.ratio_num": "detected-summary",
+    "actions.ratio_den": "detected-summary",
+    "actions.amount_per_share": "timeline",
+    "actions.purpose_text": "timeline",
+    "actions.source": "timeline",
+    "calendar": "timeline",
+    "calendar.event_date": "timeline",
+    "calendar.type": "timeline",
+    "calendar.details": "timeline",
+    "calendar.source": "timeline",
+    "reason": "events-no-data",
+    "entry_hint": "events-no-data"
+  },
+  "GET /stocks/{symbol}/links": {
+    "links": "research-link"
+  },
+  "PATCH /stocks/{symbol}/actions/{id}": {
+    "id": "decision-result",
+    "symbol": "decision-result",
+    "ex_date": "decision-result",
+    "action_type": "decision-result",
+    "status": "decision-result",
+    "ratio_num": "confirm-ratio-num",
+    "ratio_den": "confirm-ratio-den",
+    "multiplier": "confirm-preview",
+    "future_ex_date": "decision-result",
+    "changed": "decision-result",
+    "warnings": "decision-result",
+    "post_import_job_id": "decision-result"
   }
 }

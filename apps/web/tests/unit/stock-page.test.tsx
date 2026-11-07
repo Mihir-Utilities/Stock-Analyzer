@@ -269,8 +269,9 @@ describe("UNCONFIRMED_ACTION and the soft flag (ACT-01)", () => {
     expect(banner.textContent).toMatch(
       /^Possible split or bonus on \d+ \w{3} 2026: price changed -50\.0%\. Confirm to adjust history\.$/,
     );
-    expect(screen.getByTestId("action-confirm")).toBeDisabled();
-    expect(screen.getByTestId("action-reject")).toBeDisabled();
+    // F08: the decision lives on the Events tab; the banner links there.
+    expect(screen.getByTestId("action-review-link").getAttribute("href")).toContain("tab=events");
+    expect(screen.queryByTestId("action-confirm")).toBeNull();
     // The detected date is covered, so the soft notice does not double up.
     expect(screen.queryByTestId("soft-flag")).toBeNull();
   });

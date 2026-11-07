@@ -119,7 +119,7 @@ test.describe("axe and touch targets on the stock page", () => {
               )
               .map((x) => `${x.id}: ${Math.round(x.r.width)}x${Math.round(x.r.height)}`),
           );
-          expect(await page.getByTestId("action-confirm").count()).toBe(1);
+          expect(await page.getByTestId("action-review-link").count()).toBe(1);
           expect(await page.getByTestId("soft-flag-dismiss").count()).toBe(1);
           expect(small).toEqual([]);
           const { scrollWidth, clientWidth } = await page.evaluate(() => ({

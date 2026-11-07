@@ -372,3 +372,11 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Not available yet (see F11-2, F11-7): growth vs benchmark, drawdown, treemap or waterfall charts, and removing an adjustment override (the button is disabled with its reason until the route exists).
 - Failure modes: if the summary shows "could not be loaded" with a request id, check the API log for that id. A fully sold stock is hidden unless "Show fully sold positions" is ticked; its realized P&L stays in the totals.
 - Tests: `npm test` (`portfolio-lib.test.ts`, `portfolio-page.test.tsx`), `npx playwright test tests/e2e/portfolio.spec.ts` after `npm run build:e2e`.
+
+## 46. Stock page: Ownership, Peers, Events and Data tabs (F08)
+
+- Routes: `?tab=ownership|peers|events|data` on `/stocks/{symbol}`. Data: `GET /stocks/{symbol}/shareholding` (6 h), `/events` and `/links` (shared with the Overview), `/prices?range=MAX` (history depth only), `GET /settings/prices-adjustment`. The Peers tab calls nothing (B13 not built).
+- Confirm / Reject of a detected action uses only `PATCH /stocks/{symbol}/actions/{id}`: confirm sends `{status, action_type, ratio_num, ratio_den}` (strings), reject `{status:"rejected"}`. Failure modes: 409 (rejected candidate, different numbers, or a confirmed split/bonus already on the ex-date: reject the candidate instead), 404 (action gone; the list reloads), 422 (field messages), `POST_IMPORT_NOT_QUEUED` (decision saved, press the button again to retry the recalculation).
+- A confirmed action cannot be changed from the UI; Dismiss and delete-action routes are decided (D-W) but not built, so nothing calls them.
+- If a stock shows the ADJUSTMENT_CONFLICT sentence on the Data tab, check which price file was raw (docs/01 3.7); nothing was adjusted.
+- Tests: `npm test` (`stock-f08.test.tsx`), `npx playwright test tests/e2e/stock-f08.spec.ts` after `npm run build:e2e`. Locally on Windows `stock-chart.spec.ts` "touch pinch" fails with and without F08 (checked by removing the only shared chart change); it is the known flake addressed for CI in 12bec25.
