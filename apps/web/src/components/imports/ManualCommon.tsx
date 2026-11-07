@@ -42,11 +42,14 @@ export function SymbolInput({
   onChange,
   error,
   testId,
+  readOnly = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   error: string | null;
   testId: string;
+  /** Stock page: the symbol is fixed to the page's stock. */
+  readOnly?: boolean;
 }) {
   return (
     <FormField
@@ -61,6 +64,7 @@ export function SymbolInput({
           data-testid={testId}
           className={inputClass}
           autoComplete="off"
+          readOnly={readOnly}
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />

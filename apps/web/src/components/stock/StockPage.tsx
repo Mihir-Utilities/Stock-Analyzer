@@ -35,6 +35,7 @@ import { StockHeader } from "./StockHeader";
 import { OverviewTab } from "./OverviewTab";
 import { AnalysisTab } from "./chart/AnalysisTab";
 import { ChartTab } from "./chart/ChartTab";
+import { FundamentalsTab } from "./fundamentals/FundamentalsTab";
 
 export const TAB_IDS = [
   "overview",
@@ -244,6 +245,7 @@ function Inner({ symbol }: { symbol: string }) {
         <AnalysisTab indicatorsLoad={indicatorsLoad} />
       );
     }
+    if (id === "fundamentals") return <FundamentalsTab symbol={profile.symbol} />;
     return <NotBuilt tab={TAB_LABELS[id]} />;
   };
 

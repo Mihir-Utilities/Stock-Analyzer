@@ -509,3 +509,18 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | F11-9 | Holding notes need one text per row but `DataTable` reasons are per column | Row-specific reasons (split in the day-change window, price converted for a later split, review needed items, fully sold) are in a Notes column; the other columns carry a generic reason | `SummarySection.tsx` |
 | F11-10 | "vs Nifty 50" delta | Value is the benchmark XIRR; the delta is your XIRR minus the benchmark in percentage points, shown only when both are known. The server note (same dated cash flows, price index, may use negative units, B11-10) is in the info popover | `SummarySection.tsx` |
 | F11-11 | Transaction list filters | Symbol filter goes to the server; side and date range filter the loaded pages in the browser. The list is paged 50 at a time with Load more | `TxnSection.tsx` |
+
+## F07 assumptions (Claude, 2026-10-27; owner may overrule, none blocks)
+
+| # | Question | Interim assumption | Where |
+|---|---|---|---|
+| F07-1 | Only the Results form (with Delete manual period) is embedded; Shareholding and Corporate action forms are not fundamentals | They belong to the Ownership and Events tabs (F08). Calendar events have no entry route (F13b-1) | `FundamentalsTab.tsx` |
+| F07-2 | Balance sheet and cash flow have no manual entry route | Shown from imports only; the empty group says to import balance_cashflow_annual.csv. No form is invented | `FundamentalsTab.tsx` |
+| F07-3 | Per-metric entry date is not in the API (only per-stock `last_updated`) | Per-row source (latest period, `source_by_metric`) plus one stamp for the stock with the stale flag from `meta.stale`; a row that mixes sources shows the MIXED_SOURCES warning text | `PeriodsTable.tsx` |
+| F07-4 | "QoQ/YoY as returned" | Only the `derived` arrays are shown (revenue_yoy, net_profit_yoy, op_margin, net_margin and any other key the API sends); nothing is computed in the browser except fcf = cfo - capex (docs/05 section 2, shown as a computed row) | `fundamentals.ts` |
+| F07-5 | Waterfall chain in docs/06a omits other income and exceptional items | Totals are the reported values (equal to the table); steps are differences of reported values and a labelled "Other items (balancing)" step closes the chain when non-zero. A missing input or a negative level shows the reason instead of a chart | `waterfall()` |
+| F07-6 | ROE decomposition and balance composition formulas are not in docs/05 | ROE decomposition is not drawn (needs margin, turnover and leverage parts the API does not return); the card says so. Balance composition stacks reported equity, borrowings and current liabilities with total assets as a line (liabilities exclude equity, D-Q; no "other" is invented) | `GroupCharts.tsx` |
+| F07-7 | Financial companies (FND-10) | No panel hiding yet; rows show only what was entered | `FundamentalsTab.tsx` |
+| F07-8 | `pe_percentile_5y` unit | Treated as a percent number 0-100 (CLAUDE.md rule); outside that range the strip is not drawn | `PeStrip` |
+| F07-9 | "Import CSV" prefilled with the symbol | The Import center takes no symbol parameter, so the link opens `/imports` plainly | `FundamentalsTab.tsx` |
+| F07-10 | Shared edits | `ChartSeries` gained optional `stack` and `floatBase` (invisible base series, not in legend, table or tooltip); `ResultsForm` gained optional `fixed` and `onChanged` props and `SymbolInput` `readOnly`; the tab queries `/fundamentals?basis=&period=` under its own cache key | `chart-data.ts`, `ResultsForm.tsx` |

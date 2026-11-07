@@ -372,3 +372,11 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Not available yet (see F11-2, F11-7): growth vs benchmark, drawdown, treemap or waterfall charts, and removing an adjustment override (the button is disabled with its reason until the route exists).
 - Failure modes: if the summary shows "could not be loaded" with a request id, check the API log for that id. A fully sold stock is hidden unless "Show fully sold positions" is ticked; its realized P&L stays in the totals.
 - Tests: `npm test` (`portfolio-lib.test.ts`, `portfolio-page.test.tsx`), `npx playwright test tests/e2e/portfolio.spec.ts` after `npm run build:e2e`.
+
+## Stock page Fundamentals tab (F07)
+
+- Tab `?tab=fundamentals`. Data: `GET /stocks/{symbol}/fundamentals?basis=&period=` (cache key `fundamentals-tab`, separate from the Overview KPI call). Toggles: Quarterly/Annual, Auto/Consolidated/Standalone (a basis the API does not list in `basis_available` is disabled), groups P&L, Balance sheet, Cash flow, Ratios, Valuation.
+- One basis per response (B05-5): the warning BASIS_NOT_MIXED is shown with the API count; `basis_note` explains an auto fallback to standalone. DERIVED_STALE means growth, margins, ratios and valuation predate the latest entry; they refresh after the next analytics run. Until D05b (held by the owner) writes the snapshot, those cells show a dash with "not computed yet" (`*_reason = not_computed`).
+- Add or restate a period: "Add results" or the per-column "Edit" opens the F13b Results form with the symbol locked; saving refetches the stock queries. "Delete manual period" removes only manual values (CSV values stay). Balance sheet and cash flow come only from the balance_cashflow_annual.csv import (F07-2).
+- Failure modes: an error card with a request id means the fundamentals call failed (check the API log for the id); the stale stamp follows `meta.stale` (120 days without a fundamentals update). "Last updated" is the newest entry among the values shown (D-R).
+- Tests: `npm test` (`fundamentals-tab.test.tsx`), `npx playwright test tests/e2e/stock-fundamentals.spec.ts` after `npm run build:e2e`.
