@@ -37,11 +37,13 @@ Compute everything analytical: indicators, returns/risk, scores, owner-data-deri
 ## Acceptance criteria (all must be true)
 Split (tasks/README.md): **D05a** = indicators, returns/risk, analysis-tab series, `analysis_snapshot` (indicators), `compute_analysis` hook and CLI job, `screener_row` price metrics. **D05b** = derived fundamentals, scores, shareholding, fundamental screener keys, `docs/definitions.json` (waits for B05).
 
-- [ ] All FND-* and SHP-* analytics tests pass (D05b; not started)
+- [x] All FND-* and SHP-* analytics tests pass (D05b): FND-01/04..10/13/14/16 and SHP-02..04 plus new rows FND-81..FND-89, FND-99..FND-103, SHP-09 in `tests/test_fundamentals.py` (46 tests), `tests/test_fundamentals_db.py`; scores SCO-81..SCO-85 in `tests/test_scores.py` (23 tests)
 - [x] Indicators within stated tolerance of reference after warm-up (D05a): `tests/test_indicators.py` (EMA vs pandas `ewm` at 1e-6 after 3n bars, RSI vs a naive Wilder reference at 1e-12, hand-computed ATR/ADX/Stochastic/OBV/Bollinger/MACD values), `tests/test_returns.py` (returns, CAGR, vol, drawdown, beta, Sharpe-like, liquidity), `tests/test_analysis_snapshot.py`, `tests/test_analysis_db.py` (Postgres 16: idempotence, retention, stale snapshots, warnings, screener metrics, `post_import` wiring)
-- [ ] Stocks without owner data produce null fundamentals with `no_data_entered` (D05b; not started)
+- [x] Stocks without owner data produce null fundamentals with `no_data_entered` (D05b): `fundamentals = {}`, `fundamentals_meta.reason`, quality score reason (FND-85, `test_fnd_db_no_owner_data_writes_empty_tree_with_reason`)
 
 D05a-specific evidence: edge-case rows IND-81..IND-92 and RET-81..RET-93 in `docs/07-edge-cases-tests.md`; assumptions D05a-A1..A8 in `docs/OPEN_QUESTIONS.md`; operations in `docs/RUNBOOK.md` section 16. Not done in D05a: `docs/definitions.json` generator (D05b, A8).
+
+D05b-specific evidence: assumptions D05b-1..D05b-17 in `docs/OPEN_QUESTIONS.md`; operations in `docs/RUNBOOK.md` section 57. Deliberately not done: `docs/definitions.json` generator (no format specified, D05b-16), `ema50` (D05b-17).
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `FND-01` (see `docs/07-edge-cases-tests.md`)
