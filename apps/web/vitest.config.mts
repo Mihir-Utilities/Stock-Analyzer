@@ -12,5 +12,8 @@ export default defineConfig({
     include: ["tests/unit/**/*.test.{ts,tsx}"],
     setupFiles: ["tests/unit/setup.ts"],
     css: false,
+    // Under a parallel full run (or a 2-CPU CI runner) single tests are slow, not wrong.
+    testTimeout: 15000,
+    hookTimeout: 15000,
   },
 });

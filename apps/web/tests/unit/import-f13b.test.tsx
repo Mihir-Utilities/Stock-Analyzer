@@ -1,8 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AddStockForm } from "@/components/imports/AddStockForm";
 import { ActionForm } from "@/components/imports/ActionForm";
 import { BatchesTab } from "@/components/imports/BatchesTab";
 import { ImportCenter } from "@/components/imports/ImportCenter";
@@ -10,6 +13,7 @@ import { ImportWizard } from "@/components/imports/ImportWizard";
 import { REENTRY_COPY, ResultsForm } from "@/components/imports/ResultsForm";
 import { ShareholdingForm } from "@/components/imports/ShareholdingForm";
 import { undoVerdict } from "@/lib/imports/batches";
+import { holidayYears } from "@/lib/imports/holidays";
 import {
   cleanNumber,
   parseDate,
@@ -51,8 +55,20 @@ function openDialog(): HTMLElement {
 // Typing into many fields is slow on a loaded machine (the full suite runs in parallel).
 vi.setConfig({ testTimeout: 30000 });
 
-beforeEach(() => vi.unstubAllGlobals());
-afterEach(() => vi.unstubAllGlobals());
+// Fixed clock (only Date is faked, so timers and user-event keep working): no test reads the wall clock.
+const NOW = Date.parse("2026-10-26T06:00:00Z");
+const DAY_MS = 86_400_000;
+const RECENT = "2026-10-26T05:00:00Z";
+
+beforeEach(() => {
+  vi.unstubAllGlobals();
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
 const manualOk = {
   batch_id: 21,
@@ -445,8 +461,8 @@ describe("Batches (IMP-14, IMP-44, IMP-53, IMP-55)", () => {
 
   it("lists batches with Undo only where allowed and the overwrite warning in the dialog", async () => {
     const user = userEvent.setup();
-    const recent = new Date().toISOString();
-    renderWith(<BatchesTab />, {
+    const recent = RECENT;
+    renderWith(<BatchesTab now={NOW} />, {
       "GET /imports/batches": list([
         batch({ id: 9, created_at: recent }),
         batch({ id: 8, kind: "prices", created_at: recent }),
@@ -466,8 +482,8 @@ describe("Batches (IMP-14, IMP-44, IMP-53, IMP-55)", () => {
 
   it("undo shows the warning codes as sentences, refreshes the list and focuses the result", async () => {
     const user = userEvent.setup();
-    const recent = new Date().toISOString();
-    const mock = renderWith(<BatchesTab />, {
+    const recent = RECENT;
+    const mock = renderWith(<BatchesTab now={NOW} />, {
       "GET /imports/batches": list([batch({ id: 9, created_at: recent })]),
       "POST /imports/batches/9/undo": ok({
         batch_id: 9,
@@ -497,8 +513,8 @@ describe("Batches (IMP-14, IMP-44, IMP-53, IMP-55)", () => {
 
   it("UNDO_REMOVED_NOTHING is a sentence", async () => {
     const user = userEvent.setup();
-    renderWith(<BatchesTab />, {
-      "GET /imports/batches": list([batch({ id: 9, created_at: new Date().toISOString() })]),
+    renderWith(<BatchesTab now={NOW} />, {
+      "GET /imports/batches": list([batch({ id: 9, created_at: RECENT })]),
       "POST /imports/batches/9/undo": ok({
         batch_id: 9,
         removed: 0,
@@ -516,9 +532,9 @@ describe("Batches (IMP-14, IMP-44, IMP-53, IMP-55)", () => {
 
   it("IMP-53: 409 UNDO_HAS_DEPENDENTS explains that nothing changed", async () => {
     const user = userEvent.setup();
-    renderWith(<BatchesTab />, {
+    renderWith(<BatchesTab now={NOW} />, {
       "GET /imports/batches": list([
-        batch({ id: 9, kind: "corporate_actions", created_at: new Date().toISOString() }),
+        batch({ id: 9, kind: "corporate_actions", created_at: RECENT }),
       ]),
       "POST /imports/batches/9/undo": fail(409, "UNDO_HAS_DEPENDENTS", "has dependents", {
         dependents: { portfolio_adjustment: 1 },
@@ -533,8 +549,8 @@ describe("Batches (IMP-14, IMP-44, IMP-53, IMP-55)", () => {
 
   it("UI-32: a double click on Undo batch sends exactly one POST", async () => {
     const user = userEvent.setup();
-    const mock = renderWith(<BatchesTab />, {
-      "GET /imports/batches": list([batch({ id: 9, created_at: new Date().toISOString() })]),
+    const mock = renderWith(<BatchesTab now={NOW} />, {
+      "GET /imports/batches": list([batch({ id: 9, created_at: RECENT })]),
       "POST /imports/batches/9/undo": ok({
         batch_id: 9,
         removed: 1,
@@ -554,12 +570,12 @@ describe("Batches (IMP-14, IMP-44, IMP-53, IMP-55)", () => {
   });
 
   it("empty and error states", async () => {
-    renderWith(<BatchesTab />, { "GET /imports/batches": list([]) });
+    renderWith(<BatchesTab now={NOW} />, { "GET /imports/batches": list([]) });
     expect((await screen.findByTestId("empty-state")).textContent).toContain("No import batches");
   });
 
   it("an error shows Retry", async () => {
-    renderWith(<BatchesTab />, {
+    renderWith(<BatchesTab now={NOW} />, {
       "GET /imports/batches": fail(500, "INTERNAL", "boom"),
     });
     expect(await screen.findByTestId("batches-error")).toBeTruthy();
@@ -628,6 +644,13 @@ describe("Wizard for the other kinds (IMP-01, IMP-11, IMP-27, IMP-44)", () => {
     expect(screen.getByTestId("result-undo-note").textContent).toContain("Batches tab");
   });
 
+  const holidaysFile = () =>
+    new File(
+      ["date,description,segment\n2026-01-26,Republic Day,\n2027-01-26,Republic Day,\n"],
+      "holidays.csv",
+      { type: "text/csv" },
+    );
+
   it("IMP-27: the holidays wizard says commit replaces the years, and the batch cannot be undone", async () => {
     const user = userEvent.setup();
     renderWith(<ImportWizard initialKind="holidays" />, {
@@ -639,15 +662,18 @@ describe("Wizard for the other kinds (IMP-01, IMP-11, IMP-27, IMP-44)", () => {
       }),
       "POST /imports/holidays/commit": ok({ ...commitOk, inserted: 14, updated: 0 }),
     });
-    await user.upload(screen.getByTestId("import-file"), csv());
+    await user.upload(screen.getByTestId("import-file"), holidaysFile());
     await user.click(screen.getByTestId("wizard-next"));
     expect((await screen.findByTestId("import-holidays-note")).textContent).toContain(
       "replaces every stored holiday",
     );
+    // F13bR-1: the years the commit replaces are listed in the banner and the dialog.
+    expect(screen.getByTestId("import-holidays-years").textContent).toContain("2026, 2027");
     await user.click(screen.getByTestId("wizard-next"));
     await user.click(screen.getByTestId("wizard-commit"));
     expect(openDialog().textContent).toContain("This batch cannot be undone");
     expect(openDialog().textContent).toContain("replaced");
+    expect(openDialog().textContent).toContain("Years replaced: 2026, 2027.");
     await user.click(within(openDialog()).getByTestId("confirm-ok"));
     expect((await screen.findByTestId("result-undo-note")).textContent).toContain(
       "cannot be undone",
@@ -688,4 +714,277 @@ describe("Import center tabs", () => {
     expect(screen.getByTestId("action-form")).toBeTruthy();
     expect(mock.calls.filter((c) => c.method !== "GET")).toHaveLength(0);
   });
+});
+
+describe("F13bR review fixes", () => {
+  const csv = () => new File(["a,b\n1,2\n"], "f.csv", { type: "text/csv" });
+  const valid = (rows = 12) => ({
+    upload_id: "55555555-5555-4555-8555-555555555555",
+    upload_group: null,
+    rows,
+    preview: [{ symbol: "TCS" }],
+    errors: [],
+    warnings: [],
+    error_count: 0,
+    warning_count: 0,
+    estimated_growth_mb: null,
+    prices_already_adjusted: null,
+  });
+
+  it.each([
+    ["results_annual", true],
+    ["balance_cashflow", true],
+    ["fundamentals_long", true],
+    ["corporate_actions", true],
+    ["instrument_meta", false],
+  ] as const)(
+    "IMP-62: the %s wizard links its template and states the undo rule in the commit dialog",
+    async (kind, canUndo) => {
+      const user = userEvent.setup();
+      renderWith(<ImportWizard initialKind={kind} />, {
+        [`POST /imports/${kind}/validate`]: ok(valid()),
+        [`POST /imports/${kind}/commit`]: ok(commitOk),
+      });
+      expect(screen.getByTestId("import-template-link").getAttribute("href")).toBe(
+        `/api/v1/imports/templates/${kind}`,
+      );
+      await user.upload(screen.getByTestId("import-file"), csv());
+      await user.click(screen.getByTestId("wizard-next"));
+      await user.click(await screen.findByTestId("wizard-next"));
+      await user.click(screen.getByTestId("wizard-commit"));
+      const text = openDialog().textContent ?? "";
+      if (canUndo) {
+        expect(text).toContain("You can undo it for 30 days");
+        expect(text).not.toContain("cannot be undone");
+      } else {
+        expect(text).toContain("This batch cannot be undone");
+        expect(text).not.toContain("You can undo");
+      }
+      await user.click(within(openDialog()).getByTestId("confirm-ok"));
+      const note = (await screen.findByTestId("result-undo-note")).textContent ?? "";
+      expect(note.includes("Batches tab")).toBe(canUndo);
+      expect(note.includes("cannot be undone")).toBe(!canUndo);
+    },
+  );
+
+  it("IMP-63: a corporate actions commit shows the DUPLICATE_EX_DATE_ACTION warning as a sentence", async () => {
+    const user = userEvent.setup();
+    renderWith(<ImportWizard initialKind="corporate_actions" />, {
+      "POST /imports/corporate_actions/validate": ok(valid()),
+      "POST /imports/corporate_actions/commit": ok({
+        ...commitOk,
+        warnings: ["DUPLICATE_EX_DATE_ACTION"],
+      }),
+    });
+    await user.upload(screen.getByTestId("import-file"), csv());
+    await user.click(screen.getByTestId("wizard-next"));
+    await user.click(await screen.findByTestId("wizard-next"));
+    await user.click(screen.getByTestId("wizard-commit"));
+    await user.click(within(openDialog()).getByTestId("confirm-ok"));
+    const w = await screen.findByTestId("result-warning");
+    expect(w.textContent).toContain("same ex-date");
+    expect(w.textContent).not.toContain("DUPLICATE_EX_DATE_ACTION");
+  });
+
+  it("IMP-64: a holidays file without a readable date column says the years are unknown", async () => {
+    const user = userEvent.setup();
+    renderWith(<ImportWizard initialKind="holidays" />, {
+      "POST /imports/holidays/validate": ok(valid()),
+    });
+    await user.upload(screen.getByTestId("import-file"), csv());
+    await user.click(screen.getByTestId("wizard-next"));
+    expect((await screen.findByTestId("import-holidays-years")).textContent).toContain(
+      "could not be read",
+    );
+  });
+
+  it("holidayYears: distinct sorted years from any accepted date format, bad rows skipped", () => {
+    expect(
+      holidayYears(
+        '﻿description;DATE;segment\r\nA;30-Dec-2027;\r\nB;2026-01-26;trading\r\n"C, D";26-01-2026;\r\nE;not a date;\r\n\r\nF;2028-02-30;\r\n',
+      ),
+    ).toEqual([2026, 2027]);
+    expect(holidayYears("a,b\n1,2\n")).toEqual([]);
+    expect(holidayYears("")).toEqual([]);
+  });
+
+  it("the holidays template text is true: the served template has the header row only", async () => {
+    const served = readFileSync(
+      join(process.cwd(), "../../fixtures/templates/holidays.csv"),
+      "utf8",
+    );
+    expect(served.split(/\r?\n/).filter((l) => l.trim() !== "")).toEqual([
+      "date,description,segment",
+    ]);
+    renderWith(<ImportCenter />, {});
+    await userEvent.setup().click(screen.getByTestId("tab-templates"));
+    expect(screen.getByTestId("template-holidays").nextElementSibling?.textContent).toContain(
+      "header row only",
+    );
+  });
+
+  const batchAt = (id: number, ageMs: number) =>
+    batch({ id, created_at: new Date(NOW - ageMs).toISOString() });
+
+  it("IMP-65: the 30-day boundary is exact (30 days undoable, 30 days + 1 ms not)", () => {
+    expect(undoVerdict(batchAt(1, 30 * DAY_MS), NOW).undoable).toBe(true);
+    const late = undoVerdict(batchAt(2, 30 * DAY_MS + 1), NOW);
+    expect(late).toEqual({ undoable: false, reason: "Older than 30 days." });
+  });
+
+  it("IMP-65: the Batches tab applies the injected clock at the boundary and shows the reason", async () => {
+    renderWith(<BatchesTab now={NOW} />, {
+      "GET /imports/batches": ok({
+        items: [batchAt(31, 30 * DAY_MS), batchAt(32, 30 * DAY_MS + 1)],
+        next_cursor: null,
+      }),
+    });
+    await screen.findByTestId("batches-table");
+    expect(screen.getByTestId("batch-undo-31")).toBeTruthy();
+    expect(screen.queryByTestId("batch-undo-32")).toBeNull();
+    expect(screen.getByTestId("batch-no-undo-32").textContent).toContain("Older than 30 days");
+  });
+
+  it("IMP-65: without a prop the Batches tab uses the clock (fixed here), not a stale value", async () => {
+    renderWith(<BatchesTab />, {
+      "GET /imports/batches": ok({
+        items: [batchAt(41, 30 * DAY_MS), batchAt(42, 30 * DAY_MS + 1)],
+        next_cursor: null,
+      }),
+    });
+    await screen.findByTestId("batches-table");
+    expect(screen.getByTestId("batch-undo-41")).toBeTruthy();
+    expect(screen.queryByTestId("batch-undo-42")).toBeNull();
+  });
+
+  it("IMP-66: Load more follows next_cursor and appends the next page; it disappears at the end", async () => {
+    const user = userEvent.setup();
+    const mock = renderWith(<BatchesTab now={NOW} />, {
+      "GET /imports/batches": (call) =>
+        call.query.get("cursor") === "c1"
+          ? ok({ items: [batch({ id: 1, created_at: RECENT })], next_cursor: null })
+          : ok({ items: [batch({ id: 2, created_at: RECENT })], next_cursor: "c1" }),
+    });
+    await screen.findByTestId("batch-row-2");
+    expect(screen.queryByTestId("batch-row-1")).toBeNull();
+    await user.click(screen.getByTestId("batches-more"));
+    await screen.findByTestId("batch-row-1");
+    expect(screen.getByTestId("batch-row-2")).toBeTruthy();
+    expect(screen.queryByTestId("batches-more")).toBeNull();
+    const reqs = mock.calls.filter((c) => c.path === "/imports/batches");
+    expect(reqs[0]?.query.get("limit")).toBe("50");
+    expect(reqs[1]?.query.get("cursor")).toBe("c1");
+  });
+
+  it("UI-32: a same-tick double submit of Add stock sends one POST", async () => {
+    const user = userEvent.setup();
+    const mock = renderWith(<AddStockForm />, {
+      "POST /instruments": ok({ id: 3, symbol: "TCS", warnings: [] }, 201),
+    });
+    const release = hold(mock, "/instruments");
+    await user.type(screen.getByTestId("add-stock-symbol"), "TCS");
+    await user.type(screen.getByTestId("add-stock-name"), "Tata Consultancy Services Ltd");
+    const form = screen.getByTestId("add-stock-submit").closest("form") as HTMLFormElement;
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    release();
+    await screen.findByTestId("add-stock-added");
+    expect(mock.calls.filter((c) => c.method === "POST")).toHaveLength(1);
+  });
+
+  type User = ReturnType<typeof userEvent.setup>;
+  type FormCase = {
+    name: string;
+    mount: () => ReactElement;
+    route: string;
+    saved: string;
+    submit: string;
+    serverField: string;
+    fillValid: (u: User) => Promise<void>;
+    makeInvalid: (u: User) => Promise<void>;
+  };
+  const type = async (u: User, id: string, text: string) => {
+    const el = screen.getByTestId(id);
+    await u.clear(el);
+    await u.type(el, text);
+  };
+  const formCases: FormCase[] = [
+    {
+      name: "results",
+      mount: () => <ResultsForm />,
+      route: "POST /stocks/TCS/results",
+      saved: "results-saved",
+      submit: "results-submit",
+      serverField: "values.net_profit",
+      fillValid: async (u) => {
+        await type(u, "results-symbol", "TCS");
+        await type(u, "results-period-end", "2026-09-30");
+        await type(u, "results-revenue", "100");
+      },
+      makeInvalid: (u) => type(u, "results-revenue", "12,34"),
+    },
+    {
+      name: "shareholding",
+      mount: () => <ShareholdingForm />,
+      route: "POST /stocks/INFY/shareholding",
+      saved: "shareholding-saved",
+      submit: "shareholding-submit",
+      serverField: "fii",
+      fillValid: async (u) => {
+        await type(u, "shareholding-symbol", "INFY");
+        await type(u, "shareholding-quarter-end", "2026-09-30");
+        await type(u, "shareholding-promoter", "50");
+      },
+      makeInvalid: (u) => type(u, "shareholding-promoter", "101"),
+    },
+    {
+      name: "action",
+      mount: () => <ActionForm />,
+      route: "POST /stocks/TCS/actions",
+      saved: "action-saved",
+      submit: "action-submit",
+      serverField: "amount_per_share",
+      fillValid: async (u) => {
+        await type(u, "action-symbol", "TCS");
+        await type(u, "action-ex-date", "2026-09-12");
+        await type(u, "action-ratio-num", "10");
+        await type(u, "action-ratio-den", "2");
+      },
+      makeInvalid: (u) => type(u, "action-ratio-den", "10"),
+    },
+  ];
+
+  it.each(formCases)(
+    "IMP-67: the $name form drops the old saved panel when the next submit hits a local error",
+    async (c) => {
+      const user = userEvent.setup();
+      renderWith(c.mount(), { [c.route]: ok({ ...manualOk, id: 1 }, 201) });
+      await c.fillValid(user);
+      await user.click(screen.getByTestId(c.submit));
+      await screen.findByTestId(c.saved);
+      await c.makeInvalid(user);
+      await user.click(screen.getByTestId(c.submit));
+      expect((await screen.findAllByTestId("form-field-error")).length).toBeGreaterThan(0);
+      expect(screen.queryByTestId(c.saved)).toBeNull();
+    },
+  );
+
+  it.each(formCases)(
+    "IMP-67: the $name form drops an old server field error when the next submit hits a local error",
+    async (c) => {
+      const user = userEvent.setup();
+      renderWith(c.mount(), {
+        [c.route]: fail(422, "VALIDATION", "invalid", {
+          fields: [{ field: c.serverField, message: "STALE-SERVER-MESSAGE" }],
+        }),
+      });
+      await c.fillValid(user);
+      await user.click(screen.getByTestId(c.submit));
+      await screen.findByText(/STALE-SERVER-MESSAGE/);
+      await c.makeInvalid(user);
+      await user.click(screen.getByTestId(c.submit));
+      expect((await screen.findAllByTestId("form-field-error")).length).toBeGreaterThan(0);
+      expect(screen.queryByText(/STALE-SERVER-MESSAGE/)).toBeNull();
+    },
+  );
 });

@@ -132,9 +132,13 @@ export async function fetchDbStatus() {
   return { db: r.data.db, asOf: r.meta?.as_of ?? null };
 }
 
-export async function fetchBatches(limit = 50) {
-  const r = await apiRequest("/imports/batches", { query: { limit }, schema: batchListSchema });
-  return r.data.items;
+/** One page of batches, newest first; `next_cursor` is null on the last page (docs/03 section 1). */
+export async function fetchBatches(limit = 50, cursor?: string) {
+  const r = await apiRequest("/imports/batches", {
+    query: { limit, cursor },
+    schema: batchListSchema,
+  });
+  return { items: r.data.items, next: r.data.next_cursor ?? null };
 }
 
 export async function undoBatch(id: number) {

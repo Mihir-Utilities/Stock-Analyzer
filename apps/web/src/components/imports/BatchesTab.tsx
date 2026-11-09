@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Banner } from "@/components/ui/banners";
 import { Card } from "@/components/ui/Card";
@@ -40,13 +40,21 @@ function dependentsText(error: unknown): string {
   return `A portfolio adjustment${count} uses a corporate action of this batch, so nothing was changed. Remove the adjustment first, then undo the batch.`;
 }
 
+const BATCH_PAGE = 50;
+
 const headingClass =
   "text-body font-semibold text-text-1 outline-none focus-visible:outline-2 focus-visible:outline-accent";
 
 /** Batches tab: list of import batches with Undo for the kinds that allow it (IMP-14, IMP-44). */
-export function BatchesTab() {
+export function BatchesTab({ now }: { now?: number } = {}) {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: ["import-batches"], queryFn: () => fetchBatches(50) });
+  const q = useInfiniteQuery({
+    queryKey: ["import-batches"],
+    queryFn: ({ pageParam }) => fetchBatches(BATCH_PAGE, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.next ?? undefined,
+  });
+  const batches = q.data?.pages.flatMap((p) => p.items) ?? [];
   const [target, setTarget] = useState<Batch | null>(null);
   const [done, setDone] = useState<UndoResult | null>(null);
   const [failure, setFailure] = useState<{ batch: number; text: string; code: string } | null>(
@@ -151,7 +159,7 @@ export function BatchesTab() {
             </button>
           </div>
         </div>
-      ) : q.data.length === 0 ? (
+      ) : batches.length === 0 ? (
         <EmptyState message="No import batches yet. Batches appear here after the first import." />
       ) : (
         <div
@@ -172,8 +180,8 @@ export function BatchesTab() {
               </tr>
             </thead>
             <tbody>
-              {q.data.map((b) => {
-                const v = undoVerdict(b);
+              {batches.map((b) => {
+                const v = undoVerdict(b, now);
                 return (
                   <tr
                     key={b.id}
@@ -224,6 +232,19 @@ export function BatchesTab() {
           </table>
         </div>
       )}
+      {q.hasNextPage ? (
+        <div className="mt-3">
+          <button
+            type="button"
+            data-testid="batches-more"
+            disabled={q.isFetchingNextPage}
+            onClick={() => void q.fetchNextPage()}
+            className="touch-target h-9 rounded-control border border-border px-3 text-body-sm hover:bg-surface-3 disabled:opacity-50"
+          >
+            {q.isFetchingNextPage ? "Loading" : "Load more"}
+          </button>
+        </div>
+      ) : null}
       <ConfirmDialog
         open={target !== null}
         title={target ? `Undo batch ${target.id}?` : "Undo batch?"}

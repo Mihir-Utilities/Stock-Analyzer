@@ -387,3 +387,12 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Edit: only really changed fields are sent (compared as normalised decimals); with nothing changed Save is disabled. Price and fees above 1e13 and impossible dates are refused before sending, as the server does.
 - Focus returns to Add transaction or the row Edit button when a form closes; a polite live region announces the result.
 - Tests: `portfolio-review.test.tsx`, `portfolio-lib.test.ts`; axe e2e covers the edit form, delete dialog and error states (`tests/e2e/portfolio.spec.ts`). The DataTable cases in `ui-components.test.tsx` have an explicit 20 s budget for loaded runs.
+
+## 48. Import center review fixes (F13bR)
+
+- Holidays: the review banner and the commit dialog list the years the commit replaces. The validate response has no year summary, so the browser reads the `date` column of the chosen file (`lib/imports/holidays.ts`); if that fails the text says the years could not be read and the server still replaces every year in the file. An API field `years` would be better (F13bR-1).
+- Batches tab: pages of 50 with Load more (`cursor` = `next_cursor`). `BatchesTab` takes an optional `now` (ms) for the 30-day Undo window; tests pass it, the app uses the clock.
+- Manual forms clear the old saved panel and old server errors when the next submit fails local validation. Add stock is single-flight like the other forms.
+- Validator parity: `fixtures/validation-cases.json` is read by `apps/api/internal/importers/parity_test.go` (authoritative) and `apps/web/tests/unit/validation-parity.test.ts`. To change a rule: change the Go validator, add or change the cases, then fix `entry-validate.ts` until both pass. Fixture strings must stay free of deny-list names.
+- Unit tests under load: vitest `testTimeout` and `hookTimeout` are 15 s. The UI-05 timing tests multiply the frame budget by `loadScale()` (`tests/unit/load-scale.ts`, a fixed CPU calibration, never below 1). A timing failure that appears only in a full parallel run is load, not a regression: rerun the file alone first.
+- Tests: `npm test`; `go test ./internal/importers -run TestValidationParity -count=1` (no database).
