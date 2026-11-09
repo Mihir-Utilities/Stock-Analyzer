@@ -101,7 +101,7 @@ test.describe("footer on every page (SAF-03)", () => {
     await expect(page.getByTestId("app-disclaimer")).toBeVisible();
     await expect(page.getByTestId("mf-attribution")).toHaveCount(0);
     await page.goto("/mf");
-    await expect(page.getByTestId("mf-attribution")).toHaveText("NAV data: AMFI via mfapi.in.");
+    await expect(page.getByTestId("mf-attribution")).toHaveText("NAV data: AMFI, via mfapi.in");
   });
 });
 

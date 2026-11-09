@@ -42,7 +42,7 @@ describe("footer disclaimer (SAF-03)", () => {
     expect(DISCLAIMER).toBe(
       "Personal research tool. Data may be delayed, incomplete or wrong. Not investment advice.",
     );
-    expect(MF_ATTRIBUTION).toBe("NAV data: AMFI via mfapi.in.");
+    expect(MF_ATTRIBUTION).toBe("NAV data: AMFI, via mfapi.in");
   });
 
   it.each([

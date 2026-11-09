@@ -1,7 +1,8 @@
 // Footer disclaimer on every page (SAF-03). Strings are exact (docs/06-frontend-spec.md section 9).
 export const DISCLAIMER =
   "Personal research tool. Data may be delayed, incomplete or wrong. Not investment advice.";
-export const MF_ATTRIBUTION = "NAV data: AMFI via mfapi.in.";
+// D-W 7 / B10-8: the comma is part of the text; it is the string the API sends in `attribution`.
+export const MF_ATTRIBUTION = "NAV data: AMFI, via mfapi.in";
 
 export function isMutualFundPath(pathname: string): boolean {
   return pathname === "/mf" || pathname.startsWith("/mf/");
