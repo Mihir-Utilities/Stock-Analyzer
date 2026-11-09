@@ -52,6 +52,23 @@ export async function confirmAction(
   return r.data;
 }
 
+/**
+ * Repeat of a saved decision without numbers: the server answers `changed=false` and enqueues
+ * `post_import` again (ACT-35, B07R-5). This is the retry after POST_IMPORT_NOT_QUEUED.
+ */
+export async function repeatDecision(
+  symbol: string,
+  id: number,
+  verb: "confirmed" | "rejected",
+): Promise<PatchResult> {
+  const r = await apiRequest(path(symbol, id), {
+    method: "PATCH",
+    body: { status: verb },
+    schema: patchResultSchema,
+  });
+  return r.data;
+}
+
 export async function rejectAction(symbol: string, id: number): Promise<PatchResult> {
   const r = await apiRequest(path(symbol, id), {
     method: "PATCH",
@@ -70,6 +87,9 @@ export function multiplierOf(type: "split" | "bonus", num: number, den: number):
 export const TOLERANCE = 0.03;
 export const EXTREME_HIGH = 100;
 export const EXTREME_LOW = 0.01;
+/** Same limits as the API's `decimalCell` for ratios: at most 4 decimals, below 100,000,000. */
+export const RATIO_DECIMALS = 4;
+export const RATIO_LIMIT = 100_000_000;
 
 export interface RatioForm {
   type: "split" | "bonus" | "";
@@ -125,6 +145,15 @@ export function previewConfirm(form: RatioForm, candidate: CorporateAction): Pre
   ) {
     errors.ratio_num = "A split with equal ratios changes nothing.";
   }
+  const limits = (field: "ratio_num" | "ratio_den", c: typeof num) => {
+    if (errors[field] || !c.ok || c.value === null) return;
+    const decimals = (c.value.split(".")[1] ?? "").replace(/0+$/, "");
+    if (decimals.length > RATIO_DECIMALS) {
+      errors[field] = `The ratio may have at most ${RATIO_DECIMALS} decimal places.`;
+    } else if (Number(c.value) >= RATIO_LIMIT) errors[field] = "The ratio is too large.";
+  };
+  limits("ratio_num", num);
+  limits("ratio_den", den);
   const bad = Object.keys(errors).length > 0;
   if (bad || form.type === "" || !num.ok || !den.ok || num.value === null || den.value === null) {
     return { errors, multiplier: null, warnings: [], clean: null };
@@ -132,7 +161,8 @@ export function previewConfirm(form: RatioForm, candidate: CorporateAction): Pre
   const mult = multiplierOf(form.type, Number(num.value), Number(den.value));
   const warnings: Preview["warnings"] = [];
   const implied = detectedMultiplier(candidate);
-  if (mult !== null && implied !== null && Math.abs(mult - implied) / implied > TOLERANCE) {
+  // The API compares decimals; the 1e-9 slack keeps exactly 3% silent (5.15 against 5) in floats.
+  if (mult !== null && implied !== null && Math.abs(mult - implied) / implied - TOLERANCE > 1e-9) {
     warnings.push({
       code: "RATIO_DISAGREES_WITH_DETECTED",
       message: `The multiplier ${fmt4(mult)} differs by more than 3% from the one implied by the detected price change (${fmt4(implied)}). Check the ratio.`,
@@ -150,7 +180,7 @@ export function previewConfirm(form: RatioForm, candidate: CorporateAction): Pre
 /** Plain-language lines for the warning codes the PATCH answer can carry (B07, B07R). */
 export const WARNING_COPY: Record<string, string> = {
   POST_IMPORT_NOT_QUEUED:
-    "Your decision is saved, but the recalculation could not be queued. Press the same button again to retry.",
+    "Your decision is saved, but the recalculation could not be queued. Use Retry recalculation to try again.",
   ADJUSTMENT_SKIPPED_SRC_ADJUSTED:
     "The prices around this date were imported as already adjusted, so the history was not changed again. Nothing is adjusted twice.",
   DUPLICATE_EX_DATE_ACTION:

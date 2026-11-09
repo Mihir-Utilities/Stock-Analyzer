@@ -32,8 +32,8 @@ export const ADJUSTMENT_CHECK_INFO =
 const ISO = /\d{4}-\d{2}-\d{2}/;
 
 /**
- * The ADJUSTMENT_CONFLICT warning text of docs/01 3.7. The API message is shown as sent; when it
- * carries no usable date the spec sentence is used with the date left out rather than invented.
+ * The ADJUSTMENT_CONFLICT warning text of docs/01 3.7. Always the spec sentence; the date is taken
+ * from the API message when it has one and left out otherwise, never invented.
  */
 export function adjustmentConflictText(message: string): string {
   const m = ISO.exec(message);

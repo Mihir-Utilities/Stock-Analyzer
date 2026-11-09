@@ -585,3 +585,11 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | F12-9 | The Telegram card appears in both docs/06 6.8 (Alerts) and 6.11 (Settings) | The same component is on both pages | `AlertsPage.tsx`, `SettingsPage.tsx` |
 | F12-10 | About: "versions" have no source | Shows sources, safe-use text and the notices file name; says app and data versions are not available. No link to THIRD_PARTY_NOTICES (no served page) | `SettingsPage.tsx` |
 | F12-11 | Confirm password field is not in the API | Client-only "repeat new password" check; only `current` and `new` are sent. No strength meter | `SettingsPage.tsx` |
+
+## F08 review assumptions (Claude, 2026-11-09; owner may overrule, none blocks)
+| # | Question | Choice made | Where |
+|---|---|---|---|
+| F08R-1 | After Confirm or Reject the card leaves the list, so the old "press the same button again" retry for POST_IMPORT_NOT_QUEUED had no button | The decision banner gets "Retry recalculation", which repeats the PATCH with only `status` (the server answers changed=false and enqueues again, B07R-5, ACT-35). No new route | `EventsTab.tsx`, `action-patch.ts` |
+| F08R-2 | The client ratio check missed the API limits (more than 4 decimals, 100,000,000 or more) and compared floats at exactly 3 percent | Same limits as `decimalCell`; the 3 percent band has a 1e-9 slack so 5.15 against 5 is silent like the server | `action-patch.ts` |
+| F08R-3 | A stacked composition on a fitted y axis exaggerates the parts | A chart with any stacked series gets an axis that includes zero (all other charts unchanged) | `chart-data.ts` |
+| F08R-4 | A twin-confirmed candidate still has an enabled Confirm | Kept enabled on purpose: the warning is shown up front and the server 409 text is the final word (B07R-1). Owner may prefer a disabled button with a visible reason | `DetectedActionCard.tsx` |

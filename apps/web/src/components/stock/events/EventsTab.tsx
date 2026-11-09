@@ -10,7 +10,9 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Timeline, type TimelineItem } from "@/components/ui/Timeline";
 import { formatDate } from "@/lib/format";
 import { todayIst } from "@/lib/imports/entry-validate";
-import type { PatchResult } from "@/lib/stock/action-patch";
+import { describeError } from "@/lib/imports/errors";
+import { useSingleFlight } from "@/lib/imports/single-flight";
+import { repeatDecision, type PatchResult } from "@/lib/stock/action-patch";
 import {
   actionDetail,
   actionTitle,
@@ -31,6 +33,51 @@ interface Decision {
   key: string;
   result: PatchResult;
   verb: "confirmed" | "rejected";
+}
+
+/**
+ * A saved decision. When the recalculation could not be queued (POST_IMPORT_NOT_QUEUED) the card is
+ * already gone from the list, so the retry lives here: a repeat of the decision (ACT-35).
+ */
+function DecisionBanner({ symbol, decision }: { symbol: string; decision: Decision }) {
+  const once = useSingleFlight();
+  const [result, setResult] = useState(decision.result);
+  const [failed, setFailed] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const warnings = result.warnings ?? [];
+  const needsRetry = warnings.some((w) => w.code === "POST_IMPORT_NOT_QUEUED");
+  const retry = () =>
+    once(async () => {
+      setBusy(true);
+      setFailed(null);
+      try {
+        setResult(await repeatDecision(symbol, result.id, decision.verb));
+      } catch (e) {
+        setFailed(describeError(e));
+      } finally {
+        setBusy(false);
+      }
+    });
+  return (
+    <Banner tone={warnings.length > 0 ? "warn" : "info"} testId="decision-result">
+      {decisionLines(result, decision.verb).join(" ")}
+      {needsRetry ? (
+        <>
+          {" "}
+          <button
+            type="button"
+            data-testid="decision-retry"
+            disabled={busy}
+            onClick={retry}
+            className="touch-target inline-flex items-center underline disabled:opacity-60"
+          >
+            {busy ? "Retrying" : "Retry recalculation"}
+          </button>
+        </>
+      ) : null}
+      {failed ? <span data-testid="decision-retry-error"> {failed}</span> : null}
+    </Banner>
+  );
 }
 
 function ResearchLinks({ load }: { load: Load<LinksData> }) {
@@ -197,15 +244,9 @@ export function EventsTab({
         data-testid="decision-live"
         className="flex flex-col gap-2 outline-none"
       >
-        {decisions.map((d) => {
-          const lines = decisionLines(d.result, d.verb);
-          const warn = (d.result.warnings ?? []).length > 0;
-          return (
-            <Banner key={d.key} tone={warn ? "warn" : "info"} testId="decision-result">
-              {lines.join(" ")}
-            </Banner>
-          );
-        })}
+        {decisions.map((d) => (
+          <DecisionBanner key={d.key} symbol={symbol} decision={d} />
+        ))}
       </div>
       {standalone ?? (
         <Card title="Events" testId="events-card" actions={addLink}>

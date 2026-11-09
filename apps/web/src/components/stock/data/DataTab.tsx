@@ -73,6 +73,11 @@ export function DataTab({
   const conflicts = warnings.filter((w) => w.code === "ADJUSTMENT_CONFLICT");
   const depth = prices.state === "ready" ? prices.data.depth : undefined;
   const noPricesWhy = "no prices imported for this stock";
+  const depthWhy = profile.flags.no_prices
+    ? noPricesWhy
+    : prices.state === "loading"
+      ? "loading"
+      : "history depth unavailable";
 
   return (
     <div className="flex flex-col gap-4" data-testid="data-tab">
@@ -100,10 +105,10 @@ export function DataTab({
                 : formatCount(depth?.bars ?? null, { reason: "history depth unavailable" }).text}
           </Row>
           <Row label="First price date" testId="data-first-bar">
-            {formatDate(depth?.first_bar ?? null, { reason: noPricesWhy }).text}
+            {formatDate(depth?.first_bar ?? null, { reason: depthWhy }).text}
           </Row>
           <Row label="Last price date" testId="data-last-bar">
-            {formatDate(depth?.last_bar ?? null, { reason: noPricesWhy }).text}
+            {formatDate(depth?.last_bar ?? null, { reason: depthWhy }).text}
           </Row>
           <Row label="Price sources used" testId="data-sources">
             {NOT_SERVED}

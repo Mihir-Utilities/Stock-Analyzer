@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildOption } from "@/components/charts/chart-data";
 import { StockPage } from "@/components/stock/StockPage";
 import {
   detectedMultiplier,
@@ -438,5 +439,158 @@ describe("Data tab", () => {
     );
     expect(screen.getByTestId("data-bars").textContent).toMatch(/—/);
     expect(screen.queryByTestId("adjustment-conflict")).toBeNull();
+  });
+});
+
+describe("F08R review fixes", () => {
+  const cand = actionSchema.parse(f8.detected);
+  const codes = (type: "split" | "bonus", n: string, d: string) =>
+    previewConfirm({ type, ratioNum: n, ratioDen: d }, cand);
+
+  it("ACT-31: reverse split 2:10 previews 0.2 and a bonus uses (num+den)/den like the API", () => {
+    expect(codes("split", "2", "10").multiplier).toBeCloseTo(0.2, 12);
+    expect(codes("bonus", "1", "4").multiplier).toBe(1.25);
+  });
+
+  it("ACT-31: exactly 3% from the detected multiplier is silent (5.15 against 5), as on the server", () => {
+    expect(codes("split", "5.15", "1").warnings).toEqual([]);
+  });
+
+  it("ACT-32: 100 and 0.01 are silent, above or below warn", () => {
+    const has = (n: string, d: string) =>
+      codes("split", n, d).warnings.some((w) => w.code === "RATIO_EXTREME");
+    expect(has("100", "1")).toBe(false);
+    expect(has("1", "100")).toBe(false);
+    expect(has("101", "1")).toBe(true);
+    expect(has("1", "101")).toBe(true);
+  });
+
+  it("ACT-31: ratios follow ValidateAction limits (4 decimals, below 100,000,000)", () => {
+    expect(codes("split", "10.00001", "2").errors.ratio_num).toMatch(/at most 4 decimal/);
+    expect(codes("split", "10", "2.12345").errors.ratio_den).toMatch(/at most 4 decimal/);
+    expect(codes("split", "10.1200", "2").errors.ratio_num).toBeUndefined();
+    expect(codes("split", "100000000", "2").errors.ratio_num).toMatch(/too large/);
+    expect(codes("split", "99999999.9999", "2").errors.ratio_num).toBeUndefined();
+    expect(codes("split", "99999999.9999", "2").clean).not.toBeNull();
+  });
+
+  const submit = async (user: ReturnType<typeof userEvent.setup>) => {
+    await screen.findByTestId("detected-action");
+    await user.selectOptions(screen.getByTestId("confirm-type"), "split");
+    await user.type(screen.getByTestId("confirm-ratio-num"), "10");
+    await user.type(screen.getByTestId("confirm-ratio-den"), "2");
+    await user.click(screen.getByTestId("action-confirm"));
+    await user.click(within(openDialog()).getByTestId("confirm-ok"));
+  };
+
+  it("ACT-35: a saved decision whose recalculation was not queued has a working Retry", async () => {
+    search = "tab=events";
+    const user = userEvent.setup();
+    let n = 0;
+    const mock = renderStock({
+      "GET /stocks/TCS/events": f8.eventsDetected,
+      "PATCH /stocks/TCS/actions/9": () => {
+        n++;
+        return n === 1
+          ? f8.patchConfirmed({
+              post_import_job_id: null,
+              warnings: [{ code: "POST_IMPORT_NOT_QUEUED", message: "x" }],
+            })
+          : f8.patchConfirmed({ changed: false, post_import_job_id: 40 });
+      },
+    });
+    await submit(user);
+    await user.click(await screen.findByTestId("decision-retry"));
+    await waitFor(() =>
+      expect(screen.getByTestId("decision-result").textContent).toMatch(/job 40/),
+    );
+    expect(screen.queryByTestId("decision-retry")).toBeNull();
+    const patches = mock.calls.filter((c) => c.method === "PATCH");
+    expect(patches).toHaveLength(2);
+    expect(patches[1]?.body).toEqual({ status: "confirmed" });
+  });
+
+  it("a saved decision moves focus to the result message (keyboard users keep their place)", async () => {
+    search = "tab=events";
+    const user = userEvent.setup();
+    renderStock({
+      "GET /stocks/TCS/events": f8.eventsDetected,
+      "PATCH /stocks/TCS/actions/9": f8.patchConfirmed(),
+    });
+    await submit(user);
+    await screen.findByTestId("decision-result");
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId("decision-live")));
+  });
+
+  it("404 says the action no longer exists and reloads the list", async () => {
+    search = "tab=events";
+    const user = userEvent.setup();
+    const mock = renderStock({
+      "GET /stocks/TCS/events": f8.eventsDetected,
+      "PATCH /stocks/TCS/actions/9": fail(404, "NOT_FOUND", "corporate action not found"),
+    });
+    await submit(user);
+    expect((await screen.findByTestId("action-error")).textContent).toMatch(/no longer exists/);
+    await waitFor(() =>
+      expect(
+        mock.calls.filter((c) => c.method === "GET" && c.path === "/stocks/TCS/events").length,
+      ).toBeGreaterThan(1),
+    );
+  });
+
+  it("422 from the server lands on the ratio field", async () => {
+    search = "tab=events";
+    const user = userEvent.setup();
+    renderStock({
+      "GET /stocks/TCS/events": f8.eventsDetected,
+      "PATCH /stocks/TCS/actions/9": fail(422, "VALIDATION", "invalid", {
+        fields: [{ field: "ratio_num", message: "server says ratio_num is odd" }],
+      }),
+    });
+    await submit(user);
+    expect((await screen.findAllByTestId("form-field-error"))[0]?.textContent).toContain(
+      "server says ratio_num is odd",
+    );
+  });
+
+  it("a failed confirm followed by a failed reject shows only the latest error", async () => {
+    search = "tab=events";
+    const user = userEvent.setup();
+    let n = 0;
+    renderStock({
+      "GET /stocks/TCS/events": f8.eventsDetected,
+      "PATCH /stocks/TCS/actions/9": () => {
+        n++;
+        return n === 1 ? fail(409, "CONFLICT", "first problem") : fail(409, "CONFLICT", "second");
+      },
+    });
+    await submit(user);
+    expect((await screen.findByTestId("action-error")).textContent).toMatch(/first problem/);
+    await user.click(screen.getByTestId("action-reject"));
+    await user.click(within(openDialog()).getByTestId("confirm-ok"));
+    await waitFor(() => expect(screen.getByTestId("action-error").textContent).toMatch(/second/));
+    expect(screen.getByTestId("action-error").textContent).not.toMatch(/first problem/);
+  });
+
+  it("stacked composition starts its axis at zero and keeps markers; unstacked stays fitted", () => {
+    const base = { xName: "Q", x: ["a", "b"], source: "s", asOf: null } as const;
+    const stacked = buildOption(
+      {
+        ...base,
+        series: [
+          { id: "a", name: "A", unit: "%", kind: "area", stack: "h", values: [40, 41] },
+          { id: "b", name: "B", unit: "%", kind: "area", stack: "h", values: [20, 21] },
+        ],
+      },
+      { theme: "light" },
+    ) as { yAxis: { scale: boolean }; series: Array<{ stack?: string; symbol?: string }> };
+    expect(stacked.yAxis.scale).toBe(false);
+    expect(stacked.series.map((s) => s.stack)).toEqual(["h", "h"]);
+    expect(new Set(stacked.series.map((s) => s.symbol)).size).toBe(2);
+    const plain = buildOption(
+      { ...base, series: [{ id: "a", name: "A", unit: "%", kind: "line", values: [40, 41] }] },
+      { theme: "light" },
+    ) as { yAxis: { scale: boolean } };
+    expect(plain.yAxis.scale).toBe(true);
   });
 });

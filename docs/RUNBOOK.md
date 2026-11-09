@@ -426,3 +426,8 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Telegram without a bot (D-9): the card still makes a code but says it cannot be used yet. After the owner creates the bot and sets `TELEGRAM_BOT_USERNAME`, `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET`, the same card shows the deep link; no web change is needed. A slow first answer after idle (cold start) is tolerated: polling continues for 2 minutes, then "Check again".
 - Sign-out: a 401 on logout counts as signed out; a network or server error leaves the owner on the page with the error. Both end in a full navigation to `/login` after clearing the query cache.
 - Tests: `npm test` (`alerts-lib.test.ts`, `alerts-page.test.tsx`); `npx playwright test tests/e2e/alerts-settings.spec.ts` after `npm run build:e2e`.
+
+## 53. F08 review fixes (Events tab)
+
+- A confirmed or rejected decision whose recalculation could not be queued (`POST_IMPORT_NOT_QUEUED`) shows "Retry recalculation" on the saved-decision message. It repeats the PATCH without numbers; the server enqueues `post_import` again (ACT-35). If it keeps failing, check the worker queue and run the post-import job by hand.
+- Tests: `npx vitest run tests/unit/stock-f08.test.tsx`.
