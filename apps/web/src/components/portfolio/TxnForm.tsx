@@ -1,15 +1,17 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { Banner } from "@/components/ui/banners";
 import { FormField, inputClass } from "@/components/ui/FormField";
 import { useToast } from "@/components/ui/overlays";
 import { istDate } from "@/lib/dashboard/state";
 import { useSingleFlight } from "@/lib/imports/single-flight";
-import { useCreateTxn, useHolidays, usePatchTxn } from "@/lib/portfolio/api";
+import { portfolioKeys, useCreateTxn, useHolidays, usePatchTxn } from "@/lib/portfolio/api";
 import { plainString, tradeAmount } from "@/lib/portfolio/decimal";
 import type { Txn } from "@/lib/portfolio/schemas";
 import {
+  changedFields,
   describeTxnError,
   EMPTY_DRAFT,
   nextAttempt,
@@ -27,12 +29,15 @@ function draftFrom(t: Txn): TxnDraft {
     symbol: t.symbol,
     side: t.side,
     qty: plainString(t.qty),
-    price: t.price,
-    fees: t.fees,
+    price: plainString(t.price),
+    fees: plainString(t.fees),
     tradeDate: t.trade_date,
     note: t.note ?? "",
   };
 }
+
+const NEW_KEY_WARNING =
+  "You changed values after a failed try, so this is sent as a new transaction. If the earlier try was saved after all, it now exists twice: check the list.";
 
 const BUTTON =
   "h-9 touch-target rounded-control border border-border px-3 text-body-sm hover:bg-surface-3 disabled:opacity-50";
@@ -48,9 +53,10 @@ export function TxnForm({
 }: {
   editing: Txn | null;
   symbols: ReadonlyArray<string>;
-  onDone: () => void;
+  onDone: (reason: "saved" | "cancelled") => void;
 }) {
   const toast = useToast();
+  const qc = useQueryClient();
   const create = useCreateTxn();
   const patch = usePatchTxn();
   const single = useSingleFlight();
@@ -81,6 +87,14 @@ export function TxnForm({
 
   const amount = tradeAmount(draft.side, draft.qty.trim(), draft.price.trim(), draft.fees);
 
+  // Edit mode: the fields that really differ from the stored row (null while the draft is invalid).
+  const changed = useMemo<Partial<TxnBody> | null>(() => {
+    if (!editing) return null;
+    const next = validateDraft(draft, istDate(new Date())).body;
+    return next === null ? null : changedFields(draftFrom(editing), next);
+  }, [editing, draft]);
+  const unchanged = changed !== null && Object.keys(changed).length === 0;
+
   const run = async () => {
     const { errors: errs, body } = validateDraft(draft, istDate(new Date()));
     setErrors(errs);
@@ -89,38 +103,35 @@ export function TxnForm({
       summaryRef.current?.focus();
       return;
     }
+    if (editing && changed !== null && Object.keys(changed).length === 0) return; // nothing to send
     setSaving(true);
     try {
       if (editing) {
-        const changed: Partial<TxnBody> = {};
-        const orig = draftFrom(editing);
-        const next = validateDraft(draft, istDate(new Date())).body;
-        if (next) {
-          if (next.symbol !== orig.symbol.toUpperCase()) changed.symbol = next.symbol;
-          if (next.side !== orig.side) changed.side = next.side;
-          if (next.qty !== orig.qty) changed.qty = next.qty;
-          if (next.price !== orig.price) changed.price = next.price;
-          if (next.fees !== orig.fees) changed.fees = next.fees;
-          if (next.trade_date !== orig.tradeDate) changed.trade_date = next.trade_date;
-          if (next.note !== orig.note) changed.note = next.note;
-        }
-        const r = await patch.mutateAsync({ id: editing.id, body: changed });
+        const r = await patch.mutateAsync({ id: editing.id, body: changed ?? {} });
         toast(
           `Transaction updated. The whole sequence for this stock was re-checked. ${r.warnings.map((w) => w.message).join(" ")}`.trim(),
         );
-        onDone();
+        onDone("saved");
       } else {
-        const a = nextAttempt(attempt.current, body);
+        const prev = attempt.current;
+        const a = nextAttempt(prev, body);
+        const newKeyAfterFailure = prev !== null && a !== prev;
         attempt.current = a;
+        setNotice(newKeyAfterFailure ? NEW_KEY_WARNING : null);
         const r = await create.mutateAsync({ body, attempt: a });
         attempt.current = null;
         toast(`Transaction saved: ${body.side} ${body.qty} ${body.symbol}.`);
         const extra = r.warnings.map((w) => w.message).join(" ");
-        setNotice(extra || null);
+        setNotice(
+          [newKeyAfterFailure ? NEW_KEY_WARNING : "", extra].filter(Boolean).join(" ") || null,
+        );
         setDraft({ ...EMPTY_DRAFT, tradeDate: body.trade_date });
       }
     } catch (err) {
       const view = describeTxnError(err);
+      if (view.conflict) attempt.current = null; // the key is burnt: the next press is a new attempt
+      // The reply may have been lost after the server committed: show what the server holds now.
+      if (view.lost) void qc.invalidateQueries({ queryKey: portfolioKeys.txnsAll });
       setErrors(view.fields);
       setServerError(view.message);
       summaryRef.current?.focus();
@@ -151,7 +162,7 @@ export function TxnForm({
             {serverError}
           </Banner>
         ) : null}
-        {notice && !serverError ? (
+        {notice ? (
           <Banner tone="warn" testId="txn-notice">
             {notice}
           </Banner>
@@ -294,16 +305,26 @@ export function TxnForm({
         <button
           type="submit"
           data-testid="txn-save"
-          disabled={saving}
+          disabled={saving || unchanged}
           aria-busy={saving}
           className={`${BUTTON} border-accent font-medium`}
         >
           {saving ? "Saving..." : editing ? "Save changes" : "Save transaction"}
         </button>
-        <button type="button" data-testid="txn-cancel" onClick={onDone} className={BUTTON}>
+        <button
+          type="button"
+          data-testid="txn-cancel"
+          onClick={() => onDone("cancelled")}
+          className={BUTTON}
+        >
           {editing ? "Cancel" : "Close"}
         </button>
       </div>
+      {unchanged ? (
+        <p className="text-caption text-text-2" data-testid="txn-unchanged">
+          Nothing has changed yet, so there is nothing to save.
+        </p>
+      ) : null}
     </form>
   );
 }

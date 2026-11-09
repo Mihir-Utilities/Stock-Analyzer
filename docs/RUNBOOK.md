@@ -379,3 +379,11 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Tiny prices: values below 0.01 show three significant digits (at most 8 decimals), below 0.00000001 as "below 0.00000001". Only the chart table, CSV text and tooltips use this rule (`priceText` in `chart-model.ts`); `lib/format` is unchanged.
 - Volume average: the dashed line is "20-day average incl. today", or "20-week average incl. current week" when the API answers `meta.interval = 1w`. It is empty until 20 bars of the plotted range exist.
 - Tests: `npm test` (`chart-f06-review.test.ts`, `echart-host.test.tsx`, `chart-tab.test.tsx` which stubs the ECharts host and sets its own 30 s timeout), `npx playwright test tests/e2e/stock-chart.spec.ts` after `npm run build:e2e`. The 2,000-point test waits on `data-ready`, not a time budget.
+
+## 47. Portfolio review fixes (F11R)
+
+- Transaction list: the server filters by symbol only, so Side and date filters look at loaded rows. When the filtered view is empty and more pages exist, the list says "No match in the loaded rows yet" and keeps Load more (F11R-3). The symbol filter queries 300 ms after typing stops.
+- Save and retry: a retry with identical values reuses the Idempotency-Key. After a network error or timeout the list is refetched so the owner can see whether the first try was saved; changing any value after a failed try sends a new key and shows a duplicate warning (F11R-2). A 409 means the key was used for different values: the next press starts a new key. If a duplicate was created, delete the extra row from the list.
+- Edit: only really changed fields are sent (compared as normalised decimals); with nothing changed Save is disabled. Price and fees above 1e13 and impossible dates are refused before sending, as the server does.
+- Focus returns to Add transaction or the row Edit button when a form closes; a polite live region announces the result.
+- Tests: `portfolio-review.test.tsx`, `portfolio-lib.test.ts`; axe e2e covers the edit form, delete dialog and error states (`tests/e2e/portfolio.spec.ts`). The DataTable cases in `ui-components.test.tsx` have an explicit 20 s budget for loaded runs.

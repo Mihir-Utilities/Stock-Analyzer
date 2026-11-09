@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Banner } from "@/components/ui/banners";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog, useToast } from "@/components/ui/overlays";
@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { describeError } from "@/lib/dashboard/state";
 import { formatDate } from "@/lib/format";
 import { useDeleteTxn, useTxns } from "@/lib/portfolio/api";
+import { useDebouncedValue } from "@/lib/portfolio/debounce";
 import { tradeAmount } from "@/lib/portfolio/decimal";
 import type { Txn } from "@/lib/portfolio/schemas";
 import { describeTxnError } from "@/lib/portfolio/txn-form";
@@ -29,8 +30,36 @@ export function TxnSection({ symbols }: { symbols: ReadonlyArray<string> }) {
   const [editing, setEditing] = useState<Txn | null>(null);
   const [deleting, setDeleting] = useState<Txn | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const q = useTxns(symbolFilter.trim().toUpperCase());
+  // Return focus to the control that opened the form once it has closed (Add, or the row Edit).
+  const focusBack = useRef<"add" | number | null>(null);
+  const [announce, setAnnounce] = useState("");
+  const debouncedSymbol = useDebouncedValue(symbolFilter.trim().toUpperCase(), 300);
+  const q = useTxns(debouncedSymbol);
   const del = useDeleteTxn();
+
+  useEffect(() => {
+    const target = focusBack.current;
+    if (target === null || adding || editing) return;
+    const id = target === "add" ? "txn-add" : `txn-edit-${target}`;
+    const el =
+      document.querySelector<HTMLElement>(`[data-testid="${id}"]`) ??
+      document.querySelector<HTMLElement>(`[data-testid="txn-add"]`);
+    el?.focus();
+    focusBack.current = null;
+  }, [adding, editing]);
+
+  const closeForm = (from: "add" | number, reason: "saved" | "cancelled") => {
+    setAnnounce(
+      reason === "saved"
+        ? "Transaction updated."
+        : from === "add"
+          ? "Add transaction form closed."
+          : "Edit cancelled, no changes saved.",
+    );
+    setAdding(false);
+    setEditing(null);
+    focusBack.current = from;
+  };
 
   const rows = useMemo(() => {
     const all = (q.data?.pages ?? []).flatMap((p) => p.data.items);
@@ -55,6 +84,18 @@ export function TxnSection({ symbols }: { symbols: ReadonlyArray<string> }) {
     }
   };
 
+  const loadMore = q.hasNextPage ? (
+    <button
+      type="button"
+      data-testid="txn-load-more"
+      disabled={q.isFetchingNextPage}
+      onClick={() => void q.fetchNextPage()}
+      className={`${BUTTON} mt-2`}
+    >
+      {q.isFetchingNextPage ? "Loading..." : "Load more"}
+    </button>
+  ) : null;
+
   let body;
   if (q.isPending) {
     body = <Skeleton className="h-24 w-full" label="Loading transactions" />;
@@ -74,12 +115,18 @@ export function TxnSection({ symbols }: { symbols: ReadonlyArray<string> }) {
       </div>
     );
   } else if (rows.length === 0) {
+    const loaded = (q.data.pages[0]?.data.items.length ?? 0) > 0;
     body = (
-      <p className="text-body-sm text-text-2" data-testid="txn-empty">
-        {q.data.pages[0]?.data.items.length
-          ? "No transaction matches these filters."
-          : "No transactions yet. Add one above."}
-      </p>
+      <div className="flex flex-col items-start gap-2">
+        <p className="text-body-sm text-text-2" data-testid="txn-empty">
+          {loaded
+            ? q.hasNextPage
+              ? "No match in the loaded rows yet. Side and date filters only look at the rows loaded so far."
+              : "No transaction matches these filters."
+            : "No transactions yet. Add one above."}
+        </p>
+        {loadMore}
+      </div>
     );
   } else {
     body = (
@@ -159,17 +206,7 @@ export function TxnSection({ symbols }: { symbols: ReadonlyArray<string> }) {
             ))}
           </tbody>
         </table>
-        {q.hasNextPage ? (
-          <button
-            type="button"
-            data-testid="txn-load-more"
-            disabled={q.isFetchingNextPage}
-            onClick={() => void q.fetchNextPage()}
-            className={`${BUTTON} mt-2`}
-          >
-            {q.isFetchingNextPage ? "Loading..." : "Load more"}
-          </button>
-        ) : null}
+        {loadMore}
       </div>
     );
   }
@@ -191,13 +228,18 @@ export function TxnSection({ symbols }: { symbols: ReadonlyArray<string> }) {
           </button>
         ) : null}
       </div>
-      {adding ? <TxnForm editing={null} symbols={symbols} onDone={() => setAdding(false)} /> : null}
+      <div role="status" className="sr-only" data-testid="txn-announce">
+        {announce}
+      </div>
+      {adding ? (
+        <TxnForm editing={null} symbols={symbols} onDone={(reason) => closeForm("add", reason)} />
+      ) : null}
       {editing ? (
         <TxnForm
           key={editing.id}
           editing={editing}
           symbols={symbols}
-          onDone={() => setEditing(null)}
+          onDone={(reason) => closeForm(editing.id, reason)}
         />
       ) : null}
       {deleteError ? (

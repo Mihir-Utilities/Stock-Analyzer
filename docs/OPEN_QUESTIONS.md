@@ -509,6 +509,10 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | F11-9 | Holding notes need one text per row but `DataTable` reasons are per column | Row-specific reasons (split in the day-change window, price converted for a later split, review needed items, fully sold) are in a Notes column; the other columns carry a generic reason | `SummarySection.tsx` |
 | F11-10 | "vs Nifty 50" delta | Value is the benchmark XIRR; the delta is your XIRR minus the benchmark in percentage points, shown only when both are known. The server note (same dated cash flows, price index, may use negative units, B11-10) is in the info popover | `SummarySection.tsx` |
 | F11-11 | Transaction list filters | Symbol filter goes to the server; side and date range filter the loaded pages in the browser. The list is paged 50 at a time with Load more | `TxnSection.tsx` |
+| F11R-1 | Server message for a price above moneyMax is the vague "must be > 0" (fees: "must be >= 0"), and the Go limit 1e13 is not in docs/03 | The browser uses the same limit with clearer text ("at most 10,000,000,000,000"). Question: state the limit in docs/03 section 12 and improve the server messages | `txn-form.ts` |
+| F11R-2 | A changed body after a failed try creates a new key, so a committed-but-unanswered first try would be duplicated (docs/03 is silent) | Interim: the form sends the new request, shows a warning, and refetches the list after a network error. Question: require an explicit second confirm before a new key is used after a failed try? | `TxnForm.tsx` |
+| F11R-3 | The transaction list API filters only by `symbol` (openapi `getPortfolioTxns`), so side and date filters run on loaded rows | Interim: Load more stays available when the filtered view is empty. Question: add `side`, `from`, `to` query parameters to docs/03, openapi and the API | `TxnSection.tsx` |
+| F11R-4 | Watchlist `ltp` and `nav` are JSON numbers (docs/03, Go `*float64`) while the portfolio summary uses money strings | Kept as numbers (display only, never summed); documented in `schemas.ts`. Question: switch the watchlist to money strings for consistency? | `schemas.ts` |
 
 ## F06R assumptions (Claude, review fixes; owner may overrule, none blocks)
 | # | Question | Choice made | Where |
@@ -519,3 +523,4 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | F06R-4 | Volume average on weekly bars | Labelled by interval ("20-week average incl. current week"); D-T unchanged for the detector | `chart-model.ts` |
 | F06R-5 | Gap reason for a pane series absent from the stored block | "not in the stored indicator series" instead of the warm-up text | `chart-model.ts` |
 | F06R-6 | Mixed weekly/daily compare | An info note explains that few or no dates are shared; nothing is resampled in the browser | `ChartTab.tsx` |
+

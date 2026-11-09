@@ -46,6 +46,10 @@ const rows = (n: number): Row[] =>
     hist: [1, 2, 3],
   }));
 
+// DataTable cases render up to 1000 rows or drive userEvent; under a loaded full run the 5 s
+// default is too tight, so these get an explicit budget (assertions unchanged).
+const HEAVY_MS = 20_000;
+
 describe("DataTable", () => {
   it("shows a reason for null cells and never 0", () => {
     render(<DataTable label="T" columns={cols} rows={rows(3)} rowKey={(r) => r.id} />);
@@ -54,59 +58,79 @@ describe("DataTable", () => {
     expect(screen.getAllByTestId("sparkline").length).toBe(3);
   });
 
-  it("sorts with nulls last and exposes aria-sort", async () => {
-    render(<DataTable label="T" columns={cols} rows={rows(4)} rowKey={(r) => r.id} />);
-    // TanStack sorts numbers descending on the first click.
-    await userEvent.click(screen.getByTestId("sort-pe"));
-    const first = screen.getAllByTestId("data-row")[0];
-    expect(first && within(first).getAllByRole("gridcell")[1]?.textContent).toBe("3.0");
-    const last = screen.getAllByTestId("data-row").at(-1);
-    expect(last && within(last).getAllByTestId("null-cell")[0]).toBeTruthy();
-    expect(screen.getByRole("columnheader", { name: /P\/E/ }).getAttribute("aria-sort")).toBe(
-      "descending",
-    );
-  });
+  it(
+    "sorts with nulls last and exposes aria-sort",
+    async () => {
+      render(<DataTable label="T" columns={cols} rows={rows(4)} rowKey={(r) => r.id} />);
+      // TanStack sorts numbers descending on the first click.
+      await userEvent.click(screen.getByTestId("sort-pe"));
+      const first = screen.getAllByTestId("data-row")[0];
+      expect(first && within(first).getAllByRole("gridcell")[1]?.textContent).toBe("3.0");
+      const last = screen.getAllByTestId("data-row").at(-1);
+      expect(last && within(last).getAllByTestId("null-cell")[0]).toBeTruthy();
+      expect(screen.getByRole("columnheader", { name: /P\/E/ }).getAttribute("aria-sort")).toBe(
+        "descending",
+      );
+    },
+    HEAVY_MS,
+  );
 
-  it("UI-18 virtualizes above 100 rows", () => {
-    // jsdom has no layout; give the scroll box a size so the virtualizer has a window.
-    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(480);
-    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
-    render(<DataTable label="T" columns={cols} rows={rows(1000)} rowKey={(r) => r.id} />);
-    expect(screen.getAllByTestId("data-row").length).toBeLessThan(100);
-    expect(screen.getByTestId("data-table-count").textContent).toContain("1000");
-  });
+  it(
+    "UI-18 virtualizes above 100 rows",
+    () => {
+      // jsdom has no layout; give the scroll box a size so the virtualizer has a window.
+      vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(480);
+      vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+      render(<DataTable label="T" columns={cols} rows={rows(1000)} rowKey={(r) => r.id} />);
+      expect(screen.getAllByTestId("data-row").length).toBeLessThan(100);
+      expect(screen.getByTestId("data-table-count").textContent).toContain("1000");
+    },
+    HEAVY_MS,
+  );
 
-  it("does not virtualize at 100 rows or fewer", () => {
-    render(<DataTable label="T" columns={cols} rows={rows(100)} rowKey={(r) => r.id} />);
-    expect(screen.getAllByTestId("data-row")).toHaveLength(100);
-  });
+  it(
+    "does not virtualize at 100 rows or fewer",
+    () => {
+      render(<DataTable label="T" columns={cols} rows={rows(100)} rowKey={(r) => r.id} />);
+      expect(screen.getAllByTestId("data-row")).toHaveLength(100);
+    },
+    HEAVY_MS,
+  );
 
-  it("IMP-15: CSV export prefixes dangerous cells", async () => {
-    const spy = vi.spyOn(csv, "downloadCsv").mockImplementation(() => {});
-    render(
-      <DataTable
-        label="T"
-        columns={cols}
-        rows={rows(3)}
-        rowKey={(r) => r.id}
-        csvFilename="x.csv"
-      />,
-    );
-    await userEvent.click(screen.getByTestId("data-table-export"));
-    const text = spy.mock.calls[0]?.[0] ?? "";
-    expect(text).toContain("'=EVIL()");
-    expect(spy.mock.calls[0]?.[1]).toBe("x.csv");
-  });
+  it(
+    "IMP-15: CSV export prefixes dangerous cells",
+    async () => {
+      const spy = vi.spyOn(csv, "downloadCsv").mockImplementation(() => {});
+      render(
+        <DataTable
+          label="T"
+          columns={cols}
+          rows={rows(3)}
+          rowKey={(r) => r.id}
+          csvFilename="x.csv"
+        />,
+      );
+      await userEvent.click(screen.getByTestId("data-table-export"));
+      const text = spy.mock.calls[0]?.[0] ?? "";
+      expect(text).toContain("'=EVIL()");
+      expect(spy.mock.calls[0]?.[1]).toBe("x.csv");
+    },
+    HEAVY_MS,
+  );
 
-  it("roving keyboard navigation moves between cells", async () => {
-    render(<DataTable label="T" columns={cols} rows={rows(5)} rowKey={(r) => r.id} />);
-    const cells = screen.getAllByRole("gridcell");
-    cells[0]?.focus();
-    await userEvent.keyboard("{ArrowRight}");
-    await vi.waitFor(() => expect(document.activeElement?.getAttribute("data-c")).toBe("1"));
-    await userEvent.keyboard("{ArrowDown}");
-    await vi.waitFor(() => expect(document.activeElement?.getAttribute("data-r")).toBe("1"));
-  });
+  it(
+    "roving keyboard navigation moves between cells",
+    async () => {
+      render(<DataTable label="T" columns={cols} rows={rows(5)} rowKey={(r) => r.id} />);
+      const cells = screen.getAllByRole("gridcell");
+      cells[0]?.focus();
+      await userEvent.keyboard("{ArrowRight}");
+      await vi.waitFor(() => expect(document.activeElement?.getAttribute("data-c")).toBe("1"));
+      await userEvent.keyboard("{ArrowDown}");
+      await vi.waitFor(() => expect(document.activeElement?.getAttribute("data-r")).toBe("1"));
+    },
+    HEAVY_MS,
+  );
 
   it("renders loading, empty and error states", async () => {
     const retry = vi.fn();

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { Banner } from "@/components/ui/banners";
 import { Card } from "@/components/ui/Card";
 import { DataTable, type DataColumn } from "@/components/ui/DataTable";
@@ -10,7 +11,16 @@ import { formatDate, formatInr } from "@/lib/format";
 import { asOfText } from "@/lib/dashboard/state";
 import { displayNumber } from "@/lib/portfolio/decimal";
 import type { Holding, PortfolioSummary } from "@/lib/portfolio/schemas";
-import { flagText, inr, pct, PORTFOLIO_SOURCE, qty, reasonText, WARNING_LABEL } from "./text";
+import {
+  benchmarkDeltaText,
+  flagText,
+  inr,
+  pct,
+  PORTFOLIO_SOURCE,
+  qty,
+  reasonText,
+  WARNING_LABEL,
+} from "./text";
 
 interface Warn {
   code: string;
@@ -126,7 +136,7 @@ export function SummaryCards({
           delta={
             diff === null
               ? { value: null, text: null }
-              : { value: diff, text: `${pct(diff, true).text} pts vs yours` }
+              : { value: diff, text: benchmarkDeltaText(diff) }
           }
           definition={bench.note ?? undefined}
           source="Nifty 50 price index, imported"
@@ -251,6 +261,8 @@ export function holdingNotes(h: Holding): string {
   return parts.join("; ");
 }
 
+const LINK_LIMIT = 8;
+
 export function HoldingsSection({
   s,
   asOf,
@@ -265,6 +277,7 @@ export function HoldingsSection({
   onShowExited: (v: boolean) => void;
 }) {
   const realized = formatInr(displayNumber(s.totals.realized_pnl), { signed: true }).text;
+  const [showAllLinks, setShowAllLinks] = useState(false);
   return (
     <section
       aria-labelledby="pf-holdings-h"
@@ -307,7 +320,7 @@ export function HoldingsSection({
       />
       <p className="text-caption text-text-2">
         Open a stock for its page:{" "}
-        {s.holdings.slice(0, 8).map((h, i) => (
+        {(showAllLinks ? s.holdings : s.holdings.slice(0, LINK_LIMIT)).map((h, i) => (
           <span key={h.symbol}>
             {i > 0 ? ", " : ""}
             <Link
@@ -319,6 +332,17 @@ export function HoldingsSection({
             </Link>
           </span>
         ))}
+        {s.holdings.length > LINK_LIMIT ? (
+          <button
+            type="button"
+            data-testid="pf-links-more"
+            aria-expanded={showAllLinks}
+            onClick={() => setShowAllLinks((v) => !v)}
+            className="touch-target ml-2 inline-flex items-center text-accent underline"
+          >
+            {showAllLinks ? "Show fewer" : `Show all ${s.holdings.length}`}
+          </button>
+        ) : null}
       </p>
     </section>
   );

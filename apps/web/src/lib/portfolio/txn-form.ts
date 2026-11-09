@@ -1,6 +1,6 @@
 import { ApiError } from "@/lib/api/client";
 import { formatDate, formatNumber } from "@/lib/format";
-import { displayNumber, isPlainDecimal, qtyDecimals, toDec } from "./decimal";
+import { displayNumber, isPlainDecimal, plainString, qtyDecimals, toDec } from "./decimal";
 
 // Pure logic of the transaction form (docs/06 section 6.7, docs/03 section 12). Amounts stay
 // strings end to end: they are validated as plain decimals and sent as strings, never parsed to
@@ -40,6 +40,19 @@ export const EMPTY_DRAFT: TxnDraft = {
 };
 
 const MAX_QTY = "1000000000";
+/** Same as the server's moneyMax (apps/api internal/portfolio/input.go: 1e13) for price and fees. */
+export const MAX_MONEY = "10000000000000";
+
+/** True for a real calendar date written YYYY-MM-DD ("2026-02-31" is not one). */
+export function isCalendarDate(v: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (m === null) return false;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const t = new Date(Date.UTC(y, mo - 1, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === mo - 1 && t.getUTCDate() === d;
+}
 
 /** Client-side validation mirroring docs/03 section 12; `today` is the IST date (YYYY-MM-DD). */
 export function validateDraft(
@@ -62,14 +75,19 @@ export function validateDraft(
   const price = d.price.trim();
   if (!isPlainDecimal(price, 4)) errors.price = "Enter a price in INR with up to 4 decimals.";
   else if (!(toDec(price)?.gt(0) ?? false)) errors.price = "Price must be greater than 0.";
+  else if (toDec(price)?.gt(MAX_MONEY)) {
+    errors.price = "Price must be greater than 0 and at most 10,000,000,000,000.";
+  }
 
   const fees = d.fees.trim();
   if (fees !== "" && !isPlainDecimal(fees, 4)) {
     errors.fees = "Enter fees in INR with up to 4 decimals, or leave empty for none.";
+  } else if (fees !== "" && toDec(fees)?.gt(MAX_MONEY)) {
+    errors.fees = "Fees must be 0 or more and at most 10,000,000,000,000.";
   }
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(d.tradeDate) || Number.isNaN(Date.parse(d.tradeDate))) {
-    errors.tradeDate = "Choose the trade date.";
+  if (!isCalendarDate(d.tradeDate)) {
+    errors.tradeDate = "Choose a real calendar date (YYYY-MM-DD).";
   } else if (d.tradeDate > today) {
     errors.tradeDate = "The trade date cannot be in the future.";
   }
@@ -88,6 +106,21 @@ export function validateDraft(
       note: d.note,
     },
   };
+}
+
+/** The fields of `next` that really differ from the stored transaction (compared normalised). */
+export function changedFields(orig: TxnDraft, next: TxnBody): Partial<TxnBody> {
+  const changed: Partial<TxnBody> = {};
+  if (next.symbol !== orig.symbol.trim().toUpperCase()) changed.symbol = next.symbol;
+  if (next.side !== orig.side) changed.side = next.side;
+  if (plainString(next.qty) !== plainString(orig.qty)) changed.qty = next.qty;
+  if (plainString(next.price) !== plainString(orig.price)) changed.price = next.price;
+  if (plainString(next.fees) !== plainString(orig.fees === "" ? "0" : orig.fees)) {
+    changed.fees = next.fees;
+  }
+  if (next.trade_date !== orig.tradeDate) changed.trade_date = next.trade_date;
+  if (next.note !== orig.note) changed.note = next.note;
+  return changed;
 }
 
 /**
@@ -158,7 +191,13 @@ export interface TxnErrorView {
   fields: FieldErrors;
   /** Network, timeout or 5xx: retrying with the same Idempotency-Key is safe. */
   retryable: boolean;
+  /** The response may have been lost after the server committed: the list should be refetched. */
+  lost: boolean;
+  /** 409: the request key was already used for different values, so the next try needs a new key. */
+  conflict: boolean;
 }
+
+const NO_FLAGS = { retryable: false, lost: false, conflict: false } as const;
 
 function qtyText(v: unknown): string {
   const s = typeof v === "string" ? v : "";
@@ -168,13 +207,15 @@ function qtyText(v: unknown): string {
 /** Turns an API failure into text for the form. The server's own detail is always shown. */
 export function describeTxnError(err: unknown): TxnErrorView {
   if (!(err instanceof ApiError)) {
-    return { message: "The transaction could not be saved.", fields: {}, retryable: false };
+    return { message: "The transaction could not be saved.", fields: {}, ...NO_FLAGS };
   }
   if (err.code === "TIMEOUT" || err.code === "NETWORK" || err.status >= 500) {
     return {
-      message: `${err.message} Nothing was confirmed; press Save again to retry safely (the same request key is reused, so it cannot be recorded twice).`,
+      message: `${err.message} Nothing was confirmed; press Save again to retry safely (the same request key is reused, so it cannot be recorded twice). Check the list before changing values: if you change anything, it is sent as a new transaction.`,
       fields: {},
       retryable: true,
+      lost: err.code === "TIMEOUT" || err.code === "NETWORK",
+      conflict: false,
     };
   }
   if (err.code === "INSUFFICIENT_HOLDINGS") {
@@ -187,7 +228,7 @@ export function describeTxnError(err: unknown): TxnErrorView {
     return {
       message: `${err.message}.${detail} Buys on the same day count before sells.`,
       fields: {},
-      retryable: false,
+      ...NO_FLAGS,
     };
   }
   const fields: FieldErrors = {};
@@ -203,9 +244,10 @@ export function describeTxnError(err: unknown): TxnErrorView {
   return {
     message:
       err.status === 409
-        ? `${err.message} This request key was already used for different values; edit and save again.`
+        ? `${err.message} The server already holds a request with this key but different values. Check the transaction list; pressing Save again sends these values as a new request.`
         : err.message,
     fields,
-    retryable: false,
+    ...NO_FLAGS,
+    conflict: err.status === 409,
   };
 }

@@ -203,3 +203,78 @@ test.describe("axe and touch targets on portfolio and watchlist", () => {
     }
   }
 });
+
+// F11 review: the edit form, the delete dialog and the error states, not only the add form.
+test.describe("axe and touch targets on the portfolio edit, delete and error states", () => {
+  test.use({ bypassCSP: true });
+  const states = ["edit-form", "delete-dialog", "save-error", "list-error"] as const;
+  for (const state of states) {
+    for (const theme of ["dark", "light"] as const) {
+      for (const width of [375, 1440]) {
+        test(`${state} ${theme} at ${width}`, async ({ page }) => {
+          await signIn(page);
+          await mockApi(page, state === "save-error");
+          if (state === "list-error") {
+            await page.route("**/api/v1/portfolio/txns*", (route) =>
+              reply(route, fail(500, "INTERNAL", "The server had a problem")),
+            );
+          }
+          await page.setViewportSize({ width, height: 900 });
+          await page.emulateMedia({ reducedMotion: "reduce" });
+          await page.goto("/portfolio");
+          await setTheme(page, theme);
+          await page.getByTestId("adj-list").waitFor();
+          if (state === "edit-form") {
+            await page.getByTestId("txn-edit-2").click();
+            await page.getByTestId("txn-form").waitFor();
+          } else if (state === "delete-dialog") {
+            await page.getByTestId("txn-delete-2").click();
+            await page.getByRole("dialog").waitFor();
+          } else if (state === "save-error") {
+            await page.getByTestId("txn-add").click();
+            await page.getByTestId("txn-symbol").fill("TCS");
+            await page.getByTestId("txn-side").selectOption("sell");
+            await page.getByTestId("txn-qty").fill("15");
+            await page.getByTestId("txn-price").fill("4000");
+            await page.getByTestId("txn-date").fill("2026-10-23");
+            await page.getByTestId("txn-save").click();
+            await page.getByTestId("txn-error").waitFor();
+          } else {
+            await page.getByTestId("txn-retry").waitFor();
+          }
+          await page.addScriptTag({ content: axeSource });
+          const violations = await page.evaluate(async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const axe = (window as any).axe;
+            const r = await axe.run(document, {
+              runOnly: {
+                type: "tag",
+                values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag412"],
+              },
+            });
+            return r.violations.map((v: { id: string; nodes: { target: string[] }[] }) => ({
+              id: v.id,
+              nodes: v.nodes.map((n) => n.target.join(" ")).slice(0, 3),
+            }));
+          });
+          expect(violations).toEqual([]);
+          if (width === 375) {
+            const small = await page.evaluate(() =>
+              Array.from(document.querySelectorAll("button[data-testid], a[data-testid]"))
+                .filter((el) => el.getAttribute("data-testid") !== "skip-link")
+                .map((el) => ({
+                  id: el.getAttribute("data-testid"),
+                  r: el.getBoundingClientRect(),
+                }))
+                .filter(
+                  (x) => x.r.width > 0 && x.r.height > 0 && (x.r.width < 43.5 || x.r.height < 43.5),
+                )
+                .map((x) => `${x.id}: ${Math.round(x.r.width)}x${Math.round(x.r.height)}`),
+            );
+            expect(small).toEqual([]);
+          }
+        });
+      }
+    }
+  }
+});

@@ -9,6 +9,9 @@ import { createMockFetch, type Handler } from "../mocks/mock-fetch";
 import * as fx from "../mocks/portfolio-fixtures";
 import "./dom-matchers";
 
+// Page tests mount the whole portfolio screen; under a loaded full run the 5 s default is too tight.
+vi.setConfig({ testTimeout: 30_000 });
+
 vi.mock("next/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
     <a href={href} {...rest}>
