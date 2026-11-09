@@ -4,17 +4,16 @@ Rule: ONE task per session. Each session does: Execute -> Review -> Fix -> Commi
 A new session starts with: "Resume. Read CLAUDE.md, PROGRESS.md, OPEN_QUESTIONS.md; continue at CURRENT."
 
 ## Pointer
-- LAST UPDATED: 2026-11-09. `main` = ffc96c1 (plus later docs commits). GitHub CI GREEN on every job (guards, api with -race, worker, web incl. build, build:e2e, storybook and Playwright e2e, api-types; run 42625900805).
+- LAST UPDATED: 2026-11-09. `main` = b721c0c (plus later docs commits). GitHub CI GREEN on every job (guards, api with -race, worker, web incl. build, build:e2e, storybook and Playwright e2e, api-types; run 42631821094).
 - CURRENT: no task in progress. **D05b is deliberately NOT started (owner instruction 2026-10-17: "don't start 5b").** The D-W follow-up work (new routes, server-side soft flag, adjusted volume, contrast tokens) is DECIDED (docs/OPEN_QUESTIONS.md D-W) but its implementation is deliberately deferred by the owner ("we will implement this later").
 - MODE: manual price mode (no broker). Each affected task file starts with an "Amendment: manual price mode" block that overrides the text below it.
-- WHAT "DONE" MEANS TODAY: tasks marked DONE completed phases 1 EXEC and 4 COMMIT (merged, CI green). Phase 2 REVIEW and 3 FIX are done for every built task EXCEPT **F07, F08, F12, F14 (review pending)**. Suggested next: Prompt 3 on F07, F08, F12 and F14, then the remaining build tasks.
+- WHAT "DONE" MEANS TODAY: tasks marked DONE completed phases 1 EXEC and 4 COMMIT (merged, CI green). Phase 2 REVIEW and 3 FIX are now done for EVERY built task (F07, F08, F12 and F14 were reviewed and fixed on 2026-11-09). Re-review only after substantial new changes.
 - HOW WORK WAS RUN: each task by a separate agent in its own git worktree (read-only reviewers, fix agents and repair agents too), merged by a coordinator agent (resolve shared docs, renumber RUNBOOK sections and docs/07 row ids, regenerate THIRD_PARTY_NOTICES.md and packages/api-types), pushed, CI confirmed. Reusable lessons are at the bottom.
 - COUNTS: 39 active task files; 42 tracked work items (D05, B06, F13 each split in two; D02 REMOVED).
 
 ### Next tasks that are unblocked (verify the Depends-on line in the task file first)
-- Reviews (Prompt 3) of F07, F08, F12, F14.
-- The deferred D-W implementation (when the owner says go): soft-flag Dismiss/Undo routes, delete-action route, DELETE /portfolio/adjustments, server-side soft flag (F05 then switches adapter), adjusted volume, future listing_date rejection, prices delete/trim queue warning, OQ-16 contrast tokens, attribution wording (F14 already shows the exact footer text).
-- Remaining build tasks need D05b (held) or later waves: B13 peers/compare/screener and F10 (need D05), D07/B14/F09 (forecasts, deferred), D08 housekeeping/backup workflows (needs D07), F15 admin/PWA/a11y/performance polish (last). Check tasks/README.md waves before starting; D08 and F15 may be startable in parts: ask the owner.
+- Everything buildable without D05b is built and reviewed. Remaining tasks: B13 peers/compare/screener and F10 (need D05, i.e. D05b which the owner HOLDS), D07 forecasts/B14 market overview + admin status/F09 prediction tab (forecasts deferred; B14 also serves the dashboard market tiles and /admin/status that several screens show as 501), D08 housekeeping/backup workflows (needs D07 per README), F15 admin/PWA/accessibility/performance polish (last wave). Ask the owner which to release: D05b first (unblocks ratios, valuation, scores, peers, screener) is the natural next step.
+- The deferred D-W implementation (when the owner says go): soft-flag Dismiss/Undo routes, delete-action route, DELETE /portfolio/adjustments, server-side soft flag (F05 then switches adapter), adjusted volume, future listing_date rejection, prices delete/trim queue warning, OQ-16 contrast tokens. Partial, unmerged D-W worktrees from an interrupted run may still exist under .claude/worktrees (agents a1c2f465... Go and ab82ab17... web): inspect before reusing, they were stopped by the owner.
 
 ### BLOCKED ON OWNER (nothing blocks coding; these block closing tasks)
 1. T01 owner spikes: S4 adjusted-vs-raw check (needs your price files), S8 real-data detector tuning (30+ stocks, 10+ known events), S9 hosting (Render/Neon/Vercel; rescoped to about 40k rows plus Vercel's current body limit, D-S; set `IMPORT_PRICES_LARGE_ENABLED` only if you need more than 5 MB / 50,000 rows), S12 Telegram after idle, S14 read the terms (docs/TERMS_NOTES.md), S16 real ratio comparison, S17 data-entry timing.
@@ -81,20 +80,20 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 | 5 | B05 | DONE (review + fix done) | | merge 0f3ce35; fixes in 181b6d8 | derived_as_of + DERIVED_STALE; derived metrics null until D05b; B05-1..9 |
 | 5 | B06b | DONE (review + fix done) | | 46faf08; fixes in 5cd5b9e | undo 409 UNDO_HAS_DEPENDENTS, warnings on all writes; owner: import holidays.csv |
 | 5 | B07 | DONE (review + fix done) | | b6932b8; fixes in 5cd5b9e | confirm/reject; DUPLICATE_EX_DATE_ACTION, worker applies lowest id once, RATIO_EXTREME; B07R-6 open (portfolio vs worker) |
-| 5 | F07 | DONE (review pending) | | 53cd570 / ffc96c1 | Fundamentals tab, reuses F13b ResultsForm; ratios 'not computed yet' until D05b; F07-1..10 |
-| 5 | F08 | DONE (review pending) | | 38aa361 / ffc96c1 | Ownership, Peers (not available), Events (confirm/reject via B07), Data tabs; F08-1..9 |
+| 5 | F07 | DONE (review + fix done) | | 53cd570; fixes in b721c0c | reversible empty toggles, truthful loading labels, snapshot provenance wording, labelled scroll regions; F07R-1..8 |
+| 5 | F08 | DONE (review + fix done) | | 38aa361; fixes in b721c0c | ratio limits and 3% edge match the server, Retry recalculation button, stacked axis includes zero; F08R-1..4 |
 | 5 | F13b | DONE (review + fix done) | | b95e552; fixes in ffc96c1 | holiday years in review, shared validation case table (Go+TS parity), now-injected batches, global vitest timeouts |
 | 6 | D05b (fundamentals/scores) | TODO (HELD by owner: do not start) | |  | owner instruction 2026-10-17 |
 | 6 | B13 | TODO | | | |
 | 6 | F10 | TODO | | | |
 | 7 | D04 | DONE (review + fix done) except live smoke check | | 8d38fea; fixes in fa0543f | AMFI floor, size caps, hostile rows, last NAV re-fetch; owner: run sync_mf_schemes --dry-run |
 | 7 | B10 | DONE (review + fix done) | | merge 0f3ce35; fixes in 181b6d8 | 6 /mf routes, XIRR errors, SIP end-date rule, LTTB; owner: attribution wording, Neon re-measure |
-| 7 | F14 | DONE (review pending) | | 041865c / ffc96c1 | /mf, /mf/[code], /mf/compare; exact attribution footer; lumpsum not available; F14-1..9 |
+| 7 | F14 | DONE (review + fix done) | | 041865c; fixes in b721c0c | 'Any' plan/option only with Show all, compare cap disabled, load-more error keeps rows, refresh state per fund; F14R-1..4 |
 | 8 | B11 | DONE (review + fix done) | | b67e053; fixes in fa0543f | benchmark XIRR with negative units (B11-10), closed-position span, buy on inconsistent sequence |
 | 8 | B12 | DONE (review + fix done) | | bc54d1d; fixes in fa0543f | webhook rate limit 60/min/IP, link rebind refused, failed /start cap |
 | 8 | D06 | DONE (review + fix done) | | 00aaceb; fixes in fa0543f | late-link expiry, first-run news baseline; works without a bot token |
 | 8 | F11 | DONE (review + fix done) | | 66dab14; fixes in ffc96c1 | txn filters with load more, idempotency retry guidance, edit diff, 409 handling, focus return |
-| 8 | F12 | DONE (review pending) | | a30a7aa+aa20fd1 / ffc96c1 | /alerts, /settings, Telegram card, SIGN OUT and sign out everywhere; F12-1..11; owner: Telegram bot |
+| 8 | F12 | DONE (review + fix done) | | a30a7aa+aa20fd1; fixes in b721c0c | sign-out clears recents and silences late 401, pages no-store, accessible menus, polling window; F12R-1..6 |
 | 9 | D07 | TODO | | | forecasts deferred; insufficient_universe path unless >= 20 eligible stocks |
 | 9 | B14 | TODO | | | |
 | 9 | F09 | TODO | | | |
@@ -135,6 +134,9 @@ Frontend and backend tasks may run in separate git worktrees/sessions. Frontend 
 
 - 2026-11-09: Reviews of F06, F13b, F11 (no blockers; F06 10 should-fix, F13b 5 with a Go/TS parity check that found the TypeScript validators matching Go, F11 7) approved and fixed. Builds F12, F07, F08, F14 done. Merged by a coordinator agent in order F06 fixes, F11 fixes, F13b fixes, F07, F08, F14, F12 and pushed as ffc96c1; CI green on all five jobs including Playwright e2e (run 42625900805). Renumbered: RUNBOOK sections 46-52, UI-72/80..83 collisions to UI-75, UI-85..89.
 - 2026-11-09: Operational notes: five agents were killed by the stream watchdog (no output for 600 s) when a single long foreground command ran; fix is to run long checks in the background and poll in short bounded waits. Docker Desktop lost outbound network during one merge (Linux Playwright run impossible locally): CI is the authoritative Linux run.
+
+- 2026-11-09: One agent per task reviewed (Prompt 3) and fixed (Prompt 4) F07, F08, F12 and F14 (no blockers except F14's 'Any' filter mismatch with the API, fixed); merged by a coordinator agent (F12, F14, F07, F08) and pushed as b721c0c; CI green (run 42631821094). Renumbered RUNBOOK 53-56 and UI-91..93. Decision for the owner recorded: F12R-2 (a failed logout keeps the owner on the page with an error instead of redirecting, because the HttpOnly cookie is still valid).
+- 2026-11-09: Housekeeping flag: untracked `Reliance Industries.xlsx` (repo root, owner's data; NOT created by agents) and `apps/web/AGENTS.md` in the main checkout. The repo is public: never commit real data; .gitignore has no .xlsx/.xls rule yet (owner to approve adding one).
 
 ## Lessons for running parallel agents (keep)
 - CI runs on Linux with Go 1.22; local is Windows with a newer Go. Anything case- or OS-dependent passes locally and fails in CI (example: `license.md` vs `LICENSE.md`, fixed in license_scan.py). Reproduce with `docker run golang:1.22` and a `git archive` export before guessing.
