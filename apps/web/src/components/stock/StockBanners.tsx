@@ -5,8 +5,6 @@ import { Banner } from "@/components/ui/banners";
 import { formatDate, formatPercent } from "@/lib/format";
 import { changeOn, ratioChange, unconfirmedCopy, unconfirmedDates } from "@/lib/stock/derive";
 import {
-  ACTION_DECISION_AVAILABLE,
-  ACTION_DECISION_UNAVAILABLE_REASON,
   getSoftFlagCoverage,
   getSoftFlags,
   SOFT_FLAG_DISMISS_AVAILABLE,
@@ -97,33 +95,13 @@ export function StockBanners({
             {unconfirmedCopy(d, (bars ? changeOn(bars, d) : null) ?? ratioChange(eventActions, d))}
           </Banner>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              data-testid="action-confirm"
-              disabled={!ACTION_DECISION_AVAILABLE}
-              aria-describedby={ACTION_DECISION_AVAILABLE ? undefined : `action-reason-${d}`}
+            <Link
+              href={`/stocks/${encodeURIComponent(profile.symbol)}?tab=events`}
+              data-testid="action-review-link"
               className={small}
             >
-              Confirm
-            </button>
-            <button
-              type="button"
-              data-testid="action-reject"
-              disabled={!ACTION_DECISION_AVAILABLE}
-              aria-describedby={ACTION_DECISION_AVAILABLE ? undefined : `action-reason-${d}`}
-              className={small}
-            >
-              Reject
-            </button>
-            {!ACTION_DECISION_AVAILABLE ? (
-              <span
-                id={`action-reason-${d}`}
-                data-testid="action-reason"
-                className="text-caption text-text-2"
-              >
-                {ACTION_DECISION_UNAVAILABLE_REASON}
-              </span>
-            ) : null}
+              Review and decide on the Events tab
+            </Link>
           </div>
         </div>
       ))}

@@ -23,7 +23,7 @@ export interface ChartSeries {
   values: ReadonlyArray<number | null>;
   /** Forecast series are dashed, hatched and drawn in --exp. */
   forecast?: boolean;
-  /** Bar series with the same stack name are stacked (balance composition). */
+  /** Bar, line or area series with the same stack name are stacked (balance and ownership composition). */
   stack?: string;
   /** Bar series: where each bar starts (floating bars, e.g. a waterfall); `values` is the height. */
   floatBase?: ReadonlyArray<number | null>;
@@ -180,6 +180,7 @@ export function buildOption(data: ChartDataset, opts: BuildOptions): Record<stri
         showSymbol: !many,
         sampling: sampling ? "lttb" : undefined,
         connectNulls: false,
+        stack: s.stack,
         itemStyle: { color },
         lineStyle: { color, width: 2, type: s.forecast ? "dashed" : "solid" },
         areaStyle: s.kind === "area" ? { color, opacity: s.forecast ? 0.12 : 0.18 } : undefined,

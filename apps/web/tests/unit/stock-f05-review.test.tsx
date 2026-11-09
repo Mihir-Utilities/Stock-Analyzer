@@ -114,7 +114,7 @@ describe("F05R-1: ACT-01 sentence when the suspect day is not served", () => {
 });
 
 describe("F05R-5: every disabled action shows its reason as visible text linked by aria-describedby", () => {
-  it("Alert, Add transaction, Confirm, Reject and Dismiss", async () => {
+  it("Alert, Add transaction and Dismiss (Confirm/Reject moved to the Events tab, F08)", async () => {
     const day = fx.bars(70)[40]![0];
     // Day 40 is the detected, unserved suspect row; the 30% drop on day 60 is covered by nothing.
     const { reply } = gapPrices(unconfirmed(day), { 40: 0.2, 60: 0.7 });
@@ -123,8 +123,6 @@ describe("F05R-5: every disabled action shows its reason as visible text linked 
     const cases: Array<[string, string | RegExp]> = [
       ["header-alert", ALERT_UNAVAILABLE],
       ["header-add-txn", TXN_UNAVAILABLE],
-      ["action-confirm", /Confirm and Reject are not available yet/],
-      ["action-reject", /Confirm and Reject are not available yet/],
       ["soft-flag-dismiss", /Dismiss is not available yet/],
     ];
     for (const [id, text] of cases) {

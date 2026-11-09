@@ -34,8 +34,4 @@ export async function dismissSoftFlag(symbol: string, date: string): Promise<voi
   throw new Error(`${SOFT_FLAG_DISMISS_UNAVAILABLE_REASON} (${symbol}, ${date})`);
 }
 
-/** Confirm / Reject of a detected action (UNCONFIRMED_ACTION banner) is the same dependency. */
-export const ACTION_DECISION_AVAILABLE = false;
-
-export const ACTION_DECISION_UNAVAILABLE_REASON =
-  "Confirm and Reject are not available yet: they need the corporate-action service, which is not built.";
+// Confirm / Reject of a detected action is built (F08): see lib/stock/action-patch.ts.

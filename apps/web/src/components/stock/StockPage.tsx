@@ -36,6 +36,10 @@ import { OverviewTab } from "./OverviewTab";
 import { AnalysisTab } from "./chart/AnalysisTab";
 import { ChartTab } from "./chart/ChartTab";
 import { FundamentalsTab } from "./fundamentals/FundamentalsTab";
+import { DataTab } from "./data/DataTab";
+import { EventsTab } from "./events/EventsTab";
+import { OwnershipTab } from "./ownership/OwnershipTab";
+import { PeersTab } from "./peers/PeersTab";
 
 export const TAB_IDS = [
   "overview",
@@ -246,6 +250,12 @@ function Inner({ symbol }: { symbol: string }) {
       );
     }
     if (id === "fundamentals") return <FundamentalsTab symbol={profile.symbol} />;
+    if (id === "ownership") return <OwnershipTab symbol={profile.symbol} />;
+    if (id === "peers") return <PeersTab profile={profile} />;
+    if (id === "events") {
+      return <EventsTab profile={profile} eventsLoad={eventsLoad} linksLoad={linksLoad} />;
+    }
+    if (id === "data") return <DataTab profile={profile} warnings={warnings} />;
     return <NotBuilt tab={TAB_LABELS[id]} />;
   };
 
