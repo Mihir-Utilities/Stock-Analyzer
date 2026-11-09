@@ -28,6 +28,68 @@ const DASH: Record<string, number[] | undefined> = {
   dotted: [2, 3],
 };
 
+export interface ZoomWindow {
+  start: number;
+  end: number;
+}
+
+const MIN_SPAN = 5; // percent of the data; keeps at least a handful of bars in view
+
+/**
+ * Keyboard zoom and pan for the focusable chart (F06R-1). `+`/`=` zoom in, `-` zooms out,
+ * arrow left/right pan by a quarter of the visible window, `0` shows everything.
+ * Returns null for any other key. Pure: the caller dispatches the result to ECharts.
+ */
+export function keyboardZoom(win: ZoomWindow, key: string): ZoomWindow | null {
+  const span = win.end - win.start;
+  const centre = (win.start + win.end) / 2;
+  const clamp = (start: number, end: number): ZoomWindow => {
+    const width = Math.min(100, Math.max(MIN_SPAN, end - start));
+    const s = Math.min(100 - width, Math.max(0, start));
+    return { start: s, end: s + width };
+  };
+  switch (key) {
+    case "+":
+    case "=":
+      return clamp(centre - span / 3, centre + span / 3);
+    case "-":
+    case "_":
+      return clamp(centre - span * 0.75, centre + span * 0.75);
+    case "ArrowLeft":
+      return clamp(win.start - span / 4, win.end - span / 4);
+    case "ArrowRight":
+      return clamp(win.start + span / 4, win.end + span / 4);
+    case "0":
+      return { start: 0, end: 100 };
+    default:
+      return null;
+  }
+}
+
+/** Number of category entries on the first x axis (used to decide whether a zoom still applies). */
+export function categoryCount(option: Record<string, unknown>): number {
+  const ax = option["xAxis"];
+  const first = Array.isArray(ax) ? (ax[0] as { data?: unknown[] } | undefined) : undefined;
+  return first?.data?.length ?? 0;
+}
+
+/** Carry a zoom window into a rebuilt option (pane toggles keep the visible range). */
+export function withZoomWindow(
+  option: Record<string, unknown>,
+  win: ZoomWindow,
+): Record<string, unknown> {
+  const dz = option["dataZoom"];
+  if (!Array.isArray(dz) || dz.length === 0) return option;
+  return {
+    ...option,
+    dataZoom: dz.map((z) => ({
+      ...(z as Record<string, unknown>),
+      start: win.start,
+      end: win.end,
+    })),
+  };
+}
+
 export function paneLayout(weights: ReadonlyArray<number>): Array<{ top: number; height: number }> {
   const total = weights.reduce((a, b) => a + b, 0) || 1;
   const usable = 100 - TOP_PCT - BOTTOM_PCT - GAP_PCT * Math.max(0, weights.length - 1);
@@ -63,10 +125,11 @@ export function buildPaneOption(data: ChartDataset, opts: BuildOptions): Record<
     top: `${l.top}%`,
     height: `${l.height}%`,
   }));
+  const xData = [...data.x]; // one array shared by every pane
   const xAxis = panes.map((_, i) => ({
     type: "category",
     gridIndex: i,
-    data: [...data.x],
+    data: xData,
     boundaryGap: true,
     name: i === lastPane ? data.xName : undefined,
     nameLocation: "middle",
@@ -75,18 +138,45 @@ export function buildPaneOption(data: ChartDataset, opts: BuildOptions): Record<
     axisTick: { show: i === lastPane },
     axisPointer: { show: true, label: { show: i === lastPane } },
   }));
-  const yAxis = panes.map((p, i) => ({
-    type: i === 0 && data.logScale ? "log" : "value",
-    gridIndex: i,
-    scale: true,
-    name: p.unit ? `${p.name} (${p.unit})` : p.name,
-    nameLocation: "end",
-    nameGap: 6,
-    nameTextStyle: { align: "left" },
-    splitNumber: i === 0 ? 5 : 2,
-  }));
+  const yAxis = panes.map((p, i) => {
+    // Bars must start at zero: a pane with bars never uses the fitted (scale) axis; volume-like
+    // panes (no negative bar) also pin the minimum at 0. A MACD histogram stays zero-centred.
+    const bars = data.series.filter(
+      (s) => Math.min(s.pane ?? 0, lastPane) === i && s.kind === "bar",
+    );
+    const hasBars = bars.length > 0;
+    const nonNegative = bars.every((s) => s.values.every((v) => !isKnown(v) || v >= 0));
+    return {
+      type: i === 0 && data.logScale ? "log" : "value",
+      gridIndex: i,
+      scale: !hasBars,
+      ...(hasBars && nonNegative ? { min: 0 } : {}),
+      name: p.unit ? `${p.name} (${p.unit})` : p.name,
+      nameLocation: "end",
+      nameGap: 6,
+      nameTextStyle: { align: "left" },
+      splitNumber: i === 0 ? 5 : 2,
+    };
+  });
 
   const firstOfMain = data.series.find((s) => (s.pane ?? 0) === 0 && !hidden.has(s.id));
+  // Markers sit on the close (or rebased close), not on whichever overlay is first visible.
+  const anchor =
+    data.series.find((s) => (s.pane ?? 0) === 0 && (s.kind === "candle" || s.id === "close")) ??
+    firstOfMain;
+  const usable = (v: number | null | undefined): v is number =>
+    isKnown(v) && (!data.logScale || v > 0);
+  const markerData = (data.markers ?? []).flatMap((m) => {
+    const values = anchor?.values ?? [];
+    let v = values[m.index];
+    for (let d = 1; !usable(v) && d < values.length; d++) {
+      const before = values[m.index - d];
+      const after = values[m.index + d];
+      v = usable(before) ? before : usable(after) ? after : undefined;
+    }
+    // No valid value anywhere on the series: omit the pin rather than drawing it at 0.
+    return usable(v) ? [{ name: m.label, coord: [m.index, v], value: m.label }] : [];
+  });
 
   const series = data.series.flatMap((s, position): Array<Record<string, unknown>> => {
     if (hidden.has(s.id)) return [];
@@ -95,16 +185,13 @@ export function buildPaneOption(data: ChartDataset, opts: BuildOptions): Record<
     const color = seriesColor(s, position, opts.theme);
     const decorations: Record<string, unknown> = {};
     if (s === firstOfMain) {
-      if ((data.markers ?? []).length > 0) {
+      if (markerData.length > 0) {
         decorations["markPoint"] = {
           symbol: "pin",
           symbolSize: 34,
           itemStyle: { color: colorTokens.accent[opts.theme] },
           label: { color: colorTokens["text-1"][opts.theme], fontSize: 10, position: "top" },
-          data: (data.markers ?? []).map((m) => {
-            const v = s.values[m.index];
-            return { name: m.label, coord: [m.index, isKnown(v) ? v : 0], value: m.label };
-          }),
+          data: markerData,
           silent: true,
         };
       }
@@ -211,7 +298,8 @@ export function buildPaneOption(data: ChartDataset, opts: BuildOptions): Record<
           if (s.kind === "candle") {
             const o = s.ohlc?.[p.dataIndex];
             if (!o) return `${escapeHtml(s.name)}: ${escapeHtml(s.nullReason ?? "No data")}`;
-            const t = (k: number) => formatNumber(o[k]).text;
+            const t = (k: number) =>
+              s.format ? s.format(o[k] as number) : formatNumber(o[k]).text;
             return `${escapeHtml(s.name)}: O ${t(0)} H ${t(1)} L ${t(2)} C ${t(3)} ${escapeHtml(s.unit)}${escapeHtml(candleChange(s, p.dataIndex))}`;
           }
           const v = s.values[p.dataIndex];

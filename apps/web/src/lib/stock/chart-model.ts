@@ -215,6 +215,23 @@ export interface ChartSelection {
   adjusted: boolean;
 }
 
+/**
+ * Price text for chart cells and tooltips (F06R-2). format.ts keeps two decimals, so a price
+ * of 0.0001 would read as zero. Below 0.01 this shows 3 significant digits (at most 8 decimals);
+ * below 0.00000001 it says so instead of rounding to zero. Normal prices are unchanged.
+ */
+export function priceText(v: number): string {
+  const abs = Math.abs(v);
+  if (abs === 0 || abs >= 0.01) return formatNumber(v).text;
+  const floor = 1e-8;
+  if (abs < floor) {
+    const bound = formatNumber(floor, { decimals: 8 }).text;
+    return v < 0 ? `above -${bound}` : `below ${bound}`;
+  }
+  const decimals = Math.min(8, 2 - Math.floor(Math.log10(abs)));
+  return formatNumber(v, { decimals }).text;
+}
+
 export interface BuiltChart {
   dataset: ChartDataset;
   /** Rows the page may need to explain (compare start, missing indicators). */
@@ -236,7 +253,8 @@ function line(
   pane: number,
   extra: Partial<ChartSeries> = {},
 ): ChartSeries {
-  return { id, name, unit, kind: "line", values, pane, ...extra };
+  const format = unit === PRICE_UNIT ? { format: priceText } : {};
+  return { id, name, unit, kind: "line", values, pane, ...format, ...extra };
 }
 
 export function buildChartDataset(input: {
@@ -249,6 +267,8 @@ export function buildChartDataset(input: {
   selection: ChartSelection;
   compare: CompareInput | null;
   asOf: string | null;
+  /** meta.interval of the price response; "1w" = weekly candles (above 2,000 daily bars). */
+  interval?: string | null;
 }): BuiltChart {
   const { bars, selection: sel } = input;
   const dates = bars.map((b) => b[0]);
@@ -260,7 +280,8 @@ export function buildChartDataset(input: {
     : "Imported prices (raw)";
   const series: ChartSeries[] = [];
   const panes: ChartPane[] = [{ id: "price", name: "Price", unit: PRICE_UNIT, weight: 5 }];
-  let logScale = sel.log;
+  // Log stays available while comparing: rebased values are positive or null (F06R-3).
+  const logScale = sel.log;
 
   if (input.compare) {
     const cmap = new Map(input.compare.bars.map((b) => [b[0], b[4]]));
@@ -288,6 +309,7 @@ export function buildChartDataset(input: {
       unit: PRICE_UNIT,
       kind: "candle",
       pane: 0,
+      format: priceText,
       values: closes,
       ohlc: bars.map((b) => [b[1], b[2], b[3], b[4]] as const),
     });
@@ -298,6 +320,7 @@ export function buildChartDataset(input: {
       unit: PRICE_UNIT,
       kind: sel.type === "area" ? "area" : "line",
       pane: 0,
+      format: priceText,
       values: closes,
     });
   }
@@ -376,6 +399,10 @@ export function buildChartDataset(input: {
     series.push(...s(panes.length - 1));
   };
   const nr = "indicator warm-up or outside the last 750 trading days";
+  // A series absent from the stored block is not a warm-up gap: say so (F06R-5).
+  const nrOf = (p: Pairs | undefined) => (p ? nr : "not in the stored indicator series");
+  const weekly = input.interval === "1w";
+  const per = weekly ? "week" : "day";
   addPane("volume", { id: "volume", name: "Volume", unit: "shares", weight: 1.6 }, (i) => [
     {
       id: "volume",
@@ -387,18 +414,23 @@ export function buildChartDataset(input: {
     },
     line(
       "volume-avg20",
-      `Volume, ${VOLUME_AVG_DAYS}-day average incl. today`,
+      `Volume, ${VOLUME_AVG_DAYS}-${per} average incl. ${weekly ? "current week" : "today"}`,
       "shares",
       rollingVolumeAverage(
         bars.map((b) => b[5]),
         VOLUME_AVG_DAYS,
       ),
       i,
-      { dash: "dashed", nullReason: `fewer than ${VOLUME_AVG_DAYS} bars so far` },
+      {
+        dash: "dashed",
+        nullReason: `fewer than ${VOLUME_AVG_DAYS} ${per}s in the plotted range so far`,
+      },
     ),
   ]);
   addPane("rsi", { id: "rsi", name: "RSI 14", unit: "0-100", weight: 2 }, (i) => [
-    line("rsi14", "RSI 14", "0-100", alignByDate(dates, ind?.rsi14), i, { nullReason: nr }),
+    line("rsi14", "RSI 14", "0-100", alignByDate(dates, ind?.rsi14), i, {
+      nullReason: nrOf(ind?.rsi14),
+    }),
   ]);
   addPane("macd", { id: "macd", name: "MACD", unit: PRICE_UNIT, weight: 2 }, (i) => [
     {
@@ -408,30 +440,36 @@ export function buildChartDataset(input: {
       kind: "bar",
       pane: i,
       values: alignByDate(dates, ind?.macd?.hist),
-      nullReason: nr,
+      nullReason: nrOf(ind?.macd?.hist),
     },
-    line("macd", "MACD", PRICE_UNIT, alignByDate(dates, ind?.macd?.macd), i, { nullReason: nr }),
+    line("macd", "MACD", PRICE_UNIT, alignByDate(dates, ind?.macd?.macd), i, {
+      nullReason: nrOf(ind?.macd?.macd),
+    }),
     line("macd-signal", "Signal", PRICE_UNIT, alignByDate(dates, ind?.macd?.signal), i, {
       dash: "dashed",
-      nullReason: nr,
+      nullReason: nrOf(ind?.macd?.signal),
     }),
   ]);
   addPane("stochastic", { id: "stochastic", name: "Stochastic", unit: "0-100", weight: 2 }, (i) => [
-    line("stoch-k", "%K", "0-100", alignByDate(dates, ind?.stochastic?.k), i, { nullReason: nr }),
+    line("stoch-k", "%K", "0-100", alignByDate(dates, ind?.stochastic?.k), i, {
+      nullReason: nrOf(ind?.stochastic?.k),
+    }),
     line("stoch-d", "%D", "0-100", alignByDate(dates, ind?.stochastic?.d), i, {
       dash: "dashed",
-      nullReason: nr,
+      nullReason: nrOf(ind?.stochastic?.d),
     }),
   ]);
   addPane("adx", { id: "adx", name: "ADX 14", unit: "0-100", weight: 2 }, (i) => [
-    line("adx", "ADX", "0-100", alignByDate(dates, ind?.adx14?.adx), i, { nullReason: nr }),
+    line("adx", "ADX", "0-100", alignByDate(dates, ind?.adx14?.adx), i, {
+      nullReason: nrOf(ind?.adx14?.adx),
+    }),
     line("plus-di", "+DI", "0-100", alignByDate(dates, ind?.adx14?.plus_di), i, {
       dash: "dashed",
-      nullReason: nr,
+      nullReason: nrOf(ind?.adx14?.plus_di),
     }),
     line("minus-di", "-DI", "0-100", alignByDate(dates, ind?.adx14?.minus_di), i, {
       dash: "dotted",
-      nullReason: nr,
+      nullReason: nrOf(ind?.adx14?.minus_di),
     }),
   ]);
 
@@ -451,7 +489,6 @@ export function buildChartDataset(input: {
           label: `Resistance ${formatInr(s.price).text} (${formatCount(s.touches).text} touches)`,
         })),
       ];
-  if (input.compare) logScale = false;
 
   const dataset: ChartDataset = {
     xName: "Date",

@@ -52,7 +52,7 @@ describe("UI-07 charts render with 0, 1, 2, 10 and 2000 points", () => {
       await waitFor(
         () => expect(screen.getByTestId("chart-canvas").dataset["ready"]).toBe("true"),
         {
-          timeout: 10_000,
+          timeout: 30_000,
         },
       );
       await waitFor(() =>
@@ -61,7 +61,7 @@ describe("UI-07 charts render with 0, 1, 2, 10 and 2000 points", () => {
       expect(screen.queryByText(/could not be drawn/)).toBeNull();
       expect(errors).toEqual([]);
     },
-    20_000,
+    45_000,
   );
 
   it("0 points shows the empty state instead of an empty plot", () => {

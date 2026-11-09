@@ -310,7 +310,7 @@ export function AnalysisTab({ indicatorsLoad }: { indicatorsLoad: Load<Indicator
         last 750 trading days for the line charts, the last year for the calendar.
       </p>
       <ChartSlot
-        title="Drawdown from the running peak"
+        title="Drawdown from the running peak (peak within the last 750 trading days)"
         testId="chart-drawdown"
         load={indicatorsLoad}
         slot={drawdown}

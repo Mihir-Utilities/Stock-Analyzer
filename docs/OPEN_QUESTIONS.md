@@ -509,3 +509,13 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | F11-9 | Holding notes need one text per row but `DataTable` reasons are per column | Row-specific reasons (split in the day-change window, price converted for a later split, review needed items, fully sold) are in a Notes column; the other columns carry a generic reason | `SummarySection.tsx` |
 | F11-10 | "vs Nifty 50" delta | Value is the benchmark XIRR; the delta is your XIRR minus the benchmark in percentage points, shown only when both are known. The server note (same dated cash flows, price index, may use negative units, B11-10) is in the info popover | `SummarySection.tsx` |
 | F11-11 | Transaction list filters | Symbol filter goes to the server; side and date range filter the loaded pages in the browser. The list is paged 50 at a time with Load more | `TxnSection.tsx` |
+
+## F06R assumptions (Claude, review fixes; owner may overrule, none blocks)
+| # | Question | Choice made | Where |
+|---|---|---|---|
+| F06R-1 | docs/06 says "touch pinch/zoom" and is silent on keyboard zoom | Focusable chart group: + / - zoom, arrow keys pan by a quarter window, 0 resets (minimum window 5% of the bars); visible hint under the chart; markers sit on the close or the nearest valid close and are omitted if none | `pane-option.ts keyboardZoom`, `EChart.tsx` |
+| F06R-2 | `formatInr`/`formatNumber` always use 2 decimals, so a 0.0001 price reads as zero | Localised to chart values (`priceText`): 3 significant digits below 0.01 (max 8 decimals), "below 0.00000001" under that. `lib/format` unchanged | `chart-model.ts` |
+| F06R-3 | docs/06 is silent on log scale with compare | Log stays available with compare because rebased values are positive or null (it was silently ignored while the button looked pressed) | `chart-model.ts` |
+| F06R-4 | Volume average on weekly bars | Labelled by interval ("20-week average incl. current week"); D-T unchanged for the detector | `chart-model.ts` |
+| F06R-5 | Gap reason for a pane series absent from the stored block | "not in the stored indicator series" instead of the warm-up text | `chart-model.ts` |
+| F06R-6 | Mixed weekly/daily compare | An info note explains that few or no dates are shared; nothing is resampled in the browser | `ChartTab.tsx` |

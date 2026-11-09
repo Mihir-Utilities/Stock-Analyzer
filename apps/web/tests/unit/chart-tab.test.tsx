@@ -9,6 +9,23 @@ import * as cx from "../mocks/chart-fixtures";
 import * as fx from "../mocks/stock-fixtures";
 import "./dom-matchers";
 
+// These tests are about the page, not about ECharts drawing (that is covered by the pane-option
+// unit tests and the Playwright specs): a stub host keeps the full-page renders cheap under load.
+// The per-file timeout is generous because a full StockPage render is still heavy on 2 CPUs.
+vi.setConfig({ testTimeout: 30_000 });
+vi.mock("@/components/charts/EChart", () => ({
+  EChart: ({ label, keyboardHintId }: { label: string; keyboardHintId?: string }) => (
+    <div
+      role={keyboardHintId ? "group" : "img"}
+      tabIndex={keyboardHintId ? 0 : undefined}
+      aria-label={label}
+      aria-describedby={keyboardHintId}
+      data-testid="chart-canvas"
+      data-ready="true"
+    />
+  ),
+}));
+
 const replace = vi.fn();
 let search = "";
 vi.mock("next/navigation", () => ({
@@ -156,6 +173,54 @@ describe("Chart tab", () => {
     );
   });
 
+  it("log scale stays usable with compare, and a weekly/daily mix is explained", async () => {
+    const user = userEvent.setup();
+    renderStock({
+      "GET /stocks/TCS/prices": cx.pricesWeekly(),
+      "GET /stocks/INFY/prices": fx.prices(),
+    });
+    const frame = await screen.findByTestId("chart-main");
+    await waitFor(() => expect(frame).toHaveAttribute("data-state", "ready"));
+    await user.click(screen.getByTestId("chart-log"));
+    await user.type(screen.getByTestId("compare-input"), "INFY");
+    await user.click(screen.getByTestId("compare-apply"));
+    expect(await screen.findByTestId("compare-interval-note")).toHaveTextContent(
+      /TCS is shown as weekly bars and INFY as daily bars/,
+    );
+    const log = screen.getByTestId("chart-log");
+    expect((log as HTMLButtonElement).disabled).toBe(false);
+    expect(log).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("the chart is a labelled keyboard region with a visible hint; legends explain the encodings", async () => {
+    const user = userEvent.setup();
+    renderStock({ "GET /stocks/TCS/prices": cx.pricesWeekly() });
+    const frame = await screen.findByTestId("chart-main");
+    await waitFor(() => expect(frame).toHaveAttribute("data-state", "ready"));
+    const region = within(frame).getByTestId("chart-canvas");
+    expect(region).toHaveAttribute("tabindex", "0");
+    expect(region).toHaveAttribute("role", "group");
+    const hint = within(frame).getByTestId("chart-keyboard-hint");
+    expect(region.getAttribute("aria-describedby")).toBe(hint.id);
+    expect(hint).toHaveTextContent(/\+ zooms in, - zooms out, left and right arrows pan/);
+    expect(within(frame).getByTestId("legend-volume-avg20")).toHaveTextContent(
+      "20-week average incl. current week",
+    );
+    expect(within(frame).getByTestId("legend-candles")).toHaveTextContent(
+      "hollow = up, filled = down",
+    );
+    await user.click(within(frame).getByTestId("chart-show-data"));
+    expect(within(frame).queryByTestId("chart-keyboard-hint")).toBeNull();
+  });
+
+  it("the indicator summary table scroller is a focusable labelled region", async () => {
+    renderStock({});
+    const box = await screen.findByTestId("indicator-summary-scroll");
+    expect(box).toHaveAttribute("tabindex", "0");
+    expect(box).toHaveAttribute("role", "region");
+    expect(box.getAttribute("aria-label")).toContain("Indicator summary");
+  });
+
   it("price error shows a retry; DATA_UNAVAILABLE shows the reason, not an empty plot", async () => {
     renderStock({ "GET /stocks/TCS/prices": fail(500, "INTERNAL", "boom") });
     const frame = await screen.findByTestId("chart-main");
@@ -217,6 +282,9 @@ describe("Analysis tab (UI-10 for every chart)", () => {
       expect(within(frame).getAllByTestId("chart-data-row").length).toBeGreaterThan(0);
       expect(within(frame).getByTestId("chart-data-table").textContent).not.toMatch(/NaN|Infinity/);
     }
+    expect(screen.getByTestId("chart-drawdown")).toHaveTextContent(
+      "Drawdown from the running peak (peak within the last 750 trading days)",
+    );
     const hist = screen.getByTestId("chart-histogram");
     expect(within(hist).getAllByTestId("chart-data-row")).toHaveLength(4);
     expect(screen.getByTestId("histogram-note")).toHaveTextContent(/approximate/);

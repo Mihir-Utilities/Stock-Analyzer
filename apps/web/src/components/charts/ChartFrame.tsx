@@ -1,13 +1,14 @@
 "use client";
 
 import { Download, FileImage, Maximize2, Minimize2, Table2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Banner } from "@/components/ui/banners";
 import { AsOfChip, SourceChip } from "@/components/ui/chips";
 import { cx, type ViewState } from "@/components/ui/cx";
 import { downloadCsv, toCsv } from "@/components/ui/csv";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { colorTokens } from "@/lib/theme/tokens";
 import { useTheme } from "@/lib/theme/use-theme";
 import {
   buildOption,
@@ -87,6 +88,18 @@ function LegendGlyph({
   );
 }
 
+/** Candle legend: hollow body = up, filled body = down (the shape cue next to colour). */
+function CandleGlyph({ theme }: { theme: "dark" | "light" }) {
+  const up = colorTokens.up[theme];
+  const down = colorTokens.down[theme];
+  return (
+    <svg width="22" height="12" viewBox="0 0 22 12" aria-hidden="true">
+      <rect x="2" y="2" width="7" height="8" fill="none" stroke={up} strokeWidth="1.5" />
+      <rect x="13" y="2" width="7" height="8" fill={down} stroke={down} strokeWidth="1.5" />
+    </svg>
+  );
+}
+
 function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
   useEffect(() => {
@@ -128,6 +141,7 @@ export function ChartFrame({
   testId = "chart-frame",
 }: ChartFrameProps) {
   const { theme } = useTheme();
+  const hintId = useId();
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const [showData, setShowData] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -231,6 +245,7 @@ export function ChartFrame({
         theme={theme}
         height={fullscreen ? Math.max(height, 480) : height}
         label={describe(dataset, title)}
+        {...(dataset.zoom ? { keyboardHintId: hintId } : {})}
         onHandle={setHandle}
         onError={onRenderError}
       />
@@ -345,6 +360,12 @@ export function ChartFrame({
         </Banner>
       ) : null}
       {body}
+      {dataset.zoom && effective !== "loading" && !showData && showBody ? (
+        <p id={hintId} data-testid="chart-keyboard-hint" className="text-micro text-text-2">
+          Keyboard: focus the chart, then + zooms in, - zooms out, left and right arrows pan, 0
+          shows the whole range. The range buttons above work too.
+        </p>
+      ) : null}
 
       {effective !== "loading" ? (
         <footer className="flex flex-wrap items-center gap-2">
@@ -396,12 +417,21 @@ function LegendItem({
           off ? "text-text-2 line-through" : "text-text-1",
         )}
       >
-        <LegendGlyph
-          symbol={s.kind === "bar" || s.kind === "candle" ? "rect" : seriesSymbol(position)}
-          color={seriesColor(s, position, theme)}
-          dashed={Boolean(s.forecast) || s.dash === "dashed" || s.dash === "dotted"}
-        />
+        {s.kind === "candle" ? (
+          <CandleGlyph theme={theme} />
+        ) : (
+          <LegendGlyph
+            symbol={s.kind === "bar" ? "rect" : seriesSymbol(position)}
+            color={seriesColor(s, position, theme)}
+            dashed={Boolean(s.forecast) || s.dash === "dashed" || s.dash === "dotted"}
+          />
+        )}
         {s.name}
+        {s.kind === "candle" ? (
+          <span className="text-text-2" data-testid="legend-candle-encoding">
+            (hollow = up, filled = down)
+          </span>
+        ) : null}
         {s.unit ? <span className="text-text-2">({s.unit})</span> : null}
       </button>
     </li>

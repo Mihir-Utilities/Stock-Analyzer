@@ -51,7 +51,13 @@ export function IndicatorSummary({ indicatorsLoad }: { indicatorsLoad: Load<Indi
         as of {formatDate(ind.as_of).text}. Reads describe today&apos;s numbers; they are not advice
         and no overbought or oversold threshold is applied.
       </p>
-      <div className="overflow-x-auto">
+      <div
+        className="overflow-x-auto"
+        tabIndex={0}
+        role="region"
+        aria-label="Indicator summary values, scrollable"
+        data-testid="indicator-summary-scroll"
+      >
         <table className="w-full min-w-[34rem] border-separate border-spacing-0 text-body-sm">
           <caption className="sr-only">Indicator values with plain-language reads</caption>
           <thead>
