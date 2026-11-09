@@ -620,3 +620,14 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | F08R-2 | The client ratio check missed the API limits (more than 4 decimals, 100,000,000 or more) and compared floats at exactly 3 percent | Same limits as `decimalCell`; the 3 percent band has a 1e-9 slack so 5.15 against 5 is silent like the server | `action-patch.ts` |
 | F08R-3 | A stacked composition on a fitted y axis exaggerates the parts | A chart with any stacked series gets an axis that includes zero (all other charts unchanged) | `chart-data.ts` |
 | F08R-4 | A twin-confirmed candidate still has an enabled Confirm | Kept enabled on purpose: the warning is shown up front and the server 409 text is the final word (B07R-1). Owner may prefer a disabled button with a visible reason | `DetectedActionCard.tsx` |
+
+
+## F10 partial (browse and placeholders) assumptions (Claude, 2026-11-09; owner may overrule, none blocks)
+| # | Question | Choice made | Where |
+|---|---|---|---|
+| F10p-1 | Nav lists /stocks, /compare, /screener, /admin/status but no page existed (404) | Real browse page; honest "Not available yet" pages for the other three; unit test that every nav href has a page.tsx | `app/(app)/*`, `nav-routes.test.ts` |
+| F10p-2 | docs/06 6.3 lists Price, 1D, 1Y sparkline, P/E, Quality, a Tracked-only toggle and an Index tag filter, but `GET /stocks` returns none of them and has no tracked filter | Browse shows only list fields and a per-row "Tracked" label; filters limited to the API params kind, status, sector (exact); no per-row requests; a banner says the rest waits for D05b. Tracked-only toggle and Index filter left out (a client-side toggle would break paging) | `StocksBrowse.tsx` |
+| F10p-3 | Search source: the palette ranks the full `/stocks/index` client-side, but "Load more" needs the cursor of `GET /stocks` | The browse page uses server ranking of `GET /stocks` (same order as docs/03 B03); the palette is unchanged | `lib/stocks/api.ts` |
+| F10p-4 | Watchlist star on rows | Left out: no existing hook adds a star without extra calls or mapping; the Watchlist page and the stock page keep it | `StocksBrowse.tsx` |
+| F10p-5 | Virtualised table (F10 step 2) | Plain list of 50-row pages: paging bounds the DOM; revisit when the screener lands | `StocksBrowse.tsx` |
+| F10p-6 | docs/06 6.3 "Add stock form" button on the empty state | Only the Imports link is shown (no add-stock form route exists yet) | `StocksBrowse.tsx` |

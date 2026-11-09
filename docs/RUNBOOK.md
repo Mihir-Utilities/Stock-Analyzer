@@ -450,3 +450,10 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 
 - A confirmed or rejected decision whose recalculation could not be queued (`POST_IMPORT_NOT_QUEUED`) shows "Retry recalculation" on the saved-decision message. It repeats the PATCH without numbers; the server enqueues `post_import` again (ACT-35). If it keeps failing, check the worker queue and run the post-import job by hand.
 - Tests: `npx vitest run tests/unit/stock-f08.test.tsx`.
+
+## 57. Stocks browse and not-available screens (F10p)
+
+- `/stocks` is a real page: it lists `GET /stocks` (alphabetical, or ranked with `q`), 50 per page with keyset "Load more". It shows only what the list returns (symbol, name, sector, industry, status, kind, tracked). If every stock shows "Not tracked", import prices; if the list is empty, import `instruments.csv` (the page links to Imports).
+- `/compare`, `/screener` and `/admin/status` show "Not available yet" and make no API call. Compare and Screener wait for analytics step D05b (on hold); Admin status waits for task B14 (`GET /admin/status` is a 501 stub). When one of them is built, replace its page and keep the nav test (`tests/unit/nav-routes.test.ts`) green.
+- A nav entry without a page now fails the unit test `nav-routes.test.ts`.
+- Tests: `npx vitest run tests/unit/stocks-browse.test.tsx tests/unit/nav-routes.test.ts`; e2e: `npx playwright test tests/e2e/browse.spec.ts`.
