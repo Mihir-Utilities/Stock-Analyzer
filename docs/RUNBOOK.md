@@ -372,3 +372,12 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Not available yet (see F11-2, F11-7): growth vs benchmark, drawdown, treemap or waterfall charts, and removing an adjustment override (the button is disabled with its reason until the route exists).
 - Failure modes: if the summary shows "could not be loaded" with a request id, check the API log for that id. A fully sold stock is hidden unless "Show fully sold positions" is ticked; its realized P&L stays in the totals.
 - Tests: `npm test` (`portfolio-lib.test.ts`, `portfolio-page.test.tsx`), `npx playwright test tests/e2e/portfolio.spec.ts` after `npm run build:e2e`.
+
+## 46. Alerts, settings, Telegram link and sign-out (F12)
+
+- Routes `/alerts` and `/settings`; sign-out lives in the top bar (`Account menu`) and in Settings. Routes used: `/alerts` (GET, POST, PATCH, DELETE), `/alerts/events`, `/auth/me`, `/auth/change-password`, `/auth/logout`, `/auth/logout-all`, `/telegram/link-code`, `/telegram/link` (DELETE), `/telegram/test`.
+- Not available yet because no route exists (F12-1, F12-2): quiet hours editor, display preferences other than the theme, session list and single revoke, export. Each shows a "not available yet" text with the reason; do not stub them.
+- Alerts are checked against the last price import (D-D). `THRESHOLD_ALREADY_MET` is shown at the price or NAV field with the bar date; a 409 CONFLICT is the 200-active limit or a final (fired, expired) alert.
+- Telegram without a bot (D-9): the card still makes a code but says it cannot be used yet. After the owner creates the bot and sets `TELEGRAM_BOT_USERNAME`, `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET`, the same card shows the deep link; no web change is needed. A slow first answer after idle (cold start) is tolerated: polling continues for 2 minutes, then "Check again".
+- Sign-out: a 401 on logout counts as signed out; a network or server error leaves the owner on the page with the error. Both end in a full navigation to `/login` after clearing the query cache.
+- Tests: `npm test` (`alerts-lib.test.ts`, `alerts-page.test.tsx`); `npx playwright test tests/e2e/alerts-settings.spec.ts` after `npm run build:e2e`.
