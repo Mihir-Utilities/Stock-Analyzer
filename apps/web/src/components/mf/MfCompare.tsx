@@ -265,9 +265,14 @@ export function MfCompare() {
       <div aria-live="polite" data-testid="mf-compare-live">
         {!ready && rawCodes === "" ? (
           <EmptyState message="Enter 2 to 5 scheme codes, or select funds on the funds list, to compare them." />
-        ) : !ready ? (
+        ) : !parsed.ok && /^\s*\d{1,10}\s*,?\s*$/.test(rawCodes) ? (
+          <Banner tone="info" testId="mf-compare-one">
+            Scheme {rawCodes.replace(/[^0-9]/g, "")} is ready. Add 1 to 4 more scheme codes above to
+            compare.
+          </Banner>
+        ) : !parsed.ok ? (
           <Banner tone="warn" testId="mf-compare-invalid">
-            {parsed.ok ? "" : parsed.error}
+            {parsed.error}
           </Banner>
         ) : q.isPending ? (
           <div className="flex flex-col gap-2" aria-busy="true">

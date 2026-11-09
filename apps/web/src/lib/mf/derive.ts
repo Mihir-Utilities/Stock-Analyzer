@@ -7,8 +7,12 @@ import type { SchemeDetail, SipInstallment } from "./schemas";
 // date formatting stays in lib/format; nothing here turns a number into display text except by
 // calling it.
 
-/** docs/00 section 1 item 6 and docs/03 section 10 (B10-8): the comma is part of the text. */
-export const MF_ATTRIBUTION = "NAV data: AMFI, via mfapi.in";
+/**
+ * docs/00 section 1 item 6 and docs/03 section 10 (B10-8): the comma is part of the text. One
+ * constant, defined next to the footer that renders it (kept out of this module's imports so the
+ * shell does not pull decimal.js into every page).
+ */
+export { MF_ATTRIBUTION } from "@/components/shell/Footer";
 export const MF_SOURCE = "AMFI NAV file via mfapi.in";
 /** docs/06 section 6.9, verbatim. */
 export const MF_NOTICE = "AUM, expense ratio and manager are not available from this data source";

@@ -427,7 +427,14 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Sign-out: a 401 on logout counts as signed out; a network or server error leaves the owner on the page with the error. Both end in a full navigation to `/login` after clearing the query cache.
 - Tests: `npm test` (`alerts-lib.test.ts`, `alerts-page.test.tsx`); `npx playwright test tests/e2e/alerts-settings.spec.ts` after `npm run build:e2e`.
 
-## F12 review notes (alerts, settings, sign-out)
+## 53. Alerts, settings and sign-out review notes (F12R)
 - Sign-out also removes the recent-search list from this browser (F12R-1); theme, sidebar width and the stock index cache stay. Page responses are `Cache-Control: no-store` (F12R-4), so after sign-out Back refetches and lands on `/login`. If Back still shows a private page, check that a proxy is not overriding the header.
 - Telegram link polling restarts its 2 minute window for every new code (F12R-3). A second chat cannot take over a linked chat: unlink first, then make a new code.
 - Tests: `npx vitest run tests/unit/alerts-review.test.tsx`.
+
+## 54. Mutual fund screens review (F14R)
+
+- Search: Plan and Option show "Any" only with Show all, because the API applies Direct+Growth unless `include_all=true` (F14R-1). A failed "Load more" keeps the rows already shown and a banner (`mf-more-error`); a stale or invalid cursor answers 422, so Load more again retries the same cursor and a changed filter starts from page one.
+- Compare checkboxes stop at 5 (the rest are disabled). The detail page remounts per scheme code so a refresh note or poll of one fund never shows on another.
+- Tests: `npm test` (`mf-review.test.tsx`, `mf-pages.test.tsx`, `mf-lib.test.ts`); `npx playwright test tests/e2e/mf.spec.ts` after `npm run build:e2e`.
+

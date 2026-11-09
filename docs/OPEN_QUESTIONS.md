@@ -595,3 +595,12 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | F12R-4 | Back button after sign-out | Next middleware sets `Cache-Control: no-store` on page responses (not `/api/`), matching the API rule of docs/03; the browser then refetches and the gate sends it to /login | `middleware.ts` |
 | F12R-5 | Account menu pattern | Disclosure popover (button with `aria-expanded` and `aria-controls`, panel of buttons in tab order), not `role=menu`: no arrow-key model is needed for two actions. Escape closes and returns focus; outside press closes | `SessionMenu.tsx`, `AppShell.tsx` |
 | F12R-6 | Linked card and a second chat | The API refuses a second chat while one is linked (B12-11); the card says so and tells the owner to unlink first. No rebind route exists | `TelegramCard.tsx` |
+
+## F14 review (Claude, 2026-11-09; none blocks)
+| # | Question | Choice made | Where |
+|---|---|---|---|
+| F14R-1 | docs/06 6.9 lists plan Direct default and option Growth default but not "Any"; docs/03 section 10 drops the default plan/option only with `include_all=true` (explicit values always apply), so "Any" with only active schemes cannot be asked of the API | Plan and Option offer "Any" only while Show all is ticked (it also lists inactive schemes). Without it the UI would say "Any" while the server still filtered Direct+Growth. Owner: allow `plan=any`/`option=any` on the API if Any with active-only is wanted | `MfBrowse.tsx` |
+| F14R-2 | Attribution: docs/00 1.6 says "MF screens", docs/06 6.9 lists it inside `/mf/[code]` | Footer only (see F14-4); judged to satisfy both because the footer is on screen on every `/mf` path. Not repeated in the pages | `Footer.tsx` |
+| F14R-3 | Grouped search (`group=true`) folds only the rows of one keyset page, so a fund's variants can continue on the next page as a second group with the same name | Shown as two groups (no client merge, a merge would reorder rows the server ordered). Owner: group across pages on the server if this matters | `MfBrowse.tsx` |
+| F14R-4 | Detail "Compare" link carries one code, but compare needs 2 to 5 | The compare page treats a single valid code as a hint ("Add 1 to 4 more") instead of the warning used for malformed input | `MfCompare.tsx` |
+
