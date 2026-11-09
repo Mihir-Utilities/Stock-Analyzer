@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Banner } from "@/components/ui/banners";
 import { FormField, inputClass } from "@/components/ui/FormField";
 import { useCreateAlert, usePatchAlert } from "@/lib/alerts/api";
@@ -59,6 +59,8 @@ export function AlertForm({
   const [cooldown, setCooldown] = useState(initial ? String(initial.cooldown_minutes) : "");
   const [expiry, setExpiry] = useState(initial?.expires_on ?? "");
   const [local, setLocal] = useState<Record<string, string>>({});
+  const [attempt, setAttempt] = useState(0);
+  const formRef = useRef<HTMLFormElement>(null);
   const once = useSingleFlight();
   const create = useCreateAlert();
   const patch = usePatchAlert();
@@ -68,6 +70,11 @@ export function AlertForm({
   const thresholdKey = kind.startsWith("nav_") ? "nav" : "price";
   const msg = (k: string): string | null =>
     local[k] ?? (k === thresholdKey && thresholdText ? thresholdText : (server[k] ?? null));
+
+  // After a submit that shows field errors (local or from the API), focus the first invalid control.
+  useEffect(() => {
+    if (attempt > 0) formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+  }, [attempt, local, active.error]);
 
   const setValue = (k: string, v: string) => setValues((o) => ({ ...o, [k]: v }));
 
@@ -93,6 +100,7 @@ export function AlertForm({
       body = { params: p.params };
     }
     setLocal(errors);
+    setAttempt((n) => n + 1);
     if (!body) return;
     const payload = body;
     once(async () => {
@@ -119,7 +127,13 @@ export function AlertForm({
   const isMf = targetTypeFor(kind) === "mf";
 
   return (
-    <form onSubmit={submit} noValidate data-testid="alert-form" className="flex flex-col gap-3">
+    <form
+      ref={formRef}
+      onSubmit={submit}
+      noValidate
+      data-testid="alert-form"
+      className="flex flex-col gap-3"
+    >
       <FormField label="Kind" required>
         {(p) => (
           <select

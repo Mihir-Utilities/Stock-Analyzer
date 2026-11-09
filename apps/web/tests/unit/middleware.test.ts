@@ -38,3 +38,14 @@ describe("auth gate redirect behind a proxy (SEC-06)", () => {
     expect(res.headers.get("content-security-policy")).toContain("default-src");
   });
 });
+
+// F12R-4: owner pages are never reused from the HTTP cache or bfcache after sign-out.
+describe("page cache headers (SEC-13)", () => {
+  it("pages answer no-store, API paths keep the API's own header", () => {
+    const cookie = { headers: { cookie: "session=abc" } };
+    const page = middleware(new NextRequest("http://localhost:3000/alerts", cookie));
+    expect(page.headers.get("cache-control")).toBe("no-store");
+    const api = middleware(new NextRequest("http://localhost:3000/api/v1/stocks/index", cookie));
+    expect(api.headers.get("cache-control")).toBeNull();
+  });
+});

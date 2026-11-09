@@ -30,9 +30,15 @@ function PasswordCard() {
   const [done, setDone] = useState(false);
   const once = useSingleFlight();
   const resultRef = useRef<HTMLHeadingElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (done) resultRef.current?.focus();
   }, [done]);
+  // A rejected submit (local or server field errors) moves focus to the first invalid field.
+  useEffect(() => {
+    if (attempt > 0) formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+  }, [attempt, errors, serverErr]);
 
   const fields = fieldErrors(serverErr);
   const serverMsg = (k: string) => fields.find((f) => f.field === k)?.message ?? null;
@@ -43,6 +49,7 @@ function PasswordCard() {
     setDone(false);
     const v = validatePasswordChange(current, next, confirm);
     setErrors(v);
+    setAttempt((n) => n + 1);
     if (v.current || v.new || v.confirm) return;
     once(async () => {
       setPending(true);
@@ -69,6 +76,7 @@ function PasswordCard() {
   return (
     <Card title="Password" testId="password-card">
       <form
+        ref={formRef}
         onSubmit={submit}
         noValidate
         className="flex max-w-md flex-col gap-3"
@@ -186,8 +194,9 @@ function DisplayCard() {
 }
 
 function SessionsCard() {
-  const { busy, error, run } = useSignOutActions();
   const [confirmAll, setConfirmAll] = useState(false);
+  // A failed sign-out must show its error: close the modal dialog that would otherwise cover it.
+  const { busy, error, run } = useSignOutActions(() => setConfirmAll(false));
   return (
     <Card title="Sessions" testId="sessions-card">
       <p className="mb-3 text-body-sm text-text-2" data-testid="sessions-unavailable">

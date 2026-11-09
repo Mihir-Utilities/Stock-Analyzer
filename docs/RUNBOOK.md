@@ -426,3 +426,8 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Telegram without a bot (D-9): the card still makes a code but says it cannot be used yet. After the owner creates the bot and sets `TELEGRAM_BOT_USERNAME`, `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET`, the same card shows the deep link; no web change is needed. A slow first answer after idle (cold start) is tolerated: polling continues for 2 minutes, then "Check again".
 - Sign-out: a 401 on logout counts as signed out; a network or server error leaves the owner on the page with the error. Both end in a full navigation to `/login` after clearing the query cache.
 - Tests: `npm test` (`alerts-lib.test.ts`, `alerts-page.test.tsx`); `npx playwright test tests/e2e/alerts-settings.spec.ts` after `npm run build:e2e`.
+
+## F12 review notes (alerts, settings, sign-out)
+- Sign-out also removes the recent-search list from this browser (F12R-1); theme, sidebar width and the stock index cache stay. Page responses are `Cache-Control: no-store` (F12R-4), so after sign-out Back refetches and lands on `/login`. If Back still shows a private page, check that a proxy is not overriding the header.
+- Telegram link polling restarts its 2 minute window for every new code (F12R-3). A second chat cannot take over a linked chat: unlink first, then make a new code.
+- Tests: `npx vitest run tests/unit/alerts-review.test.tsx`.

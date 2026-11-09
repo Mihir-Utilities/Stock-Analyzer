@@ -25,6 +25,9 @@ export function middleware(request: NextRequest) {
   requestHeaders.set("Content-Security-Policy", csp);
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", csp);
+  // Pages carry owner data: never reuse them from the HTTP cache or the back/forward cache after
+  // sign-out (F12R-4). API paths keep the API's own header (the stock index is cacheable).
+  if (!pathname.startsWith("/api/")) response.headers.set("Cache-Control", "no-store");
   return response;
 }
 
