@@ -28,6 +28,7 @@ import type { Attempt, TxnBody } from "./txn-form";
 export const portfolioKeys = {
   all: ["portfolio"] as const,
   summary: (includeExited: boolean) => ["portfolio", "summary", includeExited] as const,
+  txnsAll: ["portfolio", "txns"] as const,
   txns: (symbol: string) => ["portfolio", "txns", symbol] as const,
   adjustments: ["portfolio", "adjustments"] as const,
   holidays: (year: number) => ["portfolio", "holidays", year] as const,

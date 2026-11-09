@@ -372,3 +372,11 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Not available yet (see F11-2, F11-7): growth vs benchmark, drawdown, treemap or waterfall charts, and removing an adjustment override (the button is disabled with its reason until the route exists).
 - Failure modes: if the summary shows "could not be loaded" with a request id, check the API log for that id. A fully sold stock is hidden unless "Show fully sold positions" is ticked; its realized P&L stays in the totals.
 - Tests: `npm test` (`portfolio-lib.test.ts`, `portfolio-page.test.tsx`), `npx playwright test tests/e2e/portfolio.spec.ts` after `npm run build:e2e`.
+
+## F11 review fixes (portfolio and watchlist screens)
+
+- Transaction list: the server filters by symbol only, so Side and date filters look at loaded rows. When the filtered view is empty and more pages exist, the list says "No match in the loaded rows yet" and keeps Load more (F11R-3). The symbol filter queries 300 ms after typing stops.
+- Save and retry: a retry with identical values reuses the Idempotency-Key. After a network error or timeout the list is refetched so the owner can see whether the first try was saved; changing any value after a failed try sends a new key and shows a duplicate warning (F11R-2). A 409 means the key was used for different values: the next press starts a new key. If a duplicate was created, delete the extra row from the list.
+- Edit: only really changed fields are sent (compared as normalised decimals); with nothing changed Save is disabled. Price and fees above 1e13 and impossible dates are refused before sending, as the server does.
+- Focus returns to Add transaction or the row Edit button when a form closes; a polite live region announces the result.
+- Tests: `portfolio-review.test.tsx`, `portfolio-lib.test.ts`; axe e2e covers the edit form, delete dialog and error states (`tests/e2e/portfolio.spec.ts`). The DataTable cases in `ui-components.test.tsx` have an explicit 20 s budget for loaded runs.

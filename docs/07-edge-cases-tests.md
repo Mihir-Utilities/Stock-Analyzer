@@ -286,6 +286,13 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | PF-20 | Missing price or no open holding in the summary | Market value, unrealized and XIRR are null with a reason, warning MISSING_PRICE; never 0 | U/I |
 | PF-21 | Latest bar older than a confirmed split, or a split between the last two bars | LTP converted to current units so value stays invariant; day change null with reason `corporate_action_in_window` | U |
 
+| PF-26 | Side or date filter selected while the matching rows are on an unloaded page (F11 review) | The empty state says "No match in the loaded rows yet" and Load more stays available; page 2 rows appear | U |
+| PF-27 | Save fails with a network error or timeout (reply may be lost), then the owner edits a field and saves (F11 review) | Same body: same Idempotency-Key. The list is refetched on a network error. The message says to check the list before changing values; a changed body gets a new key and a warning. A 409 burns the key (next press uses a new one) with its own message | U |
+| PF-28 | Edit form with nothing changed, or only the note changed (F11 review) | Save is disabled and no request is sent; a note-only edit sends `{note}`; "100" typed over "100.0000" is not a change | U |
+| PF-29 | Client validation parity with the server (F11 review) | Price or fees above 1e13 and impossible dates (2026-02-31, 2025-02-29) are rejected before sending; the listing-date 422 is shown from the server on the field and in the error summary | U |
+| PF-30 | Closing the add or edit form (F11 review) | Focus returns to Add transaction or the row's Edit button; a polite live region announces the result | U |
+| PF-31 | "vs Nifty 50" delta wording (F11 review) | `You: +2.0 pts vs Nifty`, `You: -3.5 pts vs Nifty`, `You: 0.0 pts vs Nifty` (your XIRR minus the benchmark) | U |
+
 ## ALR: alerts and Telegram
 | ID | Scenario | Required behavior | Test |
 |---|---|---|---|

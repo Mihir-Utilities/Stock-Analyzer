@@ -135,6 +135,9 @@ export const watchEntrySchema = z.object({
   note: z.string().nullish(),
 });
 
+// `ltp` and `nav` are JSON numbers here on purpose: docs/03 section 11 shows them as numbers and the
+// Go watchlist struct sends `*float64` (display prices, never summed). The portfolio summary sends
+// money as strings; those are the only money fields the UI adds up, and it does so as decimals.
 export const watchStockSchema = z.object({
   id: z.number(),
   symbol: z.string(),

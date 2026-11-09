@@ -40,6 +40,13 @@ export function qty(v: string): string {
   return formatNumber(displayNumber(v), { decimals: qtyDecimals(v) }).text;
 }
 
+/** "You: +2.0 pts vs Nifty" (your XIRR minus the benchmark's, in percentage points); zero is unsigned. */
+export function benchmarkDeltaText(diffPts: number): string {
+  const body = formatNumber(Math.abs(diffPts), { decimals: 1 }).text;
+  const sign = Number(body.replace(/,/g, "")) === 0 ? "" : diffPts > 0 ? "+" : "-";
+  return `You: ${sign}${body} pts vs Nifty`;
+}
+
 export function pct(v: number | null | undefined, signed = false, reason?: string): Formatted {
   return formatPercent(v, { ...(signed ? { signed: true } : {}), ...(reason ? { reason } : {}) });
 }

@@ -9,9 +9,12 @@ import {
   sumMoney,
   tradeAmount,
 } from "@/lib/portfolio/decimal";
+import { benchmarkDeltaText } from "@/components/portfolio/text";
 import {
+  changedFields,
   describeTxnError,
   EMPTY_DRAFT,
+  isCalendarDate,
   newIdempotencyKey,
   nextAttempt,
   nonTradingWarning,
@@ -161,5 +164,92 @@ describe("server errors", () => {
     expect(
       describeTxnError(new ApiError("CONFLICT", "Idempotency-Key reused", 409)).message,
     ).toMatch(/different values/);
+  });
+  it("F11-5/F11R: a lost reply asks to check the list first; 409 is flagged as a burnt key", () => {
+    const net = describeTxnError(new ApiError("NETWORK", "Could not reach the server.", 0));
+    expect(net.message).toContain("Check the list before changing values");
+    expect(net.lost).toBe(true);
+    const five = describeTxnError(new ApiError("INTERNAL", "boom", 503));
+    expect(five.retryable).toBe(true);
+    expect(five.lost).toBe(false);
+    const conflict = describeTxnError(new ApiError("CONFLICT", "Idempotency-Key reused", 409));
+    expect(conflict.conflict).toBe(true);
+    expect(conflict.retryable).toBe(false);
+    expect(conflict.message).toMatch(/sends these values as a new request/);
+  });
+});
+
+describe("F11 review: validation parity with the Go validator (txns.go, moneyMax 1e13)", () => {
+  const MAX = "10000000000000";
+  it.each([
+    ["price", { price: "10000000000000.0001" }, true],
+    ["price", { price: MAX }, false],
+    ["fees", { fees: "10000000000000.0001" }, true],
+    ["fees", { fees: MAX }, false],
+    ["tradeDate", { tradeDate: "2026-02-31" }, true],
+    ["tradeDate", { tradeDate: "2026-04-31" }, true],
+    ["tradeDate", { tradeDate: "2026-13-01" }, true],
+    ["tradeDate", { tradeDate: "2026-00-10" }, true],
+    ["tradeDate", { tradeDate: "2025-02-29" }, true],
+    ["tradeDate", { tradeDate: "2024-02-29" }, false],
+  ] as const)("%s %j -> rejected=%s", (field, patch, rejected) => {
+    const r = validateDraft({ ...good, ...patch }, TODAY);
+    expect(Boolean(r.errors[field])).toBe(rejected);
+    expect(r.body === null).toBe(rejected);
+  });
+  it("isCalendarDate is strict", () => {
+    expect(isCalendarDate("2026-02-28")).toBe(true);
+    expect(isCalendarDate("2026-02-31")).toBe(false);
+    expect(isCalendarDate("2026-2-3")).toBe(false);
+  });
+});
+
+describe("F11 review: edit sends only really changed fields", () => {
+  const orig: TxnDraft = {
+    symbol: "TCS",
+    side: "buy",
+    qty: "12",
+    price: "3500",
+    fees: "0.1",
+    tradeDate: "2026-01-05",
+    note: "",
+  };
+  const body = (p: object) => ({
+    symbol: "TCS",
+    side: "buy" as const,
+    qty: "12",
+    price: "3500",
+    fees: "0.1",
+    trade_date: "2026-01-05",
+    note: "",
+    ...p,
+  });
+  it("identical values, even with different decimal spelling, are no change", () => {
+    expect(changedFields(orig, body({}))).toEqual({});
+    expect(changedFields(orig, body({ price: "3500.0000", qty: "12.0", fees: "0.10" }))).toEqual(
+      {},
+    );
+    expect(changedFields({ ...orig, fees: "0" }, body({ fees: "0" }))).toEqual({});
+  });
+  it("only the note", () => {
+    expect(changedFields(orig, body({ note: "trim" }))).toEqual({ note: "trim" });
+  });
+  it("a real change in price and side", () => {
+    expect(changedFields(orig, body({ price: "3501", side: "sell" }))).toEqual({
+      price: "3501",
+      side: "sell",
+    });
+  });
+});
+
+describe("F11 review: benchmark delta wording (your XIRR minus the benchmark)", () => {
+  it.each([
+    [2, "You: +2.0 pts vs Nifty"],
+    [-3.456, "You: -3.5 pts vs Nifty"],
+    [0, "You: 0.0 pts vs Nifty"],
+    [0.04, "You: 0.0 pts vs Nifty"],
+    [-0.04, "You: 0.0 pts vs Nifty"],
+  ])("%s -> %s", (diff, text) => {
+    expect(benchmarkDeltaText(diff)).toBe(text);
   });
 });
