@@ -23,6 +23,10 @@ export interface ChartSeries {
   values: ReadonlyArray<number | null>;
   /** Forecast series are dashed, hatched and drawn in --exp. */
   forecast?: boolean;
+  /** Bar series with the same stack name are stacked (balance composition). */
+  stack?: string;
+  /** Bar series: where each bar starts (floating bars, e.g. a waterfall); `values` is the height. */
+  floatBase?: ReadonlyArray<number | null>;
   /** Estimated values are marked in the table and tooltip. */
   estimated?: boolean;
   /** Index into the categorical palette; defaults to the series position (stable identity). */
@@ -139,15 +143,30 @@ export function buildOption(data: ChartDataset, opts: BuildOptions): Record<stri
     const symbol = seriesSymbol(position);
     const values = s.values.map((v) => (isKnown(v) ? v : null));
     if (s.kind === "bar") {
+      const stack = s.floatBase ? "float" : s.stack;
+      const bar = {
+        id: s.id,
+        name: s.name,
+        type: "bar",
+        data: values,
+        ...(stack ? { stack } : {}),
+        // Bars get a per-series decal pattern from aria.decal (second encoding).
+        itemStyle: { color },
+      };
+      if (!s.floatBase) return [bar];
+      // Floating bar: an invisible base series (not in the legend, table or tooltip) lifts it.
       return [
         {
-          id: s.id,
-          name: s.name,
+          id: `${s.id}__base`,
+          name: `${s.name} (base)`,
           type: "bar",
-          data: values,
-          // Bars get a per-series decal pattern from aria.decal (second encoding).
-          itemStyle: { color },
+          stack,
+          data: s.floatBase.map((v) => (isKnown(v) ? v : null)),
+          silent: true,
+          itemStyle: { color: "transparent" },
+          tooltip: { show: false },
         },
+        bar,
       ];
     }
     return [
@@ -188,10 +207,10 @@ export function buildOption(data: ChartDataset, opts: BuildOptions): Record<stri
         const head = escapeHtml(first?.axisValueLabel ?? "");
         const lines = list.map((p) => {
           const s = data.series.find((x) => x.id === p.seriesId);
-          if (!s) return "";
+          if (!s) return null;
           return `${escapeHtml(s.name)}: ${escapeHtml(valueText(s, s.values[p.dataIndex]))} ${isKnown(s.values[p.dataIndex]) ? escapeHtml(s.unit) : ""}`;
         });
-        return `${head}<br/>${lines.join("<br/>")}<br/><small>${escapeHtml(data.source)}${data.asOf ? `, as of ${escapeHtml(data.asOf)}` : ""}</small>`;
+        return `${head}<br/>${lines.filter((l) => l !== null).join("<br/>")}<br/><small>${escapeHtml(data.source)}${data.asOf ? `, as of ${escapeHtml(data.asOf)}` : ""}</small>`;
       },
     },
     xAxis: { type: "category", name: data.xName, data: [...data.x], boundaryGap: hasBars },

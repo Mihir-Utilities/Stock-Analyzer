@@ -109,5 +109,33 @@
     "batch_id": "results-deleted-note",
     "post_import_job_id": "results-deleted-warning",
     "warnings": "results-deleted-warning"
+  },
+  "GET /stocks/{symbol}/fundamentals (Fundamentals tab, F07)": {
+    "basis_used": "fnd-summary",
+    "basis_available": "fnd-basis-*",
+    "basis_note": "fnd-basis-note",
+    "period_type": "fnd-period-*",
+    "periods_available": "depth-chip",
+    "unit": "fnd-select-*",
+    "unit_by_metric": "fnd-select-*",
+    "source_by_metric": "fnd-source-*",
+    "periods": "fnd-col-*",
+    "labels": "fnd-col-*",
+    "metrics": "fnd-cell-*",
+    "metrics_reason": "fnd-empty",
+    "derived": "fnd-cell-*",
+    "derived_reason": "fnd-derived-note",
+    "derived_as_of": "fnd-warning-DERIVED_STALE|fnd-scalar-*|fnd-pe-strip",
+    "ratios": "fnd-scalar-*",
+    "ratios_reason": "fnd-scalar-*|fnd-roe-decomposition",
+    "valuation": "fnd-scalar-*|fnd-pe-strip",
+    "valuation_reason": "fnd-scalar-*|fnd-pe-strip",
+    "company_type": "not-rendered|financial-company panel hiding is not built (F07-7)",
+    "status": "fnd-card",
+    "entry_hint": "fnd-empty",
+    "last_updated": "fnd-last-updated",
+    "last_updated_source": "fnd-last-updated",
+    "warnings": "fnd-warning-*",
+    "meta.stale": "fnd-last-updated"
   }
 }

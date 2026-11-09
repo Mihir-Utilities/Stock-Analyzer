@@ -50,12 +50,19 @@ export const REENTRY_COPY =
 const emptyValues = (): Record<ResultField, string> =>
   Object.fromEntries(RESULT_FIELDS.map((k) => [k, ""])) as Record<ResultField, string>;
 
+export interface ResultsFormProps {
+  /** Stock page: symbol locked to the page, optional period prefill (F07). */
+  fixed?: { symbol: string; basis?: string; periodType?: string; periodEnd?: string };
+  /** Called after a save or delete went through, so the page can refetch. */
+  onChanged?: () => void;
+}
+
 /** Manual quarterly or annual results (docs/01 7.6; same validators as results_*.csv, IMP-17). */
-export function ResultsForm() {
-  const [symbol, setSymbol] = useState("");
-  const [basis, setBasis] = useState("consolidated");
-  const [periodType, setPeriodType] = useState("Q");
-  const [periodEnd, setPeriodEnd] = useState("");
+export function ResultsForm({ fixed, onChanged }: ResultsFormProps = {}) {
+  const [symbol, setSymbol] = useState(fixed?.symbol ?? "");
+  const [basis, setBasis] = useState(fixed?.basis ?? "consolidated");
+  const [periodType, setPeriodType] = useState(fixed?.periodType ?? "Q");
+  const [periodEnd, setPeriodEnd] = useState(fixed?.periodEnd ?? "");
   const [values, setValues] = useState<Record<ResultField, string>>(emptyValues);
   const [note, setNote] = useState("");
   const [local, setLocal] = useState<FieldErrors>({});
@@ -65,10 +72,12 @@ export function ResultsForm() {
   const save = useMutation({
     mutationFn: (v: { symbol: string; body: Record<string, unknown> }) =>
       postResults(v.symbol, v.body),
+    onSuccess: () => onChanged?.(),
   });
   const remove = useMutation({
     mutationFn: (v: { symbol: string; periodType: string; periodEnd: string; basis: string }) =>
       deleteManualResults(v.symbol, v),
+    onSuccess: () => onChanged?.(),
     onSettled: () => setConfirmDelete(false),
   });
 
@@ -134,6 +143,7 @@ export function ResultsForm() {
           onChange={setSymbol}
           error={msg("symbol")}
           testId="results-symbol"
+          readOnly={fixed !== undefined}
         />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <FormField label="Period type" required error={msg("period_type")}>
