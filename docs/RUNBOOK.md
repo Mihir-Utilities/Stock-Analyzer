@@ -375,7 +375,7 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 
 ## 46. Alerts, settings, Telegram link and sign-out (F12)
 
-- Routes `/alerts` and `/settings`; sign-out lives in the top bar (`Account menu`) and in Settings. Routes used: `/alerts` (GET, POST, PATCH, DELETE), `/alerts/events`, `/auth/me`, `/auth/change-password`, `/auth/logout`, `/auth/logout-all`, `/telegram/link-code`, `/telegram/link` (DELETE), `/telegram/test`.
+- Routes `/alerts` and `/settings`; sign-out lives in the desktop top bar (`Account menu`), in the mobile More menu (the top bar is full at 320 px; "Sign out everywhere" confirms inline there) and in Settings (dialog). Routes used: `/alerts` (GET, POST, PATCH, DELETE), `/alerts/events`, `/auth/me`, `/auth/change-password`, `/auth/logout`, `/auth/logout-all`, `/telegram/link-code`, `/telegram/link` (DELETE), `/telegram/test`.
 - Not available yet because no route exists (F12-1, F12-2): quiet hours editor, display preferences other than the theme, session list and single revoke, export. Each shows a "not available yet" text with the reason; do not stub them.
 - Alerts are checked against the last price import (D-D). `THRESHOLD_ALREADY_MET` is shown at the price or NAV field with the bar date; a 409 CONFLICT is the 200-active limit or a final (fired, expired) alert.
 - Telegram without a bot (D-9): the card still makes a code but says it cannot be used yet. After the owner creates the bot and sets `TELEGRAM_BOT_USERNAME`, `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET`, the same card shows the deep link; no web change is needed. A slow first answer after idle (cold start) is tolerated: polling continues for 2 minutes, then "Check again".
