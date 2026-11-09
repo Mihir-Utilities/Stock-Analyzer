@@ -11,7 +11,7 @@ import {
   seriesRows,
   waterfall,
 } from "@/lib/stock/fundamentals";
-import { ok } from "../mocks/imports-fixtures";
+import { fail, ok } from "../mocks/imports-fixtures";
 import { createMockFetch, type Handler } from "../mocks/mock-fetch";
 import * as fnd from "../mocks/fundamentals-fixtures";
 import "./dom-matchers";
@@ -281,5 +281,204 @@ describe("fundamentals model", () => {
     const rows = scalarRows(parse(fnd.fundamentals()), "ratios");
     expect(rows.map((r) => r.key)).toContain("cfo_to_pat");
     expect(rows.every((r) => r.value === null && r.reason === "not computed yet")).toBe(true);
+  });
+});
+
+// ---- F07 review fixes (F07R-1..F07R-8) --------------------------------------------------------
+
+const openDialog = (): HTMLElement => {
+  const d = document.querySelector("dialog[open]");
+  if (!d) throw new Error("no open dialog");
+  return d as HTMLElement;
+};
+
+describe("F07 review: toggles, honesty and form reuse", () => {
+  it("F07R-1: an empty Annual view keeps the toggles so the owner can go back to Quarterly", async () => {
+    const user = userEvent.setup();
+    renderTab({
+      "GET /stocks/TCS/fundamentals": (c) =>
+        c.query.get("period") === "A" ? fnd.noData : fnd.fundamentals(),
+    });
+    await user.click(await screen.findByTestId("fnd-period-A"));
+    const empty = await screen.findByTestId("fnd-empty");
+    expect(within(empty).getByTestId("fnd-empty-toggles")).toBeInTheDocument();
+    await user.click(within(empty).getByTestId("fnd-period-Q"));
+    expect(await screen.findByTestId("fundamentals-tab")).toBeInTheDocument();
+  });
+
+  it("F07R-2: while the next view loads, labels and the Edit prefill follow the data on screen", async () => {
+    const user = userEvent.setup();
+    const mock = createMockFetch({
+      "GET /stocks/TCS/fundamentals": (c) =>
+        c.query.get("period") === "A" ? fnd.fundamentals(fnd.annualBalance) : fnd.fundamentals(),
+    });
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).includes("period=A")
+        ? gate.then(() => mock.impl(input, init))
+        : mock.impl(input, init),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <FundamentalsTab symbol="TCS" />
+      </QueryClientProvider>,
+    );
+    await user.click(await screen.findByTestId("fnd-period-A"));
+    expect(await screen.findByTestId("fnd-updating")).toHaveTextContent(/previous view/);
+    expect(screen.getByTestId("fundamentals-tab")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByTestId("fnd-summary")).toHaveTextContent(/quarterly/);
+    await user.click(screen.getByTestId("fnd-edit-2026-06-30"));
+    expect((screen.getByTestId("results-period-type") as HTMLSelectElement).value).toBe("Q");
+    release();
+    await waitFor(() => expect(screen.getByTestId("fnd-summary")).toHaveTextContent(/annual/));
+    expect(screen.queryByTestId("fnd-updating")).toBeNull();
+  });
+
+  it("F07R-3: derived rows name the analytics snapshot and its as-of; the FCF row names its formula", () => {
+    const d = parse(fnd.fundamentals({ derived_as_of: "2026-10-01", derived_reason: null }));
+    const pnl = seriesRows(d, "pnl");
+    expect(pnl.find((r) => r.key === "revenue_yoy")?.source).toBe(
+      "Analytics snapshot, as of 1 Oct 2026",
+    );
+    const cf = seriesRows(parse(fnd.fundamentals(fnd.annualBalance)), "cf");
+    expect(cf.find((r) => r.key === "cf.fcf")?.source).toMatch(/CFO minus capex/);
+  });
+
+  it("F07R-3b: with no snapshot the derived source says not computed yet, never a date", async () => {
+    renderTab({ "GET /stocks/TCS/fundamentals": fnd.fundamentals() });
+    expect(await screen.findByTestId("fnd-source-net_margin")).toHaveTextContent(
+      "Analytics snapshot, not computed yet",
+    );
+  });
+
+  it("F07R-4: both scroll regions are focusable and labelled", async () => {
+    const user = userEvent.setup();
+    renderTab({ "GET /stocks/TCS/fundamentals": fnd.fundamentals() });
+    const region = await screen.findByTestId("fnd-table-scroll");
+    expect(region).toHaveAttribute("role", "region");
+    expect(region).toHaveAttribute("tabindex", "0");
+    expect(region.getAttribute("aria-label")).toMatch(/P&L, quarterly, consolidated/);
+    await user.click(screen.getByTestId("fnd-group-ratios"));
+    const scalar = screen.getByTestId("fnd-scalar-scroll");
+    expect(scalar).toHaveAttribute("role", "region");
+    expect(scalar).toHaveAttribute("tabindex", "0");
+    expect(scalar.getAttribute("aria-label")).toMatch(/Ratios/);
+  });
+
+  it("F07R-5: a disabled basis is explained in visible text linked to the group", async () => {
+    renderTab({
+      "GET /stocks/TCS/fundamentals": fnd.fundamentals({
+        basis_used: "standalone",
+        basis_available: ["standalone"],
+      }),
+    });
+    const why = await screen.findByTestId("fnd-basis-disabled");
+    expect(why).toHaveTextContent("consolidated unavailable: no quarterly periods are entered");
+    const group = screen.getByTestId("fnd-basis-auto").parentElement;
+    expect(group?.getAttribute("aria-describedby")).toBe(why.id);
+  });
+
+  it("F07R-6: the waterfall states that totals are reported and balancing steps are not", async () => {
+    renderTab({ "GET /stocks/TCS/fundamentals": fnd.fundamentals() });
+    expect(await screen.findByTestId("fnd-waterfall-note")).toHaveTextContent(
+      /not a reported figure/,
+    );
+  });
+
+  it("IMP-05: a quarterly period end that is not a quarter end is refused with the quarter-end message", async () => {
+    const user = userEvent.setup();
+    const mock = renderTab({ "GET /stocks/TCS/fundamentals": fnd.fundamentals() });
+    await user.click(await screen.findByTestId("fnd-add-results"));
+    await user.type(screen.getByTestId("results-period-end"), "2026-09-29");
+    await user.type(screen.getByTestId("results-revenue"), "100");
+    await user.click(screen.getByTestId("results-submit"));
+    const errors = await screen.findAllByTestId("form-field-error");
+    expect(errors.map((e) => e.textContent).join(" ")).toContain(
+      "2026-09-29 is not a calendar quarter end (31 Mar, 30 Jun, 30 Sep or 31 Dec)",
+    );
+    expect(mock.calls.filter((c) => c.method === "POST")).toHaveLength(0);
+  });
+
+  it("IMP-06: revenue at or above 1e7 crore is refused with the unit message; nothing is sent", async () => {
+    const user = userEvent.setup();
+    const mock = renderTab({ "GET /stocks/TCS/fundamentals": fnd.fundamentals() });
+    await user.click(await screen.findByTestId("fnd-add-results"));
+    await user.type(screen.getByTestId("results-period-end"), "2026-09-30");
+    await user.type(screen.getByTestId("results-revenue"), "10000000");
+    await user.click(screen.getByTestId("results-submit"));
+    const errors = await screen.findAllByTestId("form-field-error");
+    expect(errors.map((e) => e.textContent).join(" ")).toContain(
+      "revenue 10000000 is not below 1e7 crore; check the units (INR crore, not INR)",
+    );
+    expect(mock.calls.filter((c) => c.method === "POST")).toHaveLength(0);
+  });
+
+  it("F13b parity: the embedded form shows the B08-8 copy and deletes a manual period after confirmation", async () => {
+    const user = userEvent.setup();
+    const mock = renderTab({
+      "GET /stocks/TCS/fundamentals": fnd.fundamentals(),
+      "DELETE /stocks/TCS/results": () =>
+        ok({ deleted: 3, batch_id: 31, post_import_job_id: 9, warnings: [] }),
+    });
+    await user.click(await screen.findByTestId("fnd-edit-2026-06-30"));
+    expect(screen.getByTestId("results-reentry-copy")).toHaveTextContent(
+      "Metrics you leave out are not removed: values saved by an earlier manual entry for this period stay. To remove them, delete the manual period and enter it again.",
+    );
+    await user.click(screen.getByTestId("results-delete"));
+    expect(openDialog().textContent).toContain("TCS, 2026-06-30 (quarterly, consolidated)");
+    await user.click(within(openDialog()).getByTestId("confirm-ok"));
+    expect(await screen.findByTestId("results-deleted-note")).toHaveTextContent("3");
+    const del = mock.calls.find((c) => c.method === "DELETE");
+    expect(del?.query.get("period_end")).toBe("2026-06-30");
+    expect(del?.headers.get("X-Requested-With")).toBe("fetch");
+    await waitFor(() =>
+      expect(
+        mock.calls.filter((c) => c.path === "/stocks/TCS/fundamentals").length,
+      ).toBeGreaterThan(1),
+    );
+  });
+
+  it("F07R-7: opening Edit for another period starts a clean form (no values, note or errors carried over)", async () => {
+    const user = userEvent.setup();
+    renderTab({
+      "GET /stocks/TCS/fundamentals": fnd.fundamentals(),
+      "POST /stocks/TCS/results": fail(422, "VALIDATION", "bad"),
+    });
+    await user.click(await screen.findByTestId("fnd-edit-2026-06-30"));
+    await user.type(screen.getByTestId("results-revenue"), "1,23");
+    await user.type(screen.getByTestId("results-note"), "mine");
+    await user.click(screen.getByTestId("results-submit"));
+    await screen.findAllByTestId("form-field-error");
+    await user.click(screen.getByTestId("fnd-edit-2026-03-31"));
+    expect((screen.getByTestId("results-period-end") as HTMLInputElement).value).toBe("2026-03-31");
+    expect((screen.getByTestId("results-revenue") as HTMLInputElement).value).toBe("");
+    expect((screen.getByTestId("results-note") as HTMLInputElement).value).toBe("");
+    expect(screen.queryAllByTestId("form-field-error")).toHaveLength(0);
+  });
+
+  it("F07R-8: the form is rebuilt for another stock, so a save can never go to the previous symbol", async () => {
+    const user = userEvent.setup();
+    const mock = createMockFetch({
+      "GET /stocks/TCS/fundamentals": fnd.fundamentals(),
+      "GET /stocks/INFY/fundamentals": fnd.fundamentals(),
+    });
+    vi.stubGlobal("fetch", mock.impl);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const ui = (symbol: string) => (
+      <QueryClientProvider client={client}>
+        <FundamentalsTab symbol={symbol} />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(ui("TCS"));
+    await user.click(await screen.findByTestId("fnd-add-results"));
+    expect((screen.getByTestId("results-symbol") as HTMLInputElement).value).toBe("TCS");
+    rerender(ui("INFY"));
+    await waitFor(() =>
+      expect((screen.getByTestId("results-symbol") as HTMLInputElement).value).toBe("INFY"),
+    );
   });
 });

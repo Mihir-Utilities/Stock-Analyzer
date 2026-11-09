@@ -31,7 +31,13 @@ export function PeriodsTable({
   caption: string;
 }) {
   return (
-    <div className="overflow-x-auto" data-testid="fnd-table-scroll">
+    <div
+      className="overflow-x-auto"
+      data-testid="fnd-table-scroll"
+      role="region"
+      aria-label={`${caption}, scrollable table`}
+      tabIndex={0}
+    >
       <table className="w-full min-w-max border-collapse text-body-sm" data-testid="fnd-table">
         <caption className="sr-only">{caption}</caption>
         <thead>
@@ -102,7 +108,7 @@ export function PeriodsTable({
                 className="whitespace-nowrap px-2 py-1 text-caption text-text-2"
                 data-testid={`fnd-source-${r.key}`}
               >
-                {r.source ?? "computed from entered values"}
+                {r.source ?? "source not recorded"}
               </td>
             </tr>
           ))}
@@ -123,7 +129,13 @@ export function ScalarTable({
   caption: string;
 }) {
   return (
-    <div className="overflow-x-auto" data-testid="fnd-scalar-scroll">
+    <div
+      className="overflow-x-auto"
+      data-testid="fnd-scalar-scroll"
+      role="region"
+      aria-label={`${caption}, scrollable table`}
+      tabIndex={0}
+    >
       <table className="w-full border-collapse text-body-sm" data-testid="fnd-scalar-table">
         <caption className="sr-only">{caption}</caption>
         <thead>

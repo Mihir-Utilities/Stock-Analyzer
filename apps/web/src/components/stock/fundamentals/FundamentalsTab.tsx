@@ -51,15 +51,23 @@ function Toggle<T extends string>({
   options,
   onChange,
   testPrefix,
+  describedBy,
 }: {
   label: string;
   value: T;
   options: ReadonlyArray<{ id: T; label: string; disabled?: boolean }>;
   onChange: (v: T) => void;
   testPrefix: string;
+  /** Id of visible text that explains why an option is disabled. */
+  describedBy?: string;
 }) {
   return (
-    <div role="group" aria-label={label} className="flex flex-wrap items-center gap-1">
+    <div
+      role="group"
+      aria-label={label}
+      aria-describedby={describedBy}
+      className="flex flex-wrap items-center gap-1"
+    >
       {options.map((o) => (
         <button
           key={o.id}
@@ -136,7 +144,12 @@ export function FundamentalsTab({ symbol }: { symbol: string }) {
 
   const periods = d.periods ?? [];
   const labels = d.labels ?? periods;
-  const unitNoun = period === "Q" ? "quarters" : "annual periods";
+  // With keepPreviousData the answer on screen can still be the previous toggle's; every label,
+  // the form prefill and the edit buttons follow the data shown, not the toggle just pressed.
+  const shownPeriod: PeriodChoice =
+    d.period_type === "A" ? "A" : d.period_type === "Q" ? "Q" : period;
+  const updating = q.isPlaceholderData;
+  const unitNoun = shownPeriod === "Q" ? "quarters" : "annual periods";
   const available = d.basis_available ?? [];
   const entered = d.periods_available ?? periods.length;
   const stale = q.data.meta?.stale === true;
@@ -147,7 +160,7 @@ export function FundamentalsTab({ symbol }: { symbol: string }) {
   const fixed = {
     symbol,
     basis: d.basis_used === "standalone" ? "standalone" : "consolidated",
-    periodType: period,
+    periodType: shownPeriod,
     ...(form && form.periodEnd ? { periodEnd: form.periodEnd } : {}),
   };
   const onChanged = () => void qc.invalidateQueries({ queryKey: ["stocks", symbol] });
@@ -184,7 +197,7 @@ export function FundamentalsTab({ symbol }: { symbol: string }) {
         Saved values appear here after the refresh. Balance sheet and cash flow figures come from
         the balance_cashflow_annual.csv import.
       </p>
-      <ResultsForm key={form.n} fixed={fixed} onChanged={onChanged} />
+      <ResultsForm key={`${symbol}:${form.n}`} fixed={fixed} onChanged={onChanged} />
     </div>
   ) : null;
 
@@ -199,6 +212,55 @@ export function FundamentalsTab({ symbol }: { symbol: string }) {
       Add results
     </button>
   );
+  const disabledBases = (["consolidated", "standalone"] as const).filter(
+    (b) => !available.includes(b),
+  );
+  const toggles = (
+    <>
+      <div className="flex flex-wrap items-center gap-3">
+        <Toggle
+          label="Period"
+          value={period}
+          onChange={setPeriod}
+          testPrefix="fnd-period"
+          options={[
+            { id: "Q", label: "Quarterly" },
+            { id: "A", label: "Annual" },
+          ]}
+        />
+        <Toggle
+          label="Basis"
+          value={basis}
+          onChange={setBasis}
+          testPrefix="fnd-basis"
+          describedBy={disabledBases.length > 0 ? "fnd-basis-disabled" : undefined}
+          options={[
+            { id: "auto", label: "Auto" },
+            {
+              id: "consolidated",
+              label: "Consolidated",
+              disabled: !available.includes("consolidated"),
+            },
+            {
+              id: "standalone",
+              label: "Standalone",
+              disabled: !available.includes("standalone"),
+            },
+          ]}
+        />
+      </div>
+      {disabledBases.length > 0 ? (
+        <p
+          id="fnd-basis-disabled"
+          data-testid="fnd-basis-disabled"
+          className="text-caption text-text-2"
+        >
+          {disabledBases.join(" and ")} unavailable: no{" "}
+          {shownPeriod === "Q" ? "quarterly" : "annual"} periods are entered on that basis.
+        </p>
+      ) : null}
+    </>
+  );
   const importLink = (
     <Link
       href="/imports"
@@ -212,6 +274,12 @@ export function FundamentalsTab({ symbol }: { symbol: string }) {
   if (empty) {
     return (
       <div className="flex flex-col gap-3" data-testid="fnd-empty">
+        {period !== "Q" || basis !== "auto" ? (
+          // A non-default choice with no rows must stay reversible (the toggles live nowhere else).
+          <div className="flex flex-col gap-2" data-testid="fnd-empty-toggles">
+            {toggles}
+          </div>
+        ) : null}
         <EmptyState
           message={`${d.entry_hint ?? "Add results via Import or the manual form."} Reason: ${humanReason(d.metrics_reason, "no data entered")}.`}
           action={
@@ -231,7 +299,12 @@ export function FundamentalsTab({ symbol }: { symbol: string }) {
 
   const asOf = asOfText(d);
   return (
-    <div className="flex flex-col gap-3" data-testid="fundamentals-tab">
+    <div
+      className="flex flex-col gap-3"
+      data-testid="fundamentals-tab"
+      aria-busy={updating}
+      data-updating={updating}
+    >
       <Card
         title="Fundamentals"
         testId="fnd-card"
@@ -248,42 +321,20 @@ export function FundamentalsTab({ symbol }: { symbol: string }) {
         }
       >
         <div className="flex flex-col gap-3">
+          {toggles}
           <div className="flex flex-wrap items-center gap-3">
-            <Toggle
-              label="Period"
-              value={period}
-              onChange={setPeriod}
-              testPrefix="fnd-period"
-              options={[
-                { id: "Q", label: "Quarterly" },
-                { id: "A", label: "Annual" },
-              ]}
-            />
-            <Toggle
-              label="Basis"
-              value={basis}
-              onChange={setBasis}
-              testPrefix="fnd-basis"
-              options={[
-                { id: "auto", label: "Auto" },
-                {
-                  id: "consolidated",
-                  label: "Consolidated",
-                  disabled: !available.includes("consolidated"),
-                },
-                {
-                  id: "standalone",
-                  label: "Standalone",
-                  disabled: !available.includes("standalone"),
-                },
-              ]}
-            />
             <DepthChip
               text={`${formatCount(periods.length).text} of ${formatCount(entered).text} ${unitNoun} shown`}
             />
           </div>
+          {updating ? (
+            <p role="status" data-testid="fnd-updating" className="text-caption text-text-2">
+              Loading the {period === "Q" ? "quarterly" : "annual"} view; the figures below are
+              still the previous view.
+            </p>
+          ) : null}
           <p role="status" data-testid="fnd-summary" className="text-body-sm text-text-1">
-            Showing {period === "Q" ? "quarterly" : "annual"} {d.basis_used ?? "consolidated"}{" "}
+            Showing {shownPeriod === "Q" ? "quarterly" : "annual"} {d.basis_used ?? "consolidated"}{" "}
             figures, {formatCount(periods.length).text} periods, INR crore unless a row says
             otherwise.
           </p>
@@ -338,7 +389,7 @@ export function FundamentalsTab({ symbol }: { symbol: string }) {
               selectedKey={selectedKey}
               onSelect={(k) => setPicked((p) => ({ ...p, [group]: k }))}
               onEdit={openForm}
-              caption={`${GROUPS.find((g) => g.id === group)?.label ?? ""}, ${period === "Q" ? "quarterly" : "annual"}, ${d.basis_used ?? ""}`}
+              caption={`${GROUPS.find((g) => g.id === group)?.label ?? ""}, ${shownPeriod === "Q" ? "quarterly" : "annual"}, ${d.basis_used ?? ""}`}
             />
           )}
         </div>

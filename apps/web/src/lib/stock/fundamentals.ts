@@ -214,7 +214,7 @@ export interface SeriesRow {
   label: string;
   unit: UnitKind;
   values: Array<number | null>;
-  /** Source of the latest period's value (`source_by_metric`); null for derived rows. */
+  /** Source and as-of of the row: the latest period's `source_by_metric`, or the snapshot/formula. */
   source: string | null;
   /** Why a value is unknown in this row. */
   reason: string;
@@ -259,6 +259,11 @@ function derivedRows(d: FundamentalsFull): SeriesRow[] {
   const n = d.periods?.length ?? 0;
   const derived = d.derived ?? {};
   const reason = d.derived_reason ? humanReason(d.derived_reason) : "not available for this period";
+  const when = formatDate(d.derived_as_of ?? null);
+  const source =
+    when.reason === null
+      ? `Analytics snapshot, as of ${when.text}`
+      : "Analytics snapshot, not computed yet";
   const keys = [
     ...DERIVED_KEYS,
     ...Object.keys(derived).filter((k) => !(DERIVED_KEYS as readonly string[]).includes(k)),
@@ -268,7 +273,7 @@ function derivedRows(d: FundamentalsFull): SeriesRow[] {
     label: metricLabel(k),
     unit: "PERCENT",
     values: padded(derived[k], n),
-    source: null,
+    source,
     reason,
   }));
 }
@@ -285,7 +290,7 @@ export function seriesRows(d: FundamentalsFull, group: GroupId): SeriesRow[] {
         label: "Free cash flow (CFO minus capex)",
         unit: "INR_CR",
         values: fcf,
-        source: null,
+        source: "Computed here: CFO minus capex of the same period",
         reason: "needs CFO and capex for the period",
       });
     }
