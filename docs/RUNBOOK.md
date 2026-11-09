@@ -410,3 +410,11 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - A confirmed action cannot be changed from the UI; Dismiss and delete-action routes are decided (D-W) but not built, so nothing calls them.
 - If a stock shows the ADJUSTMENT_CONFLICT sentence on the Data tab, check which price file was raw (docs/01 3.7); nothing was adjusted.
 - Tests: `npm test` (`stock-f08.test.tsx`), `npx playwright test tests/e2e/stock-f08.spec.ts` after `npm run build:e2e`. Locally on Windows `stock-chart.spec.ts` "touch pinch" fails with and without F08 (checked by removing the only shared chart change); it is the known flake addressed for CI in 12bec25.
+## 51. Mutual fund screens (F14)
+- Routes: `/mf` (search), `/mf/{code}` (detail, SIP, lumpsum notice), `/mf/compare?codes=a,b&range=3Y`. The browser only calls the same-origin `/api/v1/mf/*` routes, `GET /jobs/{id}`, `POST /mf/schemes/{code}/refresh` and the watchlist; it never calls mfapi.in or AMFI.
+- Attribution `NAV data: AMFI, via mfapi.in` comes from the shell footer (`Footer.tsx`) on every `/mf` path; change it there and in the API constant together.
+- Freshness: the stale chip and banner follow `meta.stale` (NAV older than 4 calendar days). Inactive schemes show a chip and banner. A scheme with no NAV rows shows a backfill note; the page polls every 5 s while the backfill job is queued or running.
+- Refresh: 429 shows the cooldown in minutes (also the global hourly limit), 409 shows "already running", polling stops after 3 minutes with "Still working; data will update at the next scheduled run."
+- Not built (F14-1 to F14-3): lumpsum figures, calendar-year bars, rolling-return histogram and band, compare scatter. Each card says so with the reason.
+- Failure modes: a "could not be loaded" banner with a request id means the API answered an error: check the API log for that id. Compare with no shared NAV date shows a plain sentence (API 422 `no_common_dates`).
+- Tests: `npm test` (`mf-lib.test.ts`, `mf-pages.test.tsx`), `npx playwright test tests/e2e/mf.spec.ts` after `npm run build:e2e` and `npm run build-storybook`.
