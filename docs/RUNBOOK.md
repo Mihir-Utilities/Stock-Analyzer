@@ -438,3 +438,10 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Compare checkboxes stop at 5 (the rest are disabled). The detail page remounts per scheme code so a refresh note or poll of one fund never shows on another.
 - Tests: `npm test` (`mf-review.test.tsx`, `mf-pages.test.tsx`, `mf-lib.test.ts`); `npx playwright test tests/e2e/mf.spec.ts` after `npm run build:e2e`.
 
+
+## 55. Fundamentals tab review fixes (F07R)
+
+- The tab shows the previous answer (dimmed status line, `aria-busy`) while a Period or Basis change loads; labels follow the data on screen. If a choice has no rows (for example Annual for a quarterly-only stock) the toggles stay so the owner can go back.
+- Derived rows (growth, margins) say "Analytics snapshot, as of {date}" or "not computed yet" until the worker's D05b computation exists; ratios and valuation stay dashes with the block reason.
+- The embedded results form is rebuilt per Edit click and per stock; unsaved input is dropped when another period's Edit is pressed.
+- Tests: `npm test` (`fundamentals-tab.test.tsx`); `npx playwright test tests/e2e/stock-fundamentals.spec.ts` after `npm run build:e2e`.

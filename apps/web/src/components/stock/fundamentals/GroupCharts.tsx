@@ -66,13 +66,20 @@ export function WaterfallChart({ data }: { data: FundamentalsFull }) {
     return <Unavailable title="P&L waterfall" testId="fnd-waterfall" message={w.reason} />;
   }
   return (
-    <ChartFrame
-      title={`P&L waterfall, ${w.periodLabel}`}
-      testId="fnd-waterfall"
-      dataset={w.dataset}
-      filename="fundamentals-pnl-waterfall"
-      height={300}
-    />
+    <div className="flex flex-col gap-1">
+      <ChartFrame
+        title={`P&L waterfall, ${w.periodLabel}`}
+        testId="fnd-waterfall"
+        dataset={w.dataset}
+        filename="fundamentals-pnl-waterfall"
+        height={300}
+      />
+      <p className="text-caption text-text-2" data-testid="fnd-waterfall-note">
+        Totals are the reported values in the table (INR crore). Steps are differences between
+        reported values; a step marked (balancing) closes the gap to the next reported total and is
+        not a reported figure.
+      </p>
+    </div>
   );
 }
 
