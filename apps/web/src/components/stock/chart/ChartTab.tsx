@@ -114,6 +114,7 @@ export function ChartTab({
       selection: { type, overlays, panes, log, adjusted },
       compare: compareData,
       asOf: pricesQ.data?.meta?.as_of ?? null,
+      interval: pricesQ.data?.meta?.interval ?? null,
     });
     // compareData is rebuilt each render from query data; its identity is the query result.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -130,6 +131,7 @@ export function ChartTab({
     compareSymbol,
     symbol,
     pricesQ.data?.meta?.as_of,
+    pricesQ.data?.meta?.interval,
   ]);
 
   const applyCompare = () => {
@@ -147,6 +149,13 @@ export function ChartTab({
   };
 
   const interval = pricesQ.data?.meta?.interval;
+  const compareInterval = compareQ.data?.meta?.interval;
+  // Weekly candles are dated by the last day of the week, so they rarely share a date with daily bars.
+  const mixedInterval =
+    compareData !== null &&
+    interval !== undefined &&
+    compareInterval !== undefined &&
+    (interval === "1w") !== (compareInterval === "1w");
   const warnings = (pricesQ.data?.warnings ?? []).filter(
     (w) => !pageWarnings.some((p) => p.code === w.code && p.message === w.message),
   );
@@ -349,6 +358,13 @@ export function ChartTab({
           {w.message}
         </Banner>
       ))}
+      {mixedInterval ? (
+        <Banner tone="info" testId="compare-interval-note">
+          {symbol} is shown as {interval === "1w" ? "weekly" : "daily"} bars and {compareSymbol} as{" "}
+          {compareInterval === "1w" ? "weekly" : "daily"} bars, so they share few or no dates and
+          the compare line may have gaps. Choose a shorter range to get daily bars for both.
+        </Banner>
+      ) : null}
       {built?.notes.map((n) => (
         <Banner key={n} tone="info" testId="chart-note">
           {n}

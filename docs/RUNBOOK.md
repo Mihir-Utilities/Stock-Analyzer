@@ -372,3 +372,10 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Not available yet (see F11-2, F11-7): growth vs benchmark, drawdown, treemap or waterfall charts, and removing an adjustment override (the button is disabled with its reason until the route exists).
 - Failure modes: if the summary shows "could not be loaded" with a request id, check the API log for that id. A fully sold stock is hidden unless "Show fully sold positions" is ticked; its realized P&L stays in the totals.
 - Tests: `npm test` (`portfolio-lib.test.ts`, `portfolio-page.test.tsx`), `npx playwright test tests/e2e/portfolio.spec.ts` after `npm run build:e2e`.
+
+## 46. Chart tab review fixes (F06R)
+- Keyboard: focus the chart (Tab), then `+` zoom in, `-` zoom out, left and right arrows pan, `0` shows the whole range. A visible hint sits under the chart. The range chips are the other way to change the window.
+- A pane toggle changes only the chart height: the ECharts instance is kept and a rebuilt option for the same number of bars keeps the zoom window. A different range (new bar count) or a theme change resets or re-creates it.
+- Tiny prices: values below 0.01 show three significant digits (at most 8 decimals), below 0.00000001 as "below 0.00000001". Only the chart table, CSV text and tooltips use this rule (`priceText` in `chart-model.ts`); `lib/format` is unchanged.
+- Volume average: the dashed line is "20-day average incl. today", or "20-week average incl. current week" when the API answers `meta.interval = 1w`. It is empty until 20 bars of the plotted range exist.
+- Tests: `npm test` (`chart-f06-review.test.ts`, `echart-host.test.tsx`, `chart-tab.test.tsx` which stubs the ECharts host and sets its own 30 s timeout), `npx playwright test tests/e2e/stock-chart.spec.ts` after `npm run build:e2e`. The 2,000-point test waits on `data-ready`, not a time budget.

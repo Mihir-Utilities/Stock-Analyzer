@@ -199,9 +199,16 @@ describe("chart dataset (every pane aligned with the price pane)", () => {
     const text = JSON.stringify(t);
     expect(text).not.toMatch(/e[+-]\d|NaN|Infinity/);
     expect(formatInr(99999999.99).text).toBe("₹9,99,99,999.99");
-    expect(formatInr(0.0001).text).toBe("₹0.00");
+    // F06R-2: a tiny price is never shown as zero in the table or the tooltip.
+    expect(t.rows[0]?.[1]).toBe("0.000100");
+    expect(t.rows[1]?.[4]).toBe("9,99,99,999.99");
     const opt = buildPaneOption(dataset, { theme: "dark" });
     expect(JSON.stringify(opt)).not.toMatch(/NaN|Infinity/);
+    const tip = (opt["tooltip"] as { formatter: (p: unknown) => string }).formatter;
+    const at = (i: number) => tip([{ seriesId: "candles", dataIndex: i, axisValueLabel: "d" }]);
+    expect(at(0)).toContain("O 0.000100 H 0.000200 L 0.000100 C 0.000100");
+    expect(at(1)).toContain("C 9,99,99,999.99");
+    expect(at(1)).not.toMatch(/e[+-]\d|NaN|Infinity/);
   });
 
   it("compare overlay: both lines rebased to 100 on the first shared date, overlays hidden", () => {
