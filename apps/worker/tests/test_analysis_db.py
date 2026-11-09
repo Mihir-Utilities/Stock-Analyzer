@@ -93,7 +93,7 @@ def doc(raw: Any) -> dict[str, Any]:
     return out
 
 
-async def test_ret90_snapshot_written_idempotent_and_scores_left_for_d05b(
+async def test_ret90_snapshot_written_idempotent_and_risk_score_survives_rerun(
     pg_full: asyncpg.Pool,
 ) -> None:
     iid = await seed(pg_full, "AAA", 120)
@@ -102,17 +102,22 @@ async def test_ret90_snapshot_written_idempotent_and_scores_left_for_d05b(
     rows = await snapshot_rows(pg_full, iid)
     assert len(rows) == 1 and rows[0]["version"] == VERSION
     assert rows[0]["as_of"] == weekdays(120)[-1]
-    assert doc(rows[0]["scores"]) == {}
-    # D05b may have stored scores for this as_of: a re-run must not wipe them
+    scores = doc(rows[0]["scores"])  # D05b: trend and quality are written per symbol
+    assert set(scores) == {"version", "trend", "quality"}
+    assert scores["trend"]["reason"] == "insufficient_history"  # 120 bars < 200
+    # the universe-relative risk score is written by another pass: a re-run must not wipe it
     await pg_full.execute(
-        'UPDATE analysis_snapshot SET scores = \'{"trend": {"score": 70}}\'::jsonb '
-        "WHERE instrument_id = $1",
+        "UPDATE analysis_snapshot SET scores = scores || $2::jsonb WHERE instrument_id = $1",
         iid,
+        '{"risk": {"score": 70}}',
     )
     await analysis_db.compute_analysis(pg_full, "AAA")
     again = await snapshot_rows(pg_full, iid)
-    assert len(again) == 1 and doc(again[0]["indicators"]) == doc(rows[0]["indicators"])
-    assert doc(again[0]["scores"]) == {"trend": {"score": 70}}
+    assert len(again) == 1
+    old, new = doc(rows[0]["indicators"]), doc(again[0]["indicators"])
+    assert new["technicals"] == old["technicals"] and new["returns"] == old["returns"]
+    assert doc(again[0]["scores"])["risk"] == {"score": 70}
+    assert doc(again[0]["scores"])["trend"] == scores["trend"]
 
 
 # RET-96: the snapshot writer refuses NaN/Infinity instead of storing it in jsonb
@@ -233,7 +238,7 @@ async def test_ret92_screener_row_price_metrics_keep_foreign_keys(pg_full: async
         "INSERT INTO screener_row (instrument_id, as_of, metrics) VALUES ($1, $2, $3::jsonb)",
         iid,
         date(2020, 1, 1),
-        json.dumps({"roe": 18.5, "rsi14": 1.0, "ret_1y": 999.0}),  # roe is D05b's; rest is stale
+        json.dumps({"roe": 18.5, "rsi14": 1.0, "ret_1y": 999.0, "other_job": 7}),
     )
     await analysis_db.compute_analysis(pg_full, "HHH")
     assert await analysis_db.recompute_screener(pg_full, ["HHH", "NOPE"]) == 1
@@ -244,12 +249,14 @@ async def test_ret92_screener_row_price_metrics_keep_foreign_keys(pg_full: async
     m = doc(row["metrics"])
     snap = doc((await snapshot_rows(pg_full, iid))[0]["indicators"])
     assert row["as_of"] == weekdays(300)[-1]
-    assert m["roe"] == 18.5  # fundamentals untouched
+    assert "roe" not in m  # D05b owns it: no fundamentals entered, so the stale value goes
+    assert m["other_job"] == 7  # keys no D05 part owns are untouched
     assert m["rsi14"] == snap["technicals"]["rsi14"] != 1.0  # stale value replaced
     assert m["price"] == snap["last_close"] and m["sector"] == "IT" and m["industry"] == "IT"
     assert m["ret_1y"] == snap["returns"]["calendar"]["ret_1y"]
     assert set(m) <= {
-        "roe",
+        "other_job",
+        "trend_score",
         "price",
         "rsi14",
         "dist_52w_high_pct",
