@@ -217,7 +217,8 @@ export function buildOption(data: ChartDataset, opts: BuildOptions): Record<stri
     xAxis: { type: "category", name: data.xName, data: [...data.x], boundaryGap: hasBars },
     yAxis: {
       type: opts.logScale ? "log" : "value",
-      scale: !hasBars,
+      // A stacked total is read from zero: a fitted axis would make the parts look larger.
+      scale: !hasBars && !visible.some((s) => s.stack),
       name: unitsOf(visible),
     },
     series,

@@ -612,3 +612,11 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | F14R-3 | Grouped search (`group=true`) folds only the rows of one keyset page, so a fund's variants can continue on the next page as a second group with the same name | Shown as two groups (no client merge, a merge would reorder rows the server ordered). Owner: group across pages on the server if this matters | `MfBrowse.tsx` |
 | F14R-4 | Detail "Compare" link carries one code, but compare needs 2 to 5 | The compare page treats a single valid code as a hint ("Add 1 to 4 more") instead of the warning used for malformed input | `MfCompare.tsx` |
 
+
+## F08 review assumptions (Claude, 2026-11-09; owner may overrule, none blocks)
+| # | Question | Choice made | Where |
+|---|---|---|---|
+| F08R-1 | After Confirm or Reject the card leaves the list, so the old "press the same button again" retry for POST_IMPORT_NOT_QUEUED had no button | The decision banner gets "Retry recalculation", which repeats the PATCH with only `status` (the server answers changed=false and enqueues again, B07R-5, ACT-35). No new route | `EventsTab.tsx`, `action-patch.ts` |
+| F08R-2 | The client ratio check missed the API limits (more than 4 decimals, 100,000,000 or more) and compared floats at exactly 3 percent | Same limits as `decimalCell`; the 3 percent band has a 1e-9 slack so 5.15 against 5 is silent like the server | `action-patch.ts` |
+| F08R-3 | A stacked composition on a fitted y axis exaggerates the parts | A chart with any stacked series gets an axis that includes zero (all other charts unchanged) | `chart-data.ts` |
+| F08R-4 | A twin-confirmed candidate still has an enabled Confirm | Kept enabled on purpose: the warning is shown up front and the server 409 text is the final word (B07R-1). Owner may prefer a disabled button with a visible reason | `DetectedActionCard.tsx` |

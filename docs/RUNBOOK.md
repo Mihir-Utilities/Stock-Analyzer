@@ -445,3 +445,8 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Derived rows (growth, margins) say "Analytics snapshot, as of {date}" or "not computed yet" until the worker's D05b computation exists; ratios and valuation stay dashes with the block reason.
 - The embedded results form is rebuilt per Edit click and per stock; unsaved input is dropped when another period's Edit is pressed.
 - Tests: `npm test` (`fundamentals-tab.test.tsx`); `npx playwright test tests/e2e/stock-fundamentals.spec.ts` after `npm run build:e2e`.
+
+## 56. F08 review fixes (Events tab)
+
+- A confirmed or rejected decision whose recalculation could not be queued (`POST_IMPORT_NOT_QUEUED`) shows "Retry recalculation" on the saved-decision message. It repeats the PATCH without numbers; the server enqueues `post_import` again (ACT-35). If it keeps failing, check the worker queue and run the post-import job by hand.
+- Tests: `npx vitest run tests/unit/stock-f08.test.tsx`.

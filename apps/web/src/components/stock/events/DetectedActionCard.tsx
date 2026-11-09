@@ -69,6 +69,9 @@ export function DetectedActionCard({
         ratioDen: preview.clean.den,
       });
     },
+    onMutate: (): void => {
+      reject.reset();
+    },
     onSuccess: (r) => finish(r, "confirmed"),
     onError: (e) => {
       setAsking(null);
@@ -80,6 +83,9 @@ export function DetectedActionCard({
   });
   const reject = useMutation({
     mutationFn: () => rejectAction(symbol, action.id),
+    onMutate: (): void => {
+      confirm.reset();
+    },
     onSuccess: (r) => finish(r, "rejected"),
     onError: (e) => {
       setAsking(null);

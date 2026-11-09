@@ -149,7 +149,7 @@ function QuarterTable({ s }: { s: ShareholdingData }) {
   return (
     <section aria-labelledby="own-table-h" className="flex flex-col gap-2">
       <h3 id="own-table-h" className="text-body font-semibold text-text-1">
-        Quarter by quarter (% of shares)
+        Quarter by quarter (% of shares; pledged is % of promoter holding)
       </h3>
       <div
         role="region"
