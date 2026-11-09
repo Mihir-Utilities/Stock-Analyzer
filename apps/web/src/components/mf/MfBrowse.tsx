@@ -86,11 +86,13 @@ function OneYearCell({ item }: { item: SchemeItem }) {
 function SchemeRow({
   item,
   selected,
+  full,
   onToggle,
   showName,
 }: {
   item: SchemeItem;
   selected: boolean;
+  full: boolean;
   onToggle: (code: number) => void;
   showName: boolean;
 }) {
@@ -136,6 +138,7 @@ function SchemeRow({
             type="checkbox"
             data-testid={`mf-compare-${item.code}`}
             checked={selected}
+            disabled={full && !selected}
             onChange={() => onToggle(item.code)}
             className="size-4"
           />
@@ -172,6 +175,7 @@ function GroupRows({
           key={v.code}
           item={v}
           selected={selected.has(v.code)}
+          full={selected.size >= MAX_COMPARE}
           onToggle={onToggle}
           showName={false}
         />
@@ -289,7 +293,7 @@ export function MfBrowse() {
               >
                 <option value="direct">Direct</option>
                 <option value="regular">Regular</option>
-                <option value="any">Any</option>
+                {form.includeAll ? <option value="any">Any</option> : null}
               </select>
             )}
           </FormField>
@@ -304,7 +308,7 @@ export function MfBrowse() {
               >
                 <option value="growth">Growth</option>
                 <option value="idcw">IDCW</option>
-                <option value="any">Any</option>
+                {form.includeAll ? <option value="any">Any</option> : null}
               </select>
             )}
           </FormField>
@@ -356,7 +360,7 @@ export function MfBrowse() {
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-10 w-full" />
         </div>
-      ) : q.isError ? (
+      ) : q.isError && items.length === 0 ? (
         <div className="flex flex-col items-start gap-2">
           <Banner tone="error" testId="mf-error">
             {q.error instanceof ApiError ? q.error.message : "Funds could not be loaded."}
@@ -407,6 +411,7 @@ export function MfBrowse() {
                       key={i.code}
                       item={i}
                       selected={selected.has(i.code)}
+                      full={selected.size >= MAX_COMPARE}
                       onToggle={toggle}
                       showName
                     />
@@ -427,6 +432,13 @@ export function MfBrowse() {
           </table>
         </div>
       )}
+
+      {q.isError && items.length > 0 ? (
+        <Banner tone="error" testId="mf-more-error">
+          {q.error instanceof ApiError ? q.error.message : "More funds could not be loaded."} The
+          funds above are still shown; use Load more to try again.
+        </Banner>
+      ) : null}
 
       {q.hasNextPage ? (
         <button

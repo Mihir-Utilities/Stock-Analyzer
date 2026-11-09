@@ -426,3 +426,10 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Telegram without a bot (D-9): the card still makes a code but says it cannot be used yet. After the owner creates the bot and sets `TELEGRAM_BOT_USERNAME`, `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET`, the same card shows the deep link; no web change is needed. A slow first answer after idle (cold start) is tolerated: polling continues for 2 minutes, then "Check again".
 - Sign-out: a 401 on logout counts as signed out; a network or server error leaves the owner on the page with the error. Both end in a full navigation to `/login` after clearing the query cache.
 - Tests: `npm test` (`alerts-lib.test.ts`, `alerts-page.test.tsx`); `npx playwright test tests/e2e/alerts-settings.spec.ts` after `npm run build:e2e`.
+
+## 53. Mutual fund screens review (F14R)
+
+- Search: Plan and Option show "Any" only with Show all, because the API applies Direct+Growth unless `include_all=true` (F14R-1). A failed "Load more" keeps the rows already shown and a banner (`mf-more-error`); a stale or invalid cursor answers 422, so Load more again retries the same cursor and a changed filter starts from page one.
+- Compare checkboxes stop at 5 (the rest are disabled). The detail page remounts per scheme code so a refresh note or poll of one fund never shows on another.
+- Tests: `npm test` (`mf-review.test.tsx`, `mf-pages.test.tsx`, `mf-lib.test.ts`); `npx playwright test tests/e2e/mf.spec.ts` after `npm run build:e2e`.
+

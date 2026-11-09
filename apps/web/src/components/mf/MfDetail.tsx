@@ -576,7 +576,7 @@ export function MfDetail({ code }: { code: string }) {
   return (
     <ToastProvider>
       {valid ? (
-        <Inner code={n} />
+        <Inner key={n} code={n} />
       ) : (
         <div data-testid="mf-not-found">
           <EmptyState

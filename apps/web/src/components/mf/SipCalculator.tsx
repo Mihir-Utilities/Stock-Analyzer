@@ -192,7 +192,9 @@ function SipResultView({
 }) {
   const asOf = formatDate(res.end_nav_date, { reason: "no NAV date" });
   const value = sipMoney(res.value);
-  const xirr = formatPercent(res.xirr_pct, { reason: reasonText(res.xirr_reason) });
+  const xirr = formatPercent(res.xirr_pct, {
+    reason: reasonText(res.xirr_reason, "no installment was executed"),
+  });
   const abs = formatPercent(res.absolute_return_pct, { reason: "no installment was executed" });
   const growth = useMemo(
     () => sipGrowth(res.schedule ?? [], res.amount, { date: res.end_nav_date, nav: res.end_nav }),
