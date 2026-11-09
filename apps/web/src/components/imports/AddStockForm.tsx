@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { FormField, inputClass } from "@/components/ui/FormField";
 import { addStock } from "@/lib/imports/api";
 import { describeError, fieldMessage, isApiError } from "@/lib/imports/errors";
+import { useSingleFlight } from "@/lib/imports/single-flight";
 
 const WARNING_TEXT: Record<string, string> = {
   ISIN_MALFORMED:
@@ -22,6 +23,7 @@ export function AddStockForm() {
   const [local, setLocal] = useState<{ symbol?: string; name?: string }>({});
   const symbolRef = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
+  const once = useSingleFlight();
 
   const create = useMutation({
     mutationFn: addStock,
@@ -41,7 +43,7 @@ export function AddStockForm() {
     if (!name.trim()) errs.name = "Enter the company name.";
     setLocal(errs);
     if (errs.symbol || errs.name) return;
-    create.mutate({ symbol, name, isin });
+    once(() => create.mutateAsync({ symbol, name, isin }));
   };
 
   const conflict = isApiError(create.error, "CONFLICT");

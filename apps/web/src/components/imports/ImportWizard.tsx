@@ -10,6 +10,7 @@ import { ApiError } from "@/lib/api/client";
 import { commitUpload, validateUpload } from "@/lib/imports/api";
 import { describeError, isApiError } from "@/lib/imports/errors";
 import { formatCount, formatMb } from "@/lib/format";
+import { holidayYears } from "@/lib/imports/holidays";
 import { precheckFile } from "@/lib/imports/precheck";
 import { useSingleFlight } from "@/lib/imports/single-flight";
 import {
@@ -56,6 +57,13 @@ function commitEffect(kind: ImportKind): string {
   return "Values are saved (a value already stored for the same period is overwritten) and analytics are refreshed. ";
 }
 
+/** Which years a holidays commit replaces (F13bR-1; derived from the uploaded file). */
+export function yearsText(years: number[]): string {
+  return years.length > 0
+    ? `Years replaced: ${years.join(", ")}.`
+    : "The years in this file could not be read; the server replaces every year it contains.";
+}
+
 export function undoable(kind: ImportKind): boolean {
   return UNDOABLE_KINDS.includes(kind);
 }
@@ -65,6 +73,8 @@ const COMMIT_WARNING_TEXT: Record<string, string> = {
     "More than 400 stocks are now tracked. The free tier may get slower; consider trimming history.",
   POST_IMPORT_NOT_QUEUED:
     "The rows are saved, but the analytics refresh was not queued. Any later import refreshes them.",
+  DUPLICATE_EX_DATE_ACTION:
+    "A split or bonus on the same ex-date already existed for a stock in this file. Both are stored, but only one is applied to the price history: check the corporate actions of that stock.",
 };
 
 export function templateUrl(kind: ImportKind): string {
@@ -85,6 +95,7 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
   const [picked, setPicked] = useState<File | null>(null);
   const [validation, setValidation] = useState<ValidateResult | null>(null);
   const [adjustment, setAdjustment] = useState<boolean | null>(null);
+  const [years, setYears] = useState<number[]>([]);
   const [step, setStep] = useState(0);
   const [note, setNote] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -102,9 +113,14 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
   }, [step]);
 
   const validate = useMutation({
-    mutationFn: (f: File) => validateUpload(kind, f),
-    onSuccess: (data) => {
+    mutationFn: async (f: File) => ({
+      data: await validateUpload(kind, f),
+      // F13bR-1: the API returns no year summary for holidays, so derive the years from the file.
+      years: kind === "holidays" ? holidayYears(await f.text()) : [],
+    }),
+    onSuccess: ({ data, years: fileYears }) => {
       setValidation(data);
+      setYears(fileYears);
       setAdjustment(data.prices_already_adjusted);
       setCommitError(null);
       setStep(1);
@@ -136,6 +152,7 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
   const restart = () => {
     setPicked(null);
     setValidation(null);
+    setYears([]);
     setAdjustment(null);
     setNote("");
     setResult(null);
@@ -246,7 +263,8 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
           <Banner tone="info" testId="import-holidays-note">
             Committing replaces every stored holiday of each year in this file with the rows of this
             file (the preview shows the first 20). Import the whole year. A date that falls on a
-            weekend is kept with a warning.
+            weekend is kept with a warning.{" "}
+            <strong data-testid="import-holidays-years">{yearsText(years)}</strong>
           </Banner>
         ) : null}
         {commitError ? (
@@ -410,6 +428,7 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
         message={
           <>
             {commitEffect(kind)}
+            {kind === "holidays" ? `${yearsText(years)} ` : ""}
             {undoable(kind)
               ? "You can undo it for 30 days; overwritten values are not restored."
               : "This batch cannot be undone."}

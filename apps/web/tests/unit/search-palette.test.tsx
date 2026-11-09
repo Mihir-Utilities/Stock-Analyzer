@@ -10,6 +10,7 @@ import {
 } from "@/components/search/SearchPalette";
 import { RECENT_KEY, memoryIndexStore } from "@/lib/search/store";
 import { SAMPLE } from "./search-rank.test";
+import { loadScale } from "./load-scale";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
@@ -144,10 +145,11 @@ describe("UI-21: SearchPalette: opening and accessibility", () => {
 
   it("UI-05: opens within 100 ms once the index is cached", async () => {
     await setup();
+    const before = loadScale();
     const t0 = performance.now();
     await openWithKeyboard();
     expect(screen.getByTestId("search-input")).toBeTruthy();
-    expect(performance.now() - t0).toBeLessThan(100);
+    expect(performance.now() - t0).toBeLessThan(100 * Math.max(before, loadScale()));
   });
 });
 

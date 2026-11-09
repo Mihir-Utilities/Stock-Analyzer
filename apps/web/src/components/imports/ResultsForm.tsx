@@ -87,10 +87,16 @@ export function ResultsForm() {
     if (ne) errors.note = ne;
     setLocal(errors);
     remove.reset();
-    if (Object.keys(errors).length > 0 || !body) return;
+    if (Object.keys(errors).length > 0 || !body) {
+      save.reset(); // no stale 'saved' panel or server error next to a local error
+      return;
+    }
     const payload: Record<string, unknown> = { ...body };
     if (note.trim()) payload.note = note.trim();
-    once(() => save.mutateAsync({ symbol, body: payload }));
+    once(() => {
+      save.reset(); // inside the guard: a same-tick second submit must not drop the pending save
+      return save.mutateAsync({ symbol, body: payload });
+    });
   };
 
   // Delete needs the same period fields as the entry; reuse the date and basis checks.

@@ -178,14 +178,19 @@ export function validateResults(
   today: string,
 ): { errors: FieldErrors; body: ResultsBody | null } {
   const errors: FieldErrors = {};
-  if (input.basis !== "consolidated" && input.basis !== "standalone") {
-    errors.basis = "basis is required (consolidated or standalone)";
+  // Same trimming and case folding as the API (`ValidatePeriod`).
+  const basis = input.basis.trim().toLowerCase();
+  const periodType = input.periodType.trim().toUpperCase();
+  if (basis === "") errors.basis = "basis is required (consolidated or standalone)";
+  else if (basis !== "consolidated" && basis !== "standalone") {
+    errors.basis = `basis "${input.basis}" must be consolidated or standalone`;
   }
-  if (input.periodType !== "Q" && input.periodType !== "A") {
-    errors.period_type = "period_type is required (Q or A)";
+  if (periodType === "") errors.period_type = "period_type is required (Q or A)";
+  else if (periodType !== "Q" && periodType !== "A") {
+    errors.period_type = `period_type "${input.periodType}" must be Q or A`;
   }
   const end = requiredDate("period_end", input.periodEnd, errors, today);
-  if (end && input.periodType === "Q" && !isQuarterEnd(end)) {
+  if (end && periodType === "Q" && !isQuarterEnd(end)) {
     errors.period_end = `${end} is not a calendar quarter end (31 Mar, 30 Jun, 30 Sep or 31 Dec)`;
   }
   const values: Record<string, string | null> = {};
@@ -214,8 +219,8 @@ export function validateResults(
   return {
     errors,
     body: {
-      basis: input.basis as ResultsBody["basis"],
-      period_type: input.periodType as ResultsBody["period_type"],
+      basis: basis as ResultsBody["basis"],
+      period_type: periodType as ResultsBody["period_type"],
       period_end: end,
       values,
     },
@@ -247,9 +252,12 @@ export function validateShareholding(
   today: string,
 ): { errors: FieldErrors; body: Record<string, string | null> | null } {
   const errors: FieldErrors = {};
-  const quarter = requiredDate("quarter_end", input.quarterEnd, errors, today);
+  // The quarter-end rule comes before the future rule, as in the API (`ValidateShareholding`).
+  const quarter = requiredDate("quarter_end", input.quarterEnd, errors, today, { future: false });
   if (quarter && !isQuarterEnd(quarter)) {
     errors.quarter_end = `${quarter} is not a calendar quarter end (31 Mar, 30 Jun, 30 Sep or 31 Dec)`;
+  } else if (quarter && quarter > today) {
+    errors.quarter_end = `${quarter} is in the future`;
   }
   const nums: Partial<Record<HoldingField, number>> = {};
   const body: Record<string, string | null> = {};
