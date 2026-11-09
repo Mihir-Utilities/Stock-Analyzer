@@ -98,7 +98,8 @@ async def compute_analysis_job(ctx: JobContext) -> None:
 
         await ctx.for_each(symbols, one)
         if not ctx.dry_run and not ctx.timed_out:
-            await analysis_db.recompute_screener(pool, symbols)
+            universe = await analysis_db.recompute_risk_scores(pool)
+            await analysis_db.recompute_screener(pool, list(dict.fromkeys([*symbols, *universe])))
     finally:
         await pool.close()
 

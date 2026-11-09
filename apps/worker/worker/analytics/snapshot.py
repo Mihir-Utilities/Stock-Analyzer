@@ -1,7 +1,8 @@
 """Builds the price-derived part of ``analysis_snapshot.indicators`` (D05a; docs/05 sections 3-4).
 
 Pure: bars in, JSON-safe dict out. Scores (section 6) and derived fundamentals (section 5) are
-D05b and are not produced here. Unknown values are ``None`` with an entry in ``null_reasons``.
+D05b (``analytics.fundamentals.attach_fundamentals``) and are not produced here. Unknown values
+are ``None`` with an entry in ``null_reasons``.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from worker.analytics import returns as rt
 
 F64 = NDArray[np.float64]
 
-VERSION = "d05a-1"
+VERSION = "d05b-1"  # d05a-1 + fundamentals, scores (D05b)
 MIN_BARS = 60  # docs/04 3.7: stocks with >= 60 valid bars
 DEFAULT_RISK_FREE = 0.065  # MASTER_PLAN section 5 RISK_FREE_RATE default
 
