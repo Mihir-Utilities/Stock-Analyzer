@@ -418,3 +418,11 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - Not built (F14-1 to F14-3): lumpsum figures, calendar-year bars, rolling-return histogram and band, compare scatter. Each card says so with the reason.
 - Failure modes: a "could not be loaded" banner with a request id means the API answered an error: check the API log for that id. Compare with no shared NAV date shows a plain sentence (API 422 `no_common_dates`).
 - Tests: `npm test` (`mf-lib.test.ts`, `mf-pages.test.tsx`), `npx playwright test tests/e2e/mf.spec.ts` after `npm run build:e2e` and `npm run build-storybook`.
+## 52. Alerts, settings, Telegram link and sign-out (F12)
+
+- Routes `/alerts` and `/settings`; sign-out lives in the desktop top bar (`Account menu`), in the mobile More menu (the top bar is full at 320 px; "Sign out everywhere" confirms inline there) and in Settings (dialog). Routes used: `/alerts` (GET, POST, PATCH, DELETE), `/alerts/events`, `/auth/me`, `/auth/change-password`, `/auth/logout`, `/auth/logout-all`, `/telegram/link-code`, `/telegram/link` (DELETE), `/telegram/test`.
+- Not available yet because no route exists (F12-1, F12-2): quiet hours editor, display preferences other than the theme, session list and single revoke, export. Each shows a "not available yet" text with the reason; do not stub them.
+- Alerts are checked against the last price import (D-D). `THRESHOLD_ALREADY_MET` is shown at the price or NAV field with the bar date; a 409 CONFLICT is the 200-active limit or a final (fired, expired) alert.
+- Telegram without a bot (D-9): the card still makes a code but says it cannot be used yet. After the owner creates the bot and sets `TELEGRAM_BOT_USERNAME`, `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET`, the same card shows the deep link; no web change is needed. A slow first answer after idle (cold start) is tolerated: polling continues for 2 minutes, then "Check again".
+- Sign-out: a 401 on logout counts as signed out; a network or server error leaves the owner on the page with the error. Both end in a full navigation to `/login` after clearing the query cache.
+- Tests: `npm test` (`alerts-lib.test.ts`, `alerts-page.test.tsx`); `npx playwright test tests/e2e/alerts-settings.spec.ts` after `npm run build:e2e`.

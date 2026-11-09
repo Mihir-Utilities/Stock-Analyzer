@@ -7,6 +7,7 @@ import { Footer } from "./Footer";
 import { icons, NavIcon } from "./icons";
 import { SearchPalette } from "@/components/search/SearchPalette";
 import { MarketStatusPill } from "./MarketStatusPill";
+import { SessionMenu, SignOutPanel } from "./SessionMenu";
 import { isActive, moreNav, primaryNav, type NavItem } from "./nav";
 import { ThemeToggle } from "./ThemeToggle";
 import { WakingBanner } from "./WakingBanner";
@@ -128,6 +129,9 @@ function BottomTabs({ pathname }: { pathname: string }) {
               </li>
             ))}
           </ul>
+          <div className="mt-2 border-t border-border pt-2">
+            <SignOutPanel prefix="more-" />
+          </div>
         </div>
       ) : null}
       <nav
@@ -189,6 +193,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <SearchPalette />
             <MarketStatusPill />
             <ThemeToggle />
+            <SessionMenu />
           </div>
         </header>
         <WakingBanner />
