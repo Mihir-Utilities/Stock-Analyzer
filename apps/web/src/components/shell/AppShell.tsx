@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Footer } from "./Footer";
 import { icons, NavIcon } from "./icons";
 import { SearchPalette } from "@/components/search/SearchPalette";
 import { MarketStatusPill } from "./MarketStatusPill";
-import { SessionMenu, SignOutPanel } from "./SessionMenu";
+import { SessionMenu, SignOutPanel, useDismiss } from "./SessionMenu";
 import { isActive, moreNav, primaryNav, type NavItem } from "./nav";
 import { ThemeToggle } from "./ThemeToggle";
 import { WakingBanner } from "./WakingBanner";
@@ -101,6 +101,9 @@ function Sidebar({ pathname }: { pathname: string }) {
 
 function BottomTabs({ pathname }: { pathname: string }) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+  useDismiss(moreOpen, () => setMoreOpen(false), moreRef, moreButtonRef);
   const moreActive = moreNav.some((i) => isActive(pathname, i.href));
   const tab = (active: boolean) =>
     `flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-caption ${
@@ -110,6 +113,8 @@ function BottomTabs({ pathname }: { pathname: string }) {
     <>
       {moreOpen ? (
         <div
+          id="more-menu"
+          ref={moreRef}
           data-testid="more-menu"
           className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 border-t border-border bg-surface-1 p-2 desktop:hidden"
         >
@@ -156,8 +161,10 @@ function BottomTabs({ pathname }: { pathname: string }) {
         })}
         <button
           type="button"
+          ref={moreButtonRef}
           onClick={() => setMoreOpen((o) => !o)}
           aria-expanded={moreOpen}
+          aria-controls="more-menu"
           data-testid="tab-more"
           className={tab(moreActive || moreOpen)}
         >

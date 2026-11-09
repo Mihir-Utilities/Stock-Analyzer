@@ -52,18 +52,24 @@ export function TelegramCard() {
     return () => clearInterval(id);
   }, [codeLive]);
 
-  // Stop polling after two minutes or once linked.
+  // Stop polling two minutes after the latest code was made (a new code restarts the window,
+  // F12R-3), or once linked. The cleanup also stops it on unmount.
   useEffect(() => {
     if (!polling) return;
     const id = setTimeout(() => setPolling(false), POLL_WINDOW_MS);
     return () => clearTimeout(id);
-  }, [polling]);
+  }, [polling, code]);
+  const hadCode = useRef(false);
+  useEffect(() => {
+    hadCode.current = code !== null;
+  }, [code]);
   useEffect(() => {
     if (!linked) return;
     // Linked: the one-time code is no longer needed; drop it and stop asking.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCode(null);
     setPolling(false);
+    if (hadCode.current) setNote("Telegram is now linked.");
   }, [linked]);
 
   useEffect(() => {
@@ -110,6 +116,10 @@ export function TelegramCard() {
       <div className="flex flex-col items-start gap-3">
         <p data-testid="telegram-linked" className="text-body-sm text-text-1">
           Telegram is linked. Alerts are sent to your linked chat.
+        </p>
+        <p data-testid="telegram-one-chat" className="text-body-sm text-text-2">
+          Only one chat can be linked. To use a different chat, unlink this one first; a code used
+          from a second chat is refused while one is linked.
         </p>
         <div className="flex flex-wrap gap-2">
           <button

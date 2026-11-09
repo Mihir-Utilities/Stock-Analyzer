@@ -585,3 +585,13 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | F12-9 | The Telegram card appears in both docs/06 6.8 (Alerts) and 6.11 (Settings) | The same component is on both pages | `AlertsPage.tsx`, `SettingsPage.tsx` |
 | F12-10 | About: "versions" have no source | Shows sources, safe-use text and the notices file name; says app and data versions are not available. No link to THIRD_PARTY_NOTICES (no served page) | `SettingsPage.tsx` |
 | F12-11 | Confirm password field is not in the API | Client-only "repeat new password" check; only `current` and `new` are sent. No strength meter | `SettingsPage.tsx` |
+
+## F12 review (Claude, 2026-11-09; owner may overrule, none blocks)
+| # | Question | Choice made | Where |
+|---|---|---|---|
+| F12R-1 | What browser-side data must Sign out remove? Spec is silent | Removes the recent-search list (`analyzer-recent-searches`, shows what the owner looked at) along with the query cache. Keeps the theme, sidebar width and the IndexedDB stock index (public instrument list, no owner data) | `lib/auth/session.ts` |
+| F12R-2 | Logout request fails with a network or server error: stay or leave? | Unchanged from F12-3: stay and show the error (the cookie is HttpOnly and still valid, so showing /login would be a lie). After success the 401 handler is silenced so a late in-flight 401 cannot redirect to `/login?next=<private page>` | `lib/auth/session.ts` |
+| F12R-3 | Polling window when a second code is made | Two minutes from the latest code | `TelegramCard.tsx` |
+| F12R-4 | Back button after sign-out | Next middleware sets `Cache-Control: no-store` on page responses (not `/api/`), matching the API rule of docs/03; the browser then refetches and the gate sends it to /login | `middleware.ts` |
+| F12R-5 | Account menu pattern | Disclosure popover (button with `aria-expanded` and `aria-controls`, panel of buttons in tab order), not `role=menu`: no arrow-key model is needed for two actions. Escape closes and returns focus; outside press closes | `SessionMenu.tsx`, `AppShell.tsx` |
+| F12R-6 | Linked card and a second chat | The API refuses a second chat while one is linked (B12-11); the card says so and tells the owner to unlink first. No rebind route exists | `TelegramCard.tsx` |

@@ -2,7 +2,7 @@
 
 import { QueryClientContext } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useRef, useState, type RefObject } from "react";
 import { useSingleFlight } from "@/lib/imports/single-flight";
 import { describeError } from "@/lib/imports/errors";
 import { signOut } from "@/lib/auth/session";
@@ -12,7 +12,7 @@ import { signOut } from "@/lib/auth/session";
  * session, behind a confirmation). Works without a query client (shell tests); with one, every
  * cache is cleared before the redirect to /login. Also used by Settings, sessions card.
  */
-export function useSignOutActions() {
+export function useSignOutActions(onError?: () => void) {
   const client = useContext(QueryClientContext);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,9 +29,40 @@ export function useSignOutActions() {
       } catch (e) {
         setError(describeError(e));
         setBusy(false);
+        onError?.();
       }
     });
   return { busy, error, run };
+}
+
+/**
+ * Escape closes an open popover and returns focus to its trigger; a press outside closes it
+ * without stealing focus (the pointer already moved it).
+ */
+export function useDismiss(
+  open: boolean,
+  close: () => void,
+  panel: RefObject<HTMLElement | null>,
+  trigger: RefObject<HTMLElement | null>,
+): void {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      close();
+      trigger.current?.focus();
+    };
+    const onDown = (e: Event) => {
+      const t = e.target as Node | null;
+      if (t && !panel.current?.contains(t) && !trigger.current?.contains(t)) close();
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onDown);
+    };
+  }, [open, close, panel, trigger]);
 }
 
 const ITEM =
@@ -44,6 +75,18 @@ const ITEM =
 export function SignOutPanel({ prefix }: { prefix: string }) {
   const [confirmAll, setConfirmAll] = useState(false);
   const { busy, error, run } = useSignOutActions();
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const allRef = useRef<HTMLButtonElement>(null);
+  const asked = useRef(false);
+  // The clicked button disappears when the question swaps in: move focus with it, and back again.
+  useEffect(() => {
+    if (confirmAll) {
+      asked.current = true;
+      cancelRef.current?.focus();
+    } else if (asked.current) {
+      allRef.current?.focus();
+    }
+  }, [confirmAll]);
   return (
     <div className="flex flex-col gap-1" data-testid={`${prefix}panel`}>
       {confirmAll ? (
@@ -62,6 +105,7 @@ export function SignOutPanel({ prefix }: { prefix: string }) {
           </button>
           <button
             type="button"
+            ref={cancelRef}
             data-testid={`${prefix}logout-all-cancel`}
             disabled={busy}
             onClick={() => setConfirmAll(false)}
@@ -83,6 +127,7 @@ export function SignOutPanel({ prefix }: { prefix: string }) {
           </button>
           <button
             type="button"
+            ref={allRef}
             data-testid={`${prefix}logout-all`}
             disabled={busy}
             onClick={() => setConfirmAll(true)}
@@ -109,12 +154,17 @@ export function SignOutPanel({ prefix }: { prefix: string }) {
 /** Desktop top bar: icon button with a small popover (below 1024 px the same panel is in More). */
 export function SessionMenu() {
   const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  useDismiss(open, () => setOpen(false), panelRef, buttonRef);
   return (
     <div className="relative hidden desktop:block">
       <button
         type="button"
+        ref={buttonRef}
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
+        aria-controls="session-menu"
         aria-label="Account menu"
         data-testid="session-menu-button"
         className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-control text-text-2 hover:bg-surface-2 hover:text-text-1"
@@ -123,6 +173,8 @@ export function SessionMenu() {
       </button>
       {open ? (
         <div
+          id="session-menu"
+          ref={panelRef}
           data-testid="session-menu"
           className="absolute right-0 top-full z-30 mt-1 w-56 rounded-control border border-border bg-surface-2 p-2"
         >

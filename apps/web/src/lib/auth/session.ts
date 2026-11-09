@@ -1,4 +1,5 @@
-import { ApiError, apiRequest } from "@/lib/api/client";
+import { ApiError, apiRequest, setUnauthorizedHandler } from "@/lib/api/client";
+import { RECENT_KEY } from "@/lib/search/store";
 import { z } from "zod";
 
 // Logout and logout-all (docs/03 section 2, B02-7: both answer {ok:true} and clear the cookie).
@@ -13,6 +14,19 @@ export interface SignOutDeps {
   go: (url: string) => void;
 }
 
+/**
+ * Browser-side data that reveals what the owner looked at: the recent-search list (localStorage).
+ * Kept on purpose: the theme and sidebar width (not private) and the IndexedDB stock index (the
+ * public instrument list, no owner data). F12R-1.
+ */
+export function clearPrivateBrowserData(): void {
+  try {
+    localStorage.removeItem(RECENT_KEY);
+  } catch {
+    /* storage blocked */
+  }
+}
+
 export async function signOut(all: boolean, deps: SignOutDeps): Promise<void> {
   const request = deps.request ?? apiRequest;
   try {
@@ -24,7 +38,11 @@ export async function signOut(all: boolean, deps: SignOutDeps): Promise<void> {
   } catch (e) {
     if (!(e instanceof ApiError && e.status === 401)) throw e;
   }
+  // The session is gone: a late 401 from a page request still in flight must not send the owner to
+  // /login?next=<private page> instead of plain /login (F12R-2).
+  setUnauthorizedHandler(null);
   deps.clear();
+  clearPrivateBrowserData();
   deps.go("/login");
 }
 
