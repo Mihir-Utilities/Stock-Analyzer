@@ -223,6 +223,18 @@ def test_quality_no_debt_company_skips_coverage_and_de_is_100() -> None:
     assert q["score"] == ap((100 * 10 + 50 * 80) / 90)
 
 
+def test_quality_no_debt_with_nonpositive_equity_still_scores_de_100() -> None:
+    # D05bR-3 / docs/05 6.3: borrowings 0 -> D/E component 100 even though the ratio is null
+    values = dict(FULL, debt_equity=None, interest_coverage=None)
+    q = quality_score(values, financial=False, no_debt=True)
+    comps = {c["key"]: c for c in q["components"]}
+    assert comps["debt_equity"]["score"] == 100.0
+    assert comps["debt_equity"]["value"] is None
+    assert comps["debt_equity"]["available"] is True
+    q2 = quality_score(values, financial=False, no_debt=False)
+    assert {c["key"]: c for c in q2["components"]}["debt_equity"]["score"] is None
+
+
 def test_quality_not_applicable_for_financials() -> None:
     q = quality_score(FULL, financial=True, no_debt=False)
     assert q["score"] is None and q["reason"] == "not_applicable_financial"

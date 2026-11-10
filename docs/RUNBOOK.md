@@ -470,3 +470,10 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - `data.derived_as_of` is the worker's `fundamentals_meta.computed_at` (UTC timestamp). `DERIVED_STALE` now means an entry was saved after that run; it clears right after `compute_analysis` finishes, even when the entry is newer than the last price bar (D05b-10). Snapshots from before D05b have no `computed_at`: the old rule applies (as_of date) and `derived_as_of` is a date.
 - `data.null_reasons` and `data.ratio_meta` hold the worker's per-metric reasons and the annual period each ratio used; `valuation` includes `ev_ebitda` and `market_cap_cr`. A 500 from `/fundamentals` with "analysis_snapshot fundamentals" in the log means the snapshot JSON does not match `ownerdata.snapshotNode`: reproduce with a fixture (`internal/ownerdata/testdata/worker_democo_fundamentals.json`), do not edit the stored snapshot.
 - Tests: `go test ./internal/ownerdata/` (no database); `TestFundamentalsComputedAtStaleAndPassThrough` in `internal/httpx` needs Docker.
+
+## 60. D05b review fixes (D05bR)
+
+- Risk pass reads only the latest snapshot per tracked stock (lateral join), so its cost no longer grows with snapshot history.
+- `recompute_screener` isolates failures per symbol: a symbol that cannot be built is logged as `screener_row_failed` (first 50, error class only) and skipped; the others are written.
+- If the screener hook itself raises, `post_import` still finishes `ok` with `screener_error` in the result; the nightly `compute_analysis` CLI job re-runs the risk and screener pass, so no manual action is needed.
+- `div_yield` null `no_dividend_data` means no dividend with an ex-date in the last 365 days (not a zero yield). ROCE needs a `pnl.interest` row; see OPEN_QUESTIONS D05bR-2.

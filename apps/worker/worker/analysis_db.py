@@ -28,6 +28,7 @@ from worker.analytics.snapshot import DEFAULT_RISK_FREE, VERSION, Bars, build_sn
 from worker.post_import import HOOKS, Hooks
 
 log = logging.getLogger("worker.analysis")
+MAX_SCREENER_ERRORS_LOGGED = 50
 
 KEEP_SNAPSHOTS = 30
 BENCHMARK = "NIFTY50"
@@ -272,6 +273,35 @@ def screener_score_metrics(scores: dict[str, Any]) -> dict[str, float]:
     return out
 
 
+async def _recompute_screener_one(pool: asyncpg.Pool, symbol: str) -> int:
+    row = await pool.fetchrow(
+        "SELECT i.id, i.sector, i.industry, s.as_of, s.scores, "
+        "s.indicators - 'series' - 'analysis' AS indicators FROM instrument i "
+        "JOIN analysis_snapshot s ON s.instrument_id = i.id WHERE i.symbol = $1 "
+        "ORDER BY s.as_of DESC LIMIT 1",
+        symbol,
+    )
+    if row is None:
+        return 0
+    snap = _loads(row["indicators"])
+    metrics: dict[str, Any] = dict(screener_price_metrics(snap))
+    metrics.update(snap.get("fundamentals_screener") or {})
+    metrics.update(screener_score_metrics(_loads(row["scores"]) or {}))
+    for key in SCREENER_TEXT_KEYS:
+        if row[key]:
+            metrics[key] = row[key]
+    await pool.execute(
+        "INSERT INTO screener_row (instrument_id, as_of, metrics) VALUES ($1, $2, $3::jsonb) "
+        "ON CONFLICT (instrument_id) DO UPDATE SET as_of = EXCLUDED.as_of, "
+        "metrics = (screener_row.metrics - $4::text[]) || EXCLUDED.metrics",
+        int(row["id"]),
+        row["as_of"],
+        json.dumps(metrics, allow_nan=False),
+        SCREENER_OWNED_KEYS,
+    )
+    return 1
+
+
 async def recompute_screener(pool: asyncpg.Pool, symbols: Sequence[str]) -> int:
     """Rebuild the metrics of ``screener_row`` for ``symbols`` from their latest snapshot.
 
@@ -279,33 +309,16 @@ async def recompute_screener(pool: asyncpg.Pool, symbols: Sequence[str]) -> int:
     keys); a key whose value is unknown is absent, never 0 (docs/03 section 9).
     """
     written = 0
+    errors = 0
     for symbol in symbols:
-        row = await pool.fetchrow(
-            "SELECT i.id, i.sector, i.industry, s.as_of, s.scores, "
-            "s.indicators - 'series' - 'analysis' AS indicators FROM instrument i "
-            "JOIN analysis_snapshot s ON s.instrument_id = i.id WHERE i.symbol = $1 "
-            "ORDER BY s.as_of DESC LIMIT 1",
-            symbol,
-        )
-        if row is None:
-            continue
-        snap = _loads(row["indicators"])
-        metrics: dict[str, Any] = dict(screener_price_metrics(snap))
-        metrics.update(snap.get("fundamentals_screener") or {})
-        metrics.update(screener_score_metrics(_loads(row["scores"]) or {}))
-        for key in SCREENER_TEXT_KEYS:
-            if row[key]:
-                metrics[key] = row[key]
-        await pool.execute(
-            "INSERT INTO screener_row (instrument_id, as_of, metrics) VALUES ($1, $2, $3::jsonb) "
-            "ON CONFLICT (instrument_id) DO UPDATE SET as_of = EXCLUDED.as_of, "
-            "metrics = (screener_row.metrics - $4::text[]) || EXCLUDED.metrics",
-            int(row["id"]),
-            row["as_of"],
-            json.dumps(metrics, allow_nan=False),
-            SCREENER_OWNED_KEYS,
-        )
-        written += 1
+        try:
+            written += await _recompute_screener_one(pool, symbol)
+        except Exception as exc:  # per-item isolation: one bad stock never fails the batch
+            errors += 1
+            if errors <= MAX_SCREENER_ERRORS_LOGGED:
+                log.warning(
+                    "screener_row_failed", extra={"symbol": symbol, "error": type(exc).__name__}
+                )
     return written
 
 
@@ -313,11 +326,13 @@ async def recompute_risk_scores(pool: asyncpg.Pool) -> list[str]:
     """Risk score (docs/05 6.2) for the whole universe of tracked stocks, written into each
     stock's latest snapshot. Returns the symbols whose snapshot was updated."""
     rows = await pool.fetch(
-        "SELECT DISTINCT ON (s.instrument_id) s.instrument_id, i.symbol, s.as_of, "
+        "SELECT s.instrument_id, i.symbol, s.as_of, "
         "COALESCE((s.indicators->>'bars')::int, 0) AS bars, "
         "s.indicators #> '{returns,risk}' AS risk "
-        "FROM analysis_snapshot s JOIN instrument i ON i.id = s.instrument_id "
-        "WHERE i.is_tracked ORDER BY s.instrument_id, s.as_of DESC"
+        "FROM instrument i CROSS JOIN LATERAL ("
+        "SELECT x.instrument_id, x.as_of, x.indicators FROM analysis_snapshot x "
+        "WHERE x.instrument_id = i.id ORDER BY x.as_of DESC LIMIT 1) s "
+        "WHERE i.is_tracked"
     )
     universe: dict[int, RiskInput] = {}
     keys: dict[int, tuple[str, date]] = {}

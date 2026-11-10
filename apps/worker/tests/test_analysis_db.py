@@ -232,6 +232,38 @@ async def test_benchmark_and_risk_free_rate_come_from_the_database(pg_full: asyn
     assert risk2["sharpe_3y"] - s_default == pytest.approx(0.015 / (risk["vol_3y"] / 100), rel=1e-9)
 
 
+async def test_screener_one_bad_snapshot_does_not_fail_the_batch(pg_full: asyncpg.Pool) -> None:
+    good = await seed(pg_full, "GOOD1", 300, sector="IT")
+    bad = await seed(pg_full, "BAD01", 300, sector="IT")
+    await analysis_db.compute_analysis(pg_full, "GOOD1")
+    await analysis_db.compute_analysis(pg_full, "BAD01")
+    await pg_full.execute(
+        "UPDATE analysis_snapshot SET indicators = '{}'::jsonb WHERE instrument_id = $1", bad
+    )
+    assert await analysis_db.recompute_screener(pg_full, ["BAD01", "GOOD1"]) == 1
+    n = await pg_full.fetchval("SELECT count(*) FROM screener_row WHERE instrument_id=$1", good)
+    assert n == 1
+
+
+async def test_risk_scores_touch_only_the_latest_snapshot_per_stock(pg_full: asyncpg.Pool) -> None:
+    iid = await seed(pg_full, "LATE1", 300, sector="IT")
+    await pg_full.execute("UPDATE instrument SET is_tracked = true WHERE id = $1", iid)
+    await analysis_db.compute_analysis(pg_full, "LATE1")
+    old = await pg_full.fetchrow("SELECT as_of FROM analysis_snapshot WHERE instrument_id=$1", iid)
+    assert old is not None
+    await pg_full.execute(
+        "INSERT INTO analysis_snapshot (instrument_id, as_of, indicators, scores, version) "
+        "VALUES ($1, $2, '{\"bars\": 1}'::jsonb, '{}'::jsonb, 'x')",
+        iid,
+        old["as_of"] - timedelta(days=30),
+    )
+    assert await analysis_db.recompute_risk_scores(pg_full) == ["LATE1"]
+    n = await pg_full.fetchval(
+        "SELECT count(*) FROM analysis_snapshot WHERE instrument_id=$1 AND scores ? 'risk'", iid
+    )
+    assert n == 1
+
+
 async def test_ret92_screener_row_price_metrics_keep_foreign_keys(pg_full: asyncpg.Pool) -> None:
     iid = await seed(pg_full, "HHH", 300, sector="IT")
     await pg_full.execute(

@@ -104,7 +104,7 @@ ap = pytest.approx
 def test_fnd16_ratios_known_answers() -> None:
     r = ratios(democo())
     assert r["roe"] == ap(33.658537, abs=1e-6)  # 690 / avg(2200, 1900)
-    assert r["roce"] == ap(24.691358, abs=1e-6)  # ebit 1000 / avg(4300, 3800)... see below
+    assert r["roce"] == ap(24.691358, abs=1e-6)  # ebit 1000 / avg(4300, 3800) = 1000 / 4050
     assert r["debt_equity"] == ap(0.272727, abs=1e-6)
     assert r["interest_coverage"] == ap(12.5)  # ebit 1000 / 80
     assert r["cfo_to_pat"] == ap(1.159420, abs=1e-6)
