@@ -720,3 +720,13 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | F10-12 | Per-period `null_reasons.derived` keyed by `period_end` | A derived cell uses the reason for its own period, else the row reason; ratio and valuation rows use the per-metric reason, else the block reason; `ratio_period` values are ISO dates | `fundamentals.ts` |
 | F10-13 | `compare` `short_history` for a stock without prices | Shown as "Short history: 0 price days, no prices in this range" and the stock has no line; its metrics stay in the table | `ComparePage` |
 | F10-14 | Compare picker | A text box with 2-5 symbols (the server's charset) and a link to /stocks for finding them; no search-as-you-type picker in this task | `ComparePage` |
+
+## F10 review assumptions (Claude, 2026-11-10; owner may overrule, none blocks)
+
+| ID | Question | Interim assumption | Where |
+|---|---|---|---|
+| F10R-1 | docs/03 section 9 gives 422 `fields[]` paths (`filters[2].value`) but not how the UI places them | A `filters[i].x` path is shown at the filter that was sent at position i (ids are kept per run), other paths in the form-level message; the list under Results stays. Editing the form clears them | `ScreenerPage` `placeServerErrors` |
+| F10R-2 | What should Load more do after a 4xx (for example a cursor the server refuses)? Retrying the same cursor cannot succeed | The rows are kept and the message says to press Run screen again (5xx and network errors keep "use Load more to try again"). The cursor is never carried to another screen: a new Run is a new query key that starts at the first page | `ScreenerPage` |
+| F10R-3 | Saved or preset screens naming an unknown sort or column (F10-7 covered filters only) | Named in the same note as dropped filters | `specToDraft` |
+| F10R-4 | Peers add/remove: the server accepts at most 10 removals (B13-3), the UI capped only the adds | Remove is disabled with a visible reason after 10; the table stays on screen while a change is fetched (previous data kept) so focus is not lost | `PeersTab` |
+| F10R-5 | Deferred, small: `compare-live` is one `aria-live` region around the whole result, and Run screen on an unchanged screen refetches every loaded page (React Query infinite-query behaviour) | Left as is: both are cosmetic at the planned scale (about 15 stocks, D-R); revisit with a status-only live region and a first-page reset | `ComparePage`, `ScreenerPage` |

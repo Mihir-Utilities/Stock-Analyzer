@@ -43,11 +43,31 @@ function excludedText(excluded: Record<string, number>): string {
     : `Left out because they have no value for a filtered metric (stocks per metric): ${parts.join(", ")}.`;
 }
 
+/**
+ * Server 422 `fields[]` (`filters[2].value`, `sort.metric`, `columns[1]`, `universe.kind`) as
+ * draft errors: a filter path goes to the filter that was sent at that position, the rest to the
+ * form-level message.
+ */
+export function placeServerErrors(
+  fields: ReadonlyArray<{ field: string; message: string }>,
+  sentIds: ReadonlyArray<number>,
+): DraftError[] {
+  return fields.map((f) => {
+    const m = /^filters\[(\d+)\]\.?(\w*)$/.exec(f.field);
+    const id = m ? (sentIds[Number(m[1])] ?? null) : null;
+    const label = m && id !== null ? m[2] || "filter" : f.field;
+    return { id, field: m?.[2] || f.field, message: `Server: ${label} ${f.message}.` };
+  });
+}
+
 export function ScreenerPage() {
   const [draft, setDraftState] = useState<Draft>(emptyDraft);
   const [errors, setErrors] = useState<DraftError[]>([]);
   const [applied, setApplied] = useState<QueryBody | null>(null);
   const [loadNote, setLoadNote] = useState("");
+  const [serverErrors, setServerErrors] = useState<DraftError[]>([]);
+  /** Draft filter ids in the order of the body that was sent, to place a server 422 per filter. */
+  const sentIds = useRef<number[]>([]);
   const idRef = useRef(0);
   const nextId = () => ++idRef.current;
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -56,6 +76,7 @@ export function ScreenerPage() {
   const setDraft = (fn: (d: Draft) => Draft) => {
     setDraftState(fn);
     setErrors([]);
+    setServerErrors([]);
   };
 
   const key = useMemo(() => (applied ? JSON.stringify(applied) : ""), [applied]);
@@ -79,6 +100,11 @@ export function ScreenerPage() {
     }
   }, [q.isSuccess, q.isError, q.fetchStatus]);
 
+  useEffect(() => {
+    if (!q.isError) return;
+    setServerErrors(placeServerErrors(fieldErrors(q.error), sentIds.current));
+  }, [q.isError, q.error]);
+
   const items = useMemo(() => q.data?.pages.flatMap((p) => p.items) ?? [], [q.data]);
   const first = q.data?.pages[0];
   const metrics = applied ? displayMetrics(applied) : [];
@@ -92,8 +118,10 @@ export function ScreenerPage() {
       return;
     }
     setErrors([]);
+    setServerErrors([]);
     setLoadNote("");
     focusWanted.current = true;
+    sentIds.current = draft.filters.map((f) => f.id);
     if (JSON.stringify(built.body) === key) void q.refetch();
     else setApplied(built.body);
   };
@@ -111,9 +139,10 @@ export function ScreenerPage() {
     const { draft: d, dropped } = specToDraft(spec, nextId);
     setDraftState(d);
     setErrors([]);
+    setServerErrors([]);
     setLoadNote(
       dropped.length > 0
-        ? `Loaded ${name}. Left out filters this app does not support: ${dropped.join(", ")}.`
+        ? `Loaded ${name}. Left out what this app does not support: ${dropped.join(", ")}.`
         : `Loaded ${name}. Press Run screen to see results.`,
     );
   };
@@ -121,6 +150,10 @@ export function ScreenerPage() {
   const serverFields = q.isError ? fieldErrors(q.error) : [];
   const failure = q.isError ? describeError(q.error, "The screen") : null;
   const moreFailed = q.isError && items.length > 0;
+  // A 4xx on a later page (for example a cursor the server no longer accepts) cannot be fixed by
+  // asking for the same page again: the owner starts the screen over.
+  const moreRejected =
+    moreFailed && q.error instanceof ApiError && q.error.status >= 400 && q.error.status < 500;
 
   const status = !applied
     ? ""
@@ -153,7 +186,12 @@ export function ScreenerPage() {
           }}
           className="flex flex-col gap-4"
         >
-          <FilterBuilder draft={draft} setDraft={setDraft} errors={errors} nextId={nextId} />
+          <FilterBuilder
+            draft={draft}
+            setDraft={setDraft}
+            errors={[...errors, ...serverErrors]}
+            nextId={nextId}
+          />
           <div className="flex flex-wrap gap-2">
             <button
               type="submit"
@@ -169,6 +207,7 @@ export function ScreenerPage() {
               onClick={() => {
                 setDraftState(emptyDraft());
                 setErrors([]);
+                setServerErrors([]);
                 setLoadNote("");
               }}
               className={BTN}
@@ -280,7 +319,9 @@ export function ScreenerPage() {
             )}
             {moreFailed ? (
               <Banner tone="error" testId="screener-more-error">
-                The last request failed. The rows above are kept; use Load more to try again.
+                {moreRejected
+                  ? "The server did not accept the next page. The rows above are kept; press Run screen to start the screen again."
+                  : "The last request failed. The rows above are kept; use Load more to try again."}
               </Banner>
             ) : null}
             {q.hasNextPage ? (

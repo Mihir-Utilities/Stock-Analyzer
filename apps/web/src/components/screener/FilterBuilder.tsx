@@ -158,6 +158,7 @@ function FilterRow({
         {mine.length > 0 ? (
           <p
             id={errId}
+            role="alert"
             data-testid={`screener-filter-error-${f.id}`}
             className="text-caption text-text-1"
           >

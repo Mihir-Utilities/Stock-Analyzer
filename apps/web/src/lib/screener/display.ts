@@ -93,7 +93,7 @@ export function stampText(s: Stamp): string {
   return s.last_updated_source ? `${d.text} (${s.last_updated_source})` : d.text;
 }
 
-/** Coverage is a fraction 0-1 of the 35 whitelisted metrics. */
+/** Coverage is a fraction 0-1 of the 36 whitelisted metrics. */
 export function coverageText(fraction: number): string {
   return formatFraction(fraction, { decimals: 0 }).text;
 }

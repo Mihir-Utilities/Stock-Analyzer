@@ -191,6 +191,13 @@ export function ComparePage() {
   const parsed = parseSymbols(rawSymbols);
   const [text, setText] = useState(rawSymbols);
   const [formError, setFormError] = useState<string | null>(null);
+  // Back/forward or a link changes the URL: the text box follows it.
+  const [seenRaw, setSeenRaw] = useState(rawSymbols);
+  if (seenRaw !== rawSymbols) {
+    setSeenRaw(rawSymbols);
+    setText(rawSymbols);
+    setFormError(null);
+  }
 
   const symbols = parsed.ok ? parsed.symbols : [];
   const key = symbols.join(",");
