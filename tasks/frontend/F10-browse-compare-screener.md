@@ -31,8 +31,8 @@ Build stock browse, comparison and the screener with scatter/histogram insights.
 3. Add tests for validation and empty results
 
 ## Acceptance criteria (all must be true)
-- [ ] Screener handles 12 filters and shows `excluded_for_missing`
-- [ ] Compare handles short-history badges
+- [x] Screener handles 12 filters and shows `excluded_for_missing` (SCR-08, SCR-09: `screener-page.test.tsx`)
+- [x] Compare handles short-history badges (CMP-04: `compare-page.test.tsx`; radar, correlation heatmap, scatter, histogram and watchlist multi-select deferred, OPEN_QUESTIONS F10-1)
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `SEC-04` (see `docs/07-edge-cases-tests.md`)

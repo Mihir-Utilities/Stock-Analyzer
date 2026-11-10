@@ -67,7 +67,7 @@ test("every nav entry opens a real page (UI-94)", async ({ page }) => {
   await mockApi(page, []);
   for (const [path, title] of [
     ["/stocks", "Stocks"],
-    ["/compare", "Compare"],
+    ["/compare", "Compare stocks"],
     ["/screener", "Screener"],
     ["/admin/status", "Admin status"],
   ] as const) {
@@ -88,7 +88,7 @@ test("browse pages, links with an encoded symbol, and the unbuilt pages call no 
   await page.getByTestId("stocks-more").click();
   await expect(page.getByTestId("stocks-link-M&M")).toHaveAttribute("href", "/stocks/M%26M");
   await expect(page.getByTestId("stocks-more")).toHaveCount(0);
-  for (const path of ["/compare", "/screener", "/admin/status"]) {
+  for (const path of ["/admin/status"]) {
     calls.length = 0;
     await page.goto(path);
     await expect(page.getByTestId("app-footer")).toBeVisible();

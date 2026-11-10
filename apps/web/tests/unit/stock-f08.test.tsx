@@ -21,6 +21,7 @@ import {
 import { actionSchema } from "@/lib/stock/schemas";
 import { fail, ok, type MockReply } from "../mocks/imports-fixtures";
 import { createMockFetch, type Handler } from "../mocks/mock-fetch";
+import * as f10 from "../mocks/f10-fixtures";
 import * as f8 from "../mocks/f08-fixtures";
 import * as fx from "../mocks/stock-fixtures";
 import "./dom-matchers";
@@ -214,21 +215,32 @@ describe("Ownership tab", () => {
 });
 
 describe("Peers tab", () => {
-  it("says it is not available, links to the import, and never calls the peers route", async () => {
+  it("calls the peers route and shows the table with the self row (F10)", async () => {
     search = "tab=peers";
-    const mock = renderStock({});
-    expect((await screen.findByTestId("peers-unavailable")).textContent).toMatch(
-      /not available yet/,
-    );
-    expect(screen.getByTestId("peers-import-link")).toHaveAttribute("href", "/imports");
-    expect(mock.calls.some((c) => c.path.endsWith("/peers"))).toBe(false);
+    const mock = renderStock({ "GET /stocks/TCS/peers": f10.peers() });
+    expect(await screen.findByTestId("peers-table")).toBeTruthy();
+    expect(screen.getByTestId("peers-row-TCS")).toBeTruthy();
+    expect(mock.calls.filter((c) => c.path === "/stocks/TCS/peers")).toHaveLength(1);
   });
-  it("without a sector it asks for the sector import", async () => {
+  it("a server without the peers feature says so honestly", async () => {
     search = "tab=peers";
-    renderStock({ "GET /stocks/TCS": fx.profile({ sector: null, industry: null }) });
+    renderStock({});
+    await waitFor(() =>
+      expect(screen.getByTestId("peers-card").textContent).toMatch(/not available yet/),
+    );
+  });
+  it("without a sector the server's no_sector_data asks for the sector import", async () => {
+    search = "tab=peers";
+    renderStock({
+      "GET /stocks/TCS": fx.profile({ sector: null, industry: null }),
+      "GET /stocks/TCS/peers": f10.err(404, "DATA_UNAVAILABLE", "No sector", {
+        reason: "no_sector_data",
+      }),
+    });
     expect((await screen.findByTestId("peers-unavailable")).textContent).toMatch(
       /Import sector data to see peers/,
     );
+    expect(screen.getByTestId("peers-import-link")).toHaveAttribute("href", "/imports");
   });
 });
 

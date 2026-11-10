@@ -8,6 +8,7 @@ import {
   asOfText,
   balanceDataset,
   cashflowDataset,
+  formatDerivedAsOf,
   rowDataset,
   sourceText,
   waterfall,
@@ -164,7 +165,7 @@ export function PeStrip({ data }: { data: FundamentalsFull }) {
         state="empty"
         message={`Not shown: ${reason}.`}
         source="Analytics snapshot"
-        asOf={data.derived_as_of ?? null}
+        asOf={asOfOf(data)}
       />
     );
   }
@@ -175,7 +176,7 @@ export function PeStrip({ data }: { data: FundamentalsFull }) {
       title="P/E percentile (5 years)"
       testId="fnd-pe-strip"
       source="Analytics snapshot"
-      asOf={data.derived_as_of ?? null}
+      asOf={asOfOf(data)}
     >
       <div className="flex flex-col gap-2">
         <div
@@ -202,4 +203,10 @@ export function PeStrip({ data }: { data: FundamentalsFull }) {
       </div>
     </Card>
   );
+}
+
+/** The snapshot's own time (an RFC 3339 instant for new runs) as IST text, or null. */
+function asOfOf(data: FundamentalsFull): string | null {
+  const f = formatDerivedAsOf(data.derived_as_of);
+  return f.reason === null ? f.text : null;
 }

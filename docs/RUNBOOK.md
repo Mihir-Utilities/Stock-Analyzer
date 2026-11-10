@@ -493,3 +493,13 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - **Delete of a saved screen removed the wrong one.** `DELETE /screener/saved/A%2541` was decoded twice and matched the screen `AA`. The segment is now decoded once, only when the request carries a RawPath (same rule as the symbol segment). No data repair is needed: a name containing `%` can never be stored.
 - **Compare with an alias and its current symbol** (`OLD,NEW`) is one stock and answers 422 on `symbols` (below the 2-stock minimum).
 - **Peers candidate query** reads `market_cap_cr` through the same guarded CASE expression as the screener, so a non-numeric value in `screener_row` is "no market cap", not an error.
+
+## F10 browse, compare and screener screens (web)
+- **Where:** `/screener` (builder, presets, saved screens, results, CSV), `/compare?symbols=A,B&range=1Y`, the Peers tab of a stock, and Compare selection on `/stocks`. All data comes from the B13 routes through the same-origin API client; nothing calls a third-party site.
+- **Metric list:** `apps/web/src/lib/screener/metrics.ts` is the one typed whitelist. `tests/unit/screener-lib.test.ts` parses docs/03 section 9 and fails when the two differ. To add a metric: worker writes it, docs/03 and `internal/screener/metrics.go` get it, then add it here (key, label, unit, better direction).
+- **Stale rows:** a highlighted row (word `Stale`, amber edge) means the owner data behind it is old or missing (B13-4: fundamentals over 120 days, shareholding over 135 days, or none). Fix by importing results or shareholding; it is not a data-source fault.
+- **A screen returns 422:** the page lists the server's `fields[]` messages. A saved screen that names a metric no longer in the whitelist loads without that filter and says so.
+- **Screener says 409 on save:** 30 screens are saved; delete one. Saved screens live in one `app_setting` row (see the B13 section).
+- **Compare shows no chart:** `rebased.reason` is `no_common_dates` (the stocks never traded on a common date in the range) or `fewer_than_two_stocks_with_prices`; the metrics table still shows. Try a longer range or different stocks.
+- **Peers tab empty with a prompt:** the server answered `no_sector_data` (import sector and industry) or `no_market_cap`.
+- **Tests:** `cd apps/web && npx vitest run tests/unit/screener-lib.test.ts tests/unit/screener-page.test.tsx tests/unit/compare-page.test.tsx tests/unit/peers-tab.test.tsx` and `PW_PORT=3430 PW_STORY_PORT=6430 npx playwright test tests/e2e/f10.spec.ts --workers=2` after `npm run build:e2e`.

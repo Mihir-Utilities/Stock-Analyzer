@@ -4,6 +4,7 @@ import type { ChartDataset } from "@/components/charts/chart-data";
 import {
   formatCount,
   formatDate,
+  formatDateTime,
   formatInr,
   formatMultiple,
   formatNumber,
@@ -39,6 +40,19 @@ export const fundamentalsFullSchema = z.object({
   derived: numRecord.nullish(),
   derived_reason: z.string().nullish(),
   derived_as_of: z.string().nullish(),
+  null_reasons: z
+    .object({
+      derived: z.record(z.string(), z.record(z.string(), z.string())).nullish(),
+      ratios: z.record(z.string(), z.string()).nullish(),
+      valuation: z.record(z.string(), z.string()).nullish(),
+    })
+    .nullish(),
+  ratio_meta: z
+    .object({
+      roe_basis: z.string().nullish(),
+      ratio_period: z.record(z.string(), z.string()).nullish(),
+    })
+    .nullish(),
   ratios: z.record(z.string(), num).nullish(),
   ratios_reason: z.string().nullish(),
   valuation: z.record(z.string(), z.union([z.number(), z.string()]).nullable()).nullish(),
@@ -63,6 +77,15 @@ export const getFundamentalsFull = (symbol: string, basis: BasisChoice, period: 
     schema: fundamentalsFullResponse,
     query: { basis, period },
   });
+
+/**
+ * `derived_as_of` is an RFC 3339 instant (D05bGo-3: the worker's computed_at) for new snapshots
+ * and a plain date for older ones. An instant is shown in IST with the time; a date as a date.
+ */
+export function formatDerivedAsOf(v: string | null | undefined): Formatted {
+  const t = formatDateTime(v ?? null);
+  return t.reason === null ? t : formatDate(v ?? null);
+}
 
 // ---- groups and rows ------------------------------------------------------------------------
 
@@ -218,6 +241,8 @@ export interface SeriesRow {
   source: string | null;
   /** Why a value is unknown in this row. */
   reason: string;
+  /** Per-period reasons from `null_reasons` (same order as the periods); null = use `reason`. */
+  reasons?: Array<string | null>;
 }
 
 const padded = (v: ReadonlyArray<number | null> | undefined, n: number): Array<number | null> =>
@@ -259,7 +284,8 @@ function derivedRows(d: FundamentalsFull): SeriesRow[] {
   const n = d.periods?.length ?? 0;
   const derived = d.derived ?? {};
   const reason = d.derived_reason ? humanReason(d.derived_reason) : "not available for this period";
-  const when = formatDate(d.derived_as_of ?? null);
+  const when = formatDerivedAsOf(d.derived_as_of);
+  const perPeriod = d.null_reasons?.derived ?? {};
   const source =
     when.reason === null
       ? `Analytics snapshot, as of ${when.text}`
@@ -275,6 +301,10 @@ function derivedRows(d: FundamentalsFull): SeriesRow[] {
     values: padded(derived[k], n),
     source,
     reason,
+    reasons: (d.periods ?? []).map((p) => {
+      const code = perPeriod[k]?.[p];
+      return code ? humanReason(code) : null;
+    }),
   }));
 }
 
@@ -306,6 +336,10 @@ export interface ScalarRow {
   /** Number, text (P/E basis) or null. */
   value: number | string | null;
   reason: string;
+  /** Period end the ratio used (`ratio_meta.ratio_period`), an ISO date; null when not sent. */
+  period: string | null;
+  /** Definition note, e.g. the ROE basis (`ratio_meta.roe_basis`). */
+  note: string | null;
 }
 
 export function scalarRows(d: FundamentalsFull, group: "ratios" | "valuation"): ScalarRow[] {
@@ -313,13 +347,22 @@ export function scalarRows(d: FundamentalsFull, group: "ratios" | "valuation"): 
   const blockReason = group === "ratios" ? d.ratios_reason : d.valuation_reason;
   const keys = group === "ratios" ? RATIO_KEYS : VALUATION_KEYS;
   const extra = Object.keys(block ?? {}).filter((k) => !(keys as readonly string[]).includes(k));
-  const reason = blockReason ? humanReason(blockReason) : "not available for this stock";
+  const blockWords = blockReason ? humanReason(blockReason) : "not available for this stock";
+  const perMetric = (group === "ratios" ? d.null_reasons?.ratios : d.null_reasons?.valuation) ?? {};
+  const roeBasis = d.ratio_meta?.roe_basis;
   return [...keys, ...extra].map((k) => ({
     key: k,
     label: metricLabel(k),
     unit: SCALAR_UNITS[k] ?? (group === "ratios" ? "MULT" : "TEXT"),
     value: block?.[k] ?? null,
-    reason,
+    reason: perMetric[k] ? humanReason(perMetric[k]) : blockWords,
+    period: (group === "ratios" ? d.ratio_meta?.ratio_period?.[k] : null) ?? null,
+    note:
+      group === "ratios" && k === "roe" && roeBasis
+        ? roeBasis === "average"
+          ? "Net profit over the average of opening and closing equity."
+          : "Net profit over closing equity: the earlier year's equity was not entered."
+        : null,
   }));
 }
 
@@ -551,7 +594,7 @@ export interface ApiWarning {
 /** Sentence for a fundamentals warning; an unknown code keeps the API's own message. */
 export function warningText(w: ApiWarning, derivedAsOf: string | null | undefined): string {
   if (w.code === "DERIVED_STALE") {
-    const when = formatDate(derivedAsOf ?? null);
+    const when = formatDerivedAsOf(derivedAsOf);
     return `Growth, margins, ratios and valuation were computed ${when.reason === null ? `as of ${when.text}` : "earlier"}, before your latest entry. They update after the next analytics run.`;
   }
   if (w.code === "BASIS_NOT_MIXED") {

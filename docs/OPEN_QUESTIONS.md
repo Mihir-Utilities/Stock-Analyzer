@@ -701,3 +701,22 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | B13R-2 | docs/03 says "35 whitelisted metrics" for `coverage`; the list holds 36 (34 numeric, 2 text) | Docs corrected to 36; `coverage` denominator is the whitelist size (test `TestDocsQuoteWhitelistSize`) | docs/03, `service.go` |
 | B13R-3 | `remove=OLD` for an old symbol: should it drop the current stock? | Not resolved: `remove` matches current symbols only (documented as temporary and cosmetic); revisit if the UI offers aliases there | `peers.go` |
 | B13R-4 | Presets are read-only but a saved screen may reuse a preset name | Allowed (they live in different lists); the UI should show them in separate groups | `service.go` |
+
+## F10 assumptions (Claude, 2026-11-10; owner may overrule, none blocks)
+
+| ID | Question or gap | Interim decision | Where |
+|---|---|---|---|
+| F10-1 | docs/06 6.5 and 6.6 list a radar, a correlation heatmap, a scatter of two metrics, a histogram with thresholds, sparklines, a watchlist multi-select and data bars; docs/06a has no scatter or histogram in `ChartFrame` (F14-3) and B13 returns no correlation or radar series | Not built. Compare shows the rebased chart and the metrics table; the screener shows the table. Revisit when `ChartFrame` gets scatter and bar series and the owner wants them | `ScreenerPage`, `ComparePage` |
+| F10-2 | Task step 2 "virtualized tables" | The screener table is a plain table fed by 50-row pages and a Load more button (the page size is the API default; `limit` is at most 200). The DOM grows by 50 rows per click; `DataTable` (virtualised) cannot render links, stamps and reasons per cell yet. Revisit if the owner loads more than a few hundred rows | `ResultsTable` |
+| F10-3 | `GET /stocks` returns no price, P/E, score or valuation, and the browse list must not fan out per row (F10p-2) | /stocks keeps its list columns, points to the Screener for those figures and adds a Compare selection (2 to 5 ticks). No Index tag or Tracked-only filter: the list endpoint has no such parameter | `StocksBrowse` |
+| F10-4 | Screener column choice and default | Columns are chosen from the whitelist by checkboxes (default market cap, P/E, ROE, quality score; at most 40); filter and sort metrics are always shown, in that order, before the chosen columns. The table uses the spec that was run, not the unsaved builder | `spec.ts` |
+| F10-5 | Screener rows are in the server's order; the cursor belongs to that order | Table headers do not re-sort loaded rows; sorting is the Sort control and Run screen | `ResultsTable` |
+| F10-6 | Replace of a saved screen | The UI asks for confirmation when the typed name matches a saved name in any case (the server upserts without asking) | `SavedScreens` |
+| F10-7 | Saved screen or preset naming a metric the whitelist no longer has | The filter is dropped, named in the note, and the rest loads | `specToDraft` |
+| F10-8 | Peers add/remove (session) | State lives in the tab only (not saved, not in the URL); at most 10 added; a 422 from the server (unknown symbol) shows the message and a Reset button | `PeersTab` |
+| F10-9 | Peers percentile display | `percentile_rank` is a percent 0-100 (D05b-4): shown as "Rank 30%" under each value; no percentile bars or radar (F10-1) | `PeersTab` |
+| F10-10 | The Peers tab now always calls the peers route (it used to skip the call without a sector) | The server is authoritative: `no_sector_data` shows the import prompt, `no_market_cap` the reason | `PeersTab` |
+| F10-11 | `derived_as_of` as an RFC 3339 instant | Shown in IST with the time through `formatDateTime`; an older plain date is shown as a date | `formatDerivedAsOf` |
+| F10-12 | Per-period `null_reasons.derived` keyed by `period_end` | A derived cell uses the reason for its own period, else the row reason; ratio and valuation rows use the per-metric reason, else the block reason; `ratio_period` values are ISO dates | `fundamentals.ts` |
+| F10-13 | `compare` `short_history` for a stock without prices | Shown as "Short history: 0 price days, no prices in this range" and the stock has no line; its metrics stay in the table | `ComparePage` |
+| F10-14 | Compare picker | A text box with 2-5 symbols (the server's charset) and a link to /stocks for finding them; no search-as-you-type picker in this task | `ComparePage` |
