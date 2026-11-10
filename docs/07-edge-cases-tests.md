@@ -633,3 +633,21 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | SCO-85 | Risk pass in the database (D05b) | Needs 20 tracked stocks; writes `scores.risk` into every latest snapshot; the screener hook refreshes everyone and `risk_score` in `screener_row` | I (`test_sco_db_*`) |
 | SCO-86 | No-debt company with equity <= 0 (D05bR-3) | Borrowings 0 -> quality D/E component scores 100 although the ratio is null (`negative_equity`); coverage component skipped | U (`test_quality_no_debt_with_nonpositive_equity_still_scores_de_100`) |
 | SCO-87 | Screener pass isolation and risk pass cost (D05bR-4) | One stock whose snapshot cannot be mapped is logged and skipped, the others still get their `screener_row`; the risk pass reads only each stock's latest snapshot | I (`test_screener_one_bad_snapshot_does_not_fail_the_batch`, `test_risk_scores_touch_only_the_latest_snapshot_per_stock`) |
+
+
+## SCR/PEER/CMP: screener, peers and compare (B13)
+| ID | Scenario | Required behavior | Test |
+|---|---|---|---|
+| SCR-01 | Screener filters, sort and ties (SEC-04 data path) | Whitelisted metrics only; ops `> >= < <= = between in`; a missing metric excludes the stock and is counted in `meta.excluded_for_missing`; missing sort values last; ties by symbol; unknown values are null with a reason, never 0; a real 0 matches `= 0` | I (`TestScreenerQueryFiltersSortAndExclusions`) |
+| SCR-02 | Injection in every user-controlled field (SEC-04) | Metric, sort metric, column, op, direction, universe, limit, cursor and saved name: 422 naming the field; SQL-looking values are bound parameters and match nothing; tables intact; SQL text never changes with the values (fuzz) | U + I (`FuzzSpecSQL`, `TestInjection*`, `TestScreenerInjectionOverHTTP`) |
+| SCR-03 | Whitelist equals docs/03 and the keys the worker writes | No extra and no missing key; every key is written by the worker (parsed from the Python constants) | U (`TestWhitelistMatchesWorker`, `TestWhitelistMatchesDocs`) |
+| SCR-04 | Limits | At most 12 filters, `in` at most 50 strings of at most 100 characters, `between` ordered, numbers finite within 1e15, limit clamp 200, non-integer or < 1 is 422, cursor bound to its screen, offset cap | U |
+| SCR-05 | Last updated and stale per stock (D-R) | Every item has `last_updated` (IST date of the newest owner entry, derived rows ignored), `stale`, `stale_reason`; 120 days for fundamentals, 135 days after the quarter end for shareholding; no owner data is stale with a null date | U + I |
+| SCR-06 | Saved screens | Upsert by name case-insensitively (201 then 200), at most 30 (409), name pattern, spec at most 8 KiB, delete 404 when absent, 30 parallel saves lose none | I (`TestScreenerSavedCRUD`, `TestScreenerSavedCapAndConcurrency`) |
+| SCR-07 | Auth | Every B13 route needs the session; non-GET needs the CSRF header | I |
+| PEER-01 | Peer selection (docs/05 section 7) | Same industry; fewer than 4 widens to the sector; cap ratio [0.25, 4] then [0.1, 10]; fewer than 4 returns what exists with `few comparable peers`; ranked by abs(ln ratio) | I (`TestPeersAlgorithm`) |
+| PEER-02 | Peer errors and overrides | No sector and industry: `no_sector_data`; no market cap: `no_market_cap`; `add`/`remove` temporary, conflicting or unknown symbols 422; alias gives `redirect_symbol` | I |
+| PEER-03 | Percentile of peers | Percent 0-100 among peers and self (D05b-4); null for a missing value or fewer than two values | U + I |
+| CMP-01 | Compare rebase and short history (MF-14 for stocks) | First common date = 100 on `adj_close`; a stock with under 60% of the window dates is `short_history`; a stock without prices has a null series; no common date gives empty dates with a reason | I (`TestCompareRebaseShortHistoryAndNulls`) |
+| CMP-02 | Compare metrics (FND-14) | A missing market cap or any missing metric is null with `metric_reasons`, never 0; `best` follows the direction table, null on a tie or fewer than two values | U + I |
+| CMP-03 | Compare input | 2-5 distinct symbols of the symbol charset, `range` and `metrics` whitelisted, unknown symbol 404, alias resolved | U + I |
