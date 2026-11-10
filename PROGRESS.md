@@ -4,15 +4,14 @@ Rule: ONE task per session. Each session does: Execute -> Review -> Fix -> Commi
 A new session starts with: "Resume. Read CLAUDE.md, PROGRESS.md, OPEN_QUESTIONS.md; continue at CURRENT."
 
 ## Pointer
-- LAST UPDATED: 2026-11-10. `main` = 1a9838d (plus later docs commits). GitHub CI GREEN on every job (guards, api with -race, worker, web incl. build, build:e2e, storybook and Playwright e2e, api-types; run 42753721141).
+- LAST UPDATED: 2026-11-10. `main` = 4f0285c (plus later docs commits). GitHub CI GREEN on every job (run 42756258902).
 - CURRENT: every task that does not need an owner decision is built, reviewed and merged. Open items are owner decisions and the deferred D-W implementation (see below). An UNCOMMITTED change by another session to apps/worker/worker/analytics/fundamentals.py, its test and docs/05 (likely the D05bR-2 ROCE decision) sits in the main checkout: review and commit it deliberately.
 - MODE: manual price mode (no broker). Each affected task file starts with an "Amendment: manual price mode" block that overrides the text below it.
-- WHAT "DONE" MEANS TODAY: tasks marked DONE completed phases 1 EXEC and 4 COMMIT (merged, CI green). Phase 2 REVIEW and 3 FIX are done for every built task EXCEPT **F10 (review pending)**.
+- WHAT "DONE" MEANS TODAY: tasks marked DONE completed phases 1 EXEC and 4 COMMIT (merged, CI green). Phase 2 REVIEW and 3 FIX are done for EVERY built task.
 - HOW WORK WAS RUN: each task by a separate agent in its own git worktree (read-only reviewers, fix agents and repair agents too), merged by a coordinator agent (resolve shared docs, renumber RUNBOOK sections and docs/07 row ids, regenerate THIRD_PARTY_NOTICES.md and packages/api-types), pushed, CI confirmed. Reusable lessons are at the bottom.
 - COUNTS: 39 active task files; 42 tracked work items (D05, B06, F13 each split in two; D02 REMOVED).
 
 ### Next tasks that are unblocked (verify the Depends-on line in the task file first)
-- Review (Prompt 3) of F10.
 - Remaining later waves: B14 market overview + admin status (fills the dashboard market tiles and /admin/status, which show 'not available yet'), D07 forecasts (deferred by owner), F09 prediction tab, D08 housekeeping/backup workflows, F15 admin/PWA/accessibility/performance polish. Ask the owner which to release.
 - The deferred D-W implementation (when the owner says go): soft-flag Dismiss/Undo routes, delete-action route, DELETE /portfolio/adjustments, server-side soft flag (F05 then switches adapter), adjusted volume, future listing_date rejection, prices delete/trim queue warning, OQ-16 contrast tokens.
 
@@ -87,7 +86,7 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 | 5 | F13b | DONE (review + fix done) | | b95e552; fixes in ffc96c1 | holiday years in review, shared validation case table (Go+TS parity), now-injected batches, global vitest timeouts |
 | 6 | D05b (fundamentals/scores) | DONE (review + fix done) | | 46ff9dc+7bf7dd4; fixes in 441ae1b | derived/ratios/valuation/scores/screener keys written (B05-4 shape); risk pass uses latest snapshot only; per-symbol isolation; no-debt D/E 100; D05b-1..17, D05bR-1..5 |
 | 6 | B13 | DONE (review + fix done) | | 85b81be; fixes in 4d54157 | screener delete double-decode fixed, compare alias=one stock is 422, guarded peers cast, saved cap holds under burst; B13R-1..4 |
-| 6 | F10 | DONE (review pending) | | fddd177+22e2fc7 / 1a9838d | /screener builder+saved screens+results, /compare, Peers tab, /stocks selection; D05b web follow-ups (derived_as_of IST, null_reasons, ratio_meta); F10-1..14 |
+| 6 | F10 | DONE (review + fix done) | | fddd177+22e2fc7 / 1a9838d; fixes in 4f0285c | screens for B13; server 422 shown at the filter, Load more 4xx says press Run, peers keep previous data, focus/URL sync; F10-1..14, F10R-1..5 |
 | 7 | D04 | DONE (review + fix done) except live smoke check | | 8d38fea; fixes in fa0543f | AMFI floor, size caps, hostile rows, last NAV re-fetch; owner: run sync_mf_schemes --dry-run |
 | 7 | B10 | DONE (review + fix done) | | merge 0f3ce35; fixes in 181b6d8 | 6 /mf routes, XIRR errors, SIP end-date rule, LTTB; owner: attribution wording, Neon re-measure |
 | 7 | F14 | DONE (review + fix done) | | 041865c; fixes in b721c0c | 'Any' plan/option only with Show all, compare cap disabled, load-more error keeps rows, refresh state per fund; F14R-1..4 |
@@ -145,6 +144,8 @@ Frontend and backend tasks may run in separate git worktrees/sessions. Frontend 
 - 2026-11-10: Incident: after a usage-limit reset, three resumed agents lost their worktrees and landed in the MAIN checkout; stale partial edits appeared in main twice (apps/api/internal/ownerdata): saved as patches in the scratchpad and reverted; B13 and the D05b review were relaunched in fresh worktrees. Untracked owner files in the main checkout (spreadsheets, apps/web/AGENTS.md) were left alone; spreadsheet patterns added to .git/info/exclude (local only).
 
 - 2026-11-10: AMFI now answers 302 for NAVAll.txt to portal.amfiindia.com; the egress guard refused the hop and sync_mf_schemes failed (found by the owner's live smoke check). Owner decision AMFI-1 (a): exact host portal.amfiindia.com added to config/allowed_hosts.json (7322efa), egress tests pass (43). B13 review fixes merged (4d54157); F10 merged (1a9838d); CI green (runs 42751563504, 42753721141).
+
+- 2026-11-10: F10 reviewed and fixed (no blockers; six should-fix: filter-level 422, stale-cursor wording, peers add/remove keeps the table, remove cap 10, focus after delete, compare URL sync); merged (4f0285c) from a separate worktree because the main checkout holds another session's uncommitted ROCE work (worker, Go reader, web fundamentals, docs/05, docs/07). The main checkout's local `main` therefore trails origin/main: after that work is committed, run `git pull --rebase origin main`.
 
 ## Lessons for running parallel agents (keep)
 - CI runs on Linux with Go 1.22; local is Windows with a newer Go. Anything case- or OS-dependent passes locally and fails in CI (example: `license.md` vs `LICENSE.md`, fixed in license_scan.py). Reproduce with `docker run golang:1.22` and a `git archive` export before guessing.
