@@ -253,6 +253,10 @@ export function specToDraft(
     filters.push(base);
   }
   const sort = spec.sort && metricDef(spec.sort.metric) ? spec.sort : null;
+  if (spec.sort && !sort) dropped.push(`sort on ${metricLabel(spec.sort.metric)}`);
+  for (const c of spec.columns ?? []) {
+    if (!metricDef(c)) dropped.push(`column ${metricLabel(c)}`);
+  }
   return {
     draft: {
       filters,

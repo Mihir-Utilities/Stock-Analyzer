@@ -137,7 +137,7 @@ describe("request builder (SCR-02, SCR-04, SEC-04 UI side)", () => {
       },
       () => ++id,
     );
-    expect(dropped).toEqual(["retired metric"]);
+    expect(dropped).toEqual(["retired metric", "column nope"]);
     expect(draft.filters.map((x) => [x.metric, x.op, x.a, x.b, x.list])).toEqual([
       ["pe", "between", "5", "15", ""],
       ["sector", "in", "", "", "IT, Energy"],

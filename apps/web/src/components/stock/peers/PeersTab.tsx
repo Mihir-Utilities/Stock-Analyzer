@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { MetricValue, StampView, BTN } from "@/components/screener/parts";
@@ -43,18 +43,21 @@ function PeerLine({
   units,
   isSelf,
   onRemove,
+  removeOff,
 }: {
   p: PeerRow;
   units: Record<string, string>;
   isSelf: boolean;
   onRemove?: () => void;
+  /** Why Remove is off (the server takes at most 10 removals), or null. */
+  removeOff?: string | null;
 }) {
   return (
     <tr
       data-testid={`peers-row-${p.symbol}`}
       data-origin={p.origin}
       data-stale={p.stale}
-      className={`border-b border-border align-top ${isSelf ? "bg-surface-2" : p.stale ? "border-l-4 border-l-warn" : ""}`}
+      className={`border-b border-border align-top ${isSelf ? "bg-surface-2" : ""} ${p.stale ? "border-l-4 border-l-warn" : ""}`}
     >
       <th scope="row" className="px-2 py-1 text-left font-normal">
         <div className="flex flex-col gap-0.5">
@@ -108,6 +111,8 @@ function PeerLine({
             type="button"
             data-testid={`peers-remove-${p.symbol}`}
             aria-label={`Remove ${p.symbol} from this view`}
+            disabled={!!removeOff}
+            aria-describedby={removeOff ? "peers-add-hint" : undefined}
             onClick={onRemove}
             className={BTN}
           >
@@ -143,6 +148,8 @@ export function PeersTab({ profile }: { profile: StockProfile }) {
     queryFn: () => getPeers(symbol, { add: added, remove: removed }),
     staleTime: STALE_TIME.analysis,
     retry: false,
+    // Keep the table (and the add box, with its focus) while an add/remove is being fetched.
+    placeholderData: keepPreviousData,
   });
 
   const submitAdd = (e: React.FormEvent) => {
@@ -321,6 +328,9 @@ export function PeersTab({ profile }: { profile: StockProfile }) {
                   p={p}
                   units={d.units}
                   isSelf={false}
+                  removeOff={
+                    p.origin !== "added" && removed.length >= MAX_PEER_OVERRIDES ? "off" : null
+                  }
                   onRemove={() =>
                     p.origin === "added"
                       ? setAdded(added.filter((a) => a !== p.symbol))
@@ -372,6 +382,11 @@ export function PeersTab({ profile }: { profile: StockProfile }) {
             <span data-testid="peers-add-error">
               <span className="font-medium text-down">Error: </span>
               {addError}
+            </span>
+          ) : removed.length >= MAX_PEER_OVERRIDES ? (
+            <span data-testid="peers-remove-off">
+              Remove is off: at most {MAX_PEER_OVERRIDES} peers can be removed from this view. Reset
+              peers to start again.
             </span>
           ) : (
             "Changes apply to this view only and are not saved."

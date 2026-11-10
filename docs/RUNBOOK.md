@@ -503,3 +503,11 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - **Compare shows no chart:** `rebased.reason` is `no_common_dates` (the stocks never traded on a common date in the range) or `fewer_than_two_stocks_with_prices`; the metrics table still shows. Try a longer range or different stocks.
 - **Peers tab empty with a prompt:** the server answered `no_sector_data` (import sector and industry) or `no_market_cap`.
 - **Tests:** `cd apps/web && npx vitest run tests/unit/screener-lib.test.ts tests/unit/screener-page.test.tsx tests/unit/compare-page.test.tsx tests/unit/peers-tab.test.tsx` and `PW_PORT=3430 PW_STORY_PORT=6430 npx playwright test tests/e2e/f10.spec.ts --workers=2` after `npm run build:e2e`.
+
+## F10 review fixes (screener, compare, peers)
+
+- **Screener 422 now points at the filter:** the server's `filters[i].value` message appears under filter i (the filter that was sent at that position) and clears when the form is edited.
+- **"The server did not accept the next page":** a 4xx on Load more (for example a cursor the server refuses); press Run screen to start again. The loaded rows stay.
+- **Saved screen note lists a dropped sort or column** as well as filters when the whitelist no longer has the metric.
+- **Peers:** at most 10 peers can be removed and 10 added per view (server limit); Reset peers clears both.
+- **Tests:** `cd apps/web && npx vitest run tests/unit/f10-review.test.tsx`. Open points: F10R-1..F10R-5 in `docs/OPEN_QUESTIONS.md`.

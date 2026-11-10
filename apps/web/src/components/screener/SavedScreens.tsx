@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { STALE_TIME } from "@/components/shell/Providers";
 import { Banner } from "@/components/ui/banners";
 import { Card } from "@/components/ui/Card";
@@ -45,6 +45,7 @@ export function SavedScreens({
   const [status, setStatus] = useState("");
   const [replacing, setReplacing] = useState<SavedSpec | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const savedHeadingRef = useRef<HTMLHeadingElement>(null);
 
   const save = useMutation({
     mutationFn: (spec: SavedSpec) => saveScreen({ name: name.trim(), spec }),
@@ -60,6 +61,8 @@ export function SavedScreens({
     onSuccess: (_r, n) => {
       setStatus(`Deleted screen ${n}.`);
       setDeleting(null);
+      // The Delete button that opened the dialog is gone: keep keyboard focus in this card.
+      setTimeout(() => savedHeadingRef.current?.focus(), 0);
       void qc.invalidateQueries({ queryKey: screenerKeys.saved });
     },
     onError: () => setDeleting(null),
@@ -121,7 +124,12 @@ export function SavedScreens({
         </div>
 
         <div className="flex flex-col gap-2">
-          <h3 className="text-lead font-semibold text-text-1">
+          <h3
+            ref={savedHeadingRef}
+            tabIndex={-1}
+            data-testid="screener-saved-heading"
+            className="text-lead font-semibold text-text-1 outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
             Saved screens ({items.length} of {max})
           </h3>
           {q.isSuccess && items.length === 0 ? (
@@ -187,7 +195,7 @@ export function SavedScreens({
               className={inputClass}
             />
           </label>
-          <p id="screener-save-hint" className="text-caption text-text-2">
+          <p id="screener-save-hint" aria-live="polite" className="text-caption text-text-2">
             {nameError ? (
               <span data-testid="screener-save-name-error">
                 <span className="font-medium text-down">Error: </span>
