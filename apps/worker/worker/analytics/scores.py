@@ -264,8 +264,8 @@ def quality_score(
 ) -> dict[str, Any]:
     """docs/05 6.3. ``values`` maps component keys to the metric value (None = unknown).
 
-    A company without borrowings skips the interest-coverage component; its D/E (0) already
-    interpolates to 100.
+    A company without borrowings skips the interest-coverage component; its D/E component is
+    100 even when equity is not positive (the ratio itself is then null).
     """
     if financial:
         return {
@@ -281,7 +281,12 @@ def quality_score(
     for key, label, weight, lo, hi in QUALITY_COMPONENTS:
         x = _num(values.get(key))
         skipped = key == "interest_coverage" and no_debt
-        score = None if x is None or skipped else interpolate(x, lo, hi)
+        if skipped:
+            score = None
+        elif key == "debt_equity" and no_debt:
+            score = 100.0  # docs/05 6.3: no debt -> D/E component 100, even if equity <= 0
+        else:
+            score = None if x is None else interpolate(x, lo, hi)
         comps.append(
             {
                 "key": key,

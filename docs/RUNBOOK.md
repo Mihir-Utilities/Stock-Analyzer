@@ -465,3 +465,10 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - **Stale rule.** The API marks `DERIVED_STALE` when the newest entered value was fetched on a later IST day than the snapshot `as_of` (the last bar date), so an entry made after the last imported bar shows stale even after a recompute (D05b-10). Compare `fundamentals_meta.computed_at` with `inputs_fetched_at`: it is truly stale only when `inputs_fetched_at` is later.
 - **Checking a ratio.** Look at `ratio_meta.ratio_period` (annual period used), `ratio_meta.roe_basis` (`average` or `ending`), `warnings` (`UNIT_MISMATCH:<key>`: a row in an unexpected unit was ignored) and `null_reasons`. Only confirmed split or bonus actions adjust EPS and book value per share.
 - Tests: `uv run pytest tests/test_fundamentals.py tests/test_scores.py` (no database) and `tests/test_fundamentals_db.py` (needs `TEST_DATABASE_URL`).
+
+## 59. D05b review fixes (D05bR)
+
+- Risk pass reads only the latest snapshot per tracked stock (lateral join), so its cost no longer grows with snapshot history.
+- `recompute_screener` isolates failures per symbol: a symbol that cannot be built is logged as `screener_row_failed` (first 50, error class only) and skipped; the others are written.
+- If the screener hook itself raises, `post_import` still finishes `ok` with `screener_error` in the result; the nightly `compute_analysis` CLI job re-runs the risk and screener pass, so no manual action is needed.
+- `div_yield` null `no_dividend_data` means no dividend with an ex-date in the last 365 days (not a zero yield). ROCE needs a `pnl.interest` row; see OPEN_QUESTIONS D05bR-2.
