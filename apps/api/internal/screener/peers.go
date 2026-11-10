@@ -321,8 +321,7 @@ func (s *Service) peerCandidates(ctx context.Context, self instRef) ([]peerCand,
 		WHERE i.instrument_kind = 'equity' AND i.status = 'active' AND i.id <> $1
 		  AND ((($2::text) <> '' AND lower(i.industry) = lower($2::text))
 		    OR (($3::text) <> '' AND lower(i.sector) = lower($3::text)))
-		  AND jsonb_typeof(sr.metrics->'market_cap_cr') = 'number'
-		  AND (sr.metrics->>'market_cap_cr')::float8 > 0
+		  AND `+byKey["market_cap_cr"].expr+` > 0
 		ORDER BY i.symbol`, self.ID, self.Industry, self.Sector)
 	if err != nil {
 		return nil, err

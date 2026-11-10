@@ -645,9 +645,14 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | SCR-05 | Last updated and stale per stock (D-R) | Every item has `last_updated` (IST date of the newest owner entry, derived rows ignored), `stale`, `stale_reason`; 120 days for fundamentals, 135 days after the quarter end for shareholding; no owner data is stale with a null date | U + I |
 | SCR-06 | Saved screens | Upsert by name case-insensitively (201 then 200), at most 30 (409), name pattern, spec at most 8 KiB, delete 404 when absent, 30 parallel saves lose none | I (`TestScreenerSavedCRUD`, `TestScreenerSavedCapAndConcurrency`) |
 | SCR-07 | Auth | Every B13 route needs the session; non-GET needs the CSRF header | I |
+| SCR-08 | Delete segment is decoded once (B13R-1) | `DELETE /screener/saved/A%2541` is the name `A%41` (404) and never deletes the screen `AA`; `A%41` is `AA` | I (`TestScreenerDeleteDoesNotDoubleDecode`) |
+| SCR-09 | Saved-screen cap under a burst (B13R-5) | 36 parallel saves of distinct names give exactly 30 x 201 and 6 x 409; 30 stored | I (`TestScreenerSavedCapHoldsUnderBurst`) |
+| SCR-10 | Docs quote the whitelist size (B13R-4) | The coverage denominator in docs/03 equals the number of whitelisted keys | U (`TestDocsQuoteWhitelistSize`) |
 | PEER-01 | Peer selection (docs/05 section 7) | Same industry; fewer than 4 widens to the sector; cap ratio [0.25, 4] then [0.1, 10]; fewer than 4 returns what exists with `few comparable peers`; ranked by abs(ln ratio) | I (`TestPeersAlgorithm`) |
 | PEER-02 | Peer errors and overrides | No sector and industry: `no_sector_data`; no market cap: `no_market_cap`; `add`/`remove` temporary, conflicting or unknown symbols 422; alias gives `redirect_symbol` | I |
 | PEER-03 | Percentile of peers | Percent 0-100 among peers and self (D05b-4); null for a missing value or fewer than two values | U + I |
+| PEER-04 | Non-numeric or non-positive candidate market cap (B13R-3) | A candidate whose `market_cap_cr` is a string or <= 0 is skipped, never a 500 | I (`TestPeersIgnoreNonNumericMarketCap`) |
 | CMP-01 | Compare rebase and short history (MF-14 for stocks) | First common date = 100 on `adj_close`; a stock with under 60% of the window dates is `short_history`; a stock without prices has a null series; no common date gives empty dates with a reason | I (`TestCompareRebaseShortHistoryAndNulls`) |
 | CMP-02 | Compare metrics (FND-14) | A missing market cap or any missing metric is null with `metric_reasons`, never 0; `best` follows the direction table, null on a tie or fewer than two values | U + I |
 | CMP-03 | Compare input | 2-5 distinct symbols of the symbol charset, `range` and `metrics` whitelisted, unknown symbol 404, alias resolved | U + I |
+| CMP-04 | Alias plus current symbol (B13R-2) | `symbols=OLD,NEW` naming one stock is one stock: 422 on `symbols` | I (`TestCompareAliasAndCurrentSymbolIsOneStock`) |

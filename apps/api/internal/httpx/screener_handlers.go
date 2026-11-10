@@ -134,10 +134,14 @@ func screenerHandler(rt route, d Deps) http.Handler {
 	case mDelete + " /screener/saved/{name}":
 		return Adapt(func(w http.ResponseWriter, r *http.Request) error {
 			name := chi.URLParam(r, "name")
-			if strings.Contains(name, "%") { // chi leaves the segment encoded when RawPath is set
-				if dec, err := url.PathUnescape(name); err == nil {
-					name = dec
+			// chi leaves the segment percent-encoded only when the request carries a RawPath;
+			// otherwise it is already decoded and decoding again would turn `A%2541` into `AA`.
+			if r.URL.RawPath != "" {
+				dec, err := url.PathUnescape(name)
+				if err != nil {
+					return mapScreenerError(screener.ErrSavedNotFound)
 				}
+				name = dec
 			}
 			if err := svc.DeleteSaved(r.Context(), name); err != nil {
 				return mapScreenerError(err)

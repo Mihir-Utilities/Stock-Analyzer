@@ -140,6 +140,9 @@ func (s *Service) Compare(ctx context.Context, p CompareParams) (CompareResult, 
 			refs = append(refs, r)
 		}
 	}
+	if len(refs) < MinCompare { // an alias and its current symbol are one stock
+		return CompareResult{}, &ValidationError{Fields: []FieldError{{"symbols", fmt.Sprintf("must list %d to %d different stocks", MinCompare, MaxCompare)}}}
+	}
 	ids := make([]int32, len(refs))
 	for i, r := range refs {
 		ids[i] = r.ID

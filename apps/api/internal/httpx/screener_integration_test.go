@@ -412,6 +412,41 @@ func TestScreenerSavedCapAndConcurrency(t *testing.T) {
 	}
 }
 
+// B13R-5: a burst past the cap yields exactly 30 creates and the rest 409; the advisory lock means
+// no check-then-write race can store a 31st screen.
+func TestScreenerSavedCapHoldsUnderBurst(t *testing.T) {
+	e := newScrEnv(t)
+	const n = screener.MaxSaved + 6
+	codes := make([]int, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			codes[i] = e.post("/api/v1/screener/saved", fmt.Sprintf(`{"name":"b%02d","spec":{}}`, i)).Code
+		}(i)
+	}
+	wg.Wait()
+	created, conflict := 0, 0
+	for _, c := range codes {
+		switch c {
+		case 201:
+			created++
+		case 409:
+			conflict++
+		default:
+			t.Errorf("unexpected status %d", c)
+		}
+	}
+	if created != screener.MaxSaved || conflict != 6 {
+		t.Errorf("created %d conflict %d", created, conflict)
+	}
+	var stored int
+	if err := e.pool.QueryRow(context.Background(), `SELECT jsonb_array_length(value) FROM app_setting WHERE key = 'saved_screens'`).Scan(&stored); err != nil || stored != screener.MaxSaved {
+		t.Errorf("stored %d %v", stored, err)
+	}
+}
+
 func (e *scrEnv) bars(symbol string, closes map[string]float64) {
 	e.t.Helper()
 	for d, c := range closes {
@@ -704,5 +739,43 @@ func TestPeersAlgorithm(t *testing.T) {
 	e.exec(`INSERT INTO symbol_alias (instrument_id, old_symbol) SELECT id, 'OLDSELF' FROM instrument WHERE symbol = 'SELF'`)
 	if b, code := e.peers("OLDSELF/peers"); code != 200 || b.Data.RedirectTo != "SELF" {
 		t.Errorf("alias: %d %+v", code, b.Data)
+	}
+}
+
+// B13R-1: a literal percent in the delete segment is not decoded twice (`A%2541` is the name `A%41`,
+// not `AA`), so it can never delete another screen.
+func TestScreenerDeleteDoesNotDoubleDecode(t *testing.T) {
+	e := newScrEnv(t)
+	if r := e.post("/api/v1/screener/saved", `{"name":"AA","spec":{}}`); r.Code != 201 {
+		t.Fatalf("create: %d", r.Code)
+	}
+	if r := e.do(http.MethodDelete, "/api/v1/screener/saved/A%2541", "", e.cookie, nil); r.Code != 404 {
+		t.Errorf("A%%2541 must not match: %d %s", r.Code, r.Body.String())
+	}
+	if r := e.do(http.MethodDelete, "/api/v1/screener/saved/A%41", "", e.cookie, nil); r.Code != 200 {
+		t.Errorf("A%%41 is the name AA: %d %s", r.Code, r.Body.String())
+	}
+}
+
+// B13R-2: an alias and its current symbol are one stock, so listing both is below the 2-stock minimum.
+func TestCompareAliasAndCurrentSymbolIsOneStock(t *testing.T) {
+	e := newScrEnv(t)
+	e.stock("AAA", "IT", "Software", `{"pe":10}`)
+	e.exec(`INSERT INTO symbol_alias (instrument_id, old_symbol) SELECT id, 'OLDAAA' FROM instrument WHERE symbol = 'AAA'`)
+	if r := e.get("/api/v1/compare?symbols=OLDAAA,AAA"); r.Code != 422 || !strings.Contains(r.Body.String(), `"symbols"`) {
+		t.Errorf("alias+current: %d %s", r.Code, r.Body.String())
+	}
+}
+
+// B13R-3: a non-numeric market_cap_cr on a candidate is "no market cap" (skipped), never a 500.
+func TestPeersIgnoreNonNumericMarketCap(t *testing.T) {
+	e := newScrEnv(t)
+	e.stock("SELF", "Tech", "Software", `{"market_cap_cr":1000}`)
+	e.stock("GOOD", "Tech", "Software", `{"market_cap_cr":900}`)
+	e.stock("BAD", "Tech", "Software", `{"market_cap_cr":"abc"}`)
+	e.stock("NEG", "Tech", "Software", `{"market_cap_cr":-5}`)
+	b, code := e.peers("SELF/peers")
+	if code != 200 || b.peerSymbols() != "GOOD" {
+		t.Fatalf("%d %s", code, b.peerSymbols())
 	}
 }
