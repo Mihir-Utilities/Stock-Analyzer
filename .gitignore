@@ -64,3 +64,8 @@ Thumbs.db
 test-results/
 playwright-report/
 storybook-static/
+
+# Owner spreadsheets and statements: real financial data must never be committed (public repo)
+*.xlsx
+*.xls
+*.xlsm
