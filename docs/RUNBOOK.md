@@ -487,3 +487,9 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - **Saved screens** live in one `app_setting` row (`saved_screens`, at most 30). To reset: `DELETE FROM app_setting WHERE key = 'saved_screens'`.
 - **Adding a metric.** Only if the worker writes it to `screener_row.metrics`: add it to docs/03 section 9, to `internal/screener/metrics.go` (key, unit, direction), keep `TestWhitelistMatchesDocs` and `TestWhitelistMatchesWorker` green.
 - Tests: `cd apps/api && go test ./internal/screener` (no database, includes `FuzzSpecSQL`; `go test ./internal/screener -fuzz FuzzSpecSQL -fuzztime 30s` for a longer run) and `go test ./internal/httpx -run 'Screener|Compare|Peers'` (needs `TEST_DATABASE_URL`).
+
+## 62. B13 review fixes (B13R)
+
+- **Delete of a saved screen removed the wrong one.** `DELETE /screener/saved/A%2541` was decoded twice and matched the screen `AA`. The segment is now decoded once, only when the request carries a RawPath (same rule as the symbol segment). No data repair is needed: a name containing `%` can never be stored.
+- **Compare with an alias and its current symbol** (`OLD,NEW`) is one stock and answers 422 on `symbols` (below the 2-stock minimum).
+- **Peers candidate query** reads `market_cap_cr` through the same guarded CASE expression as the screener, so a non-numeric value in `screener_row` is "no market cap", not an error.

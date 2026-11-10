@@ -2,6 +2,7 @@ package screener
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"os"
 	"reflect"
@@ -565,5 +566,13 @@ func TestMetricValueAndCoverage(t *testing.T) {
 	}
 	if coverage(map[string]any{}) != 0 {
 		t.Error("empty coverage must be 0 fraction, with values null elsewhere")
+	}
+}
+
+// B13R-4: the coverage denominator quoted in docs/03 is the real whitelist size.
+func TestDocsQuoteWhitelistSize(t *testing.T) {
+	doc := readRepo(t, "docs/03-api-spec.md")
+	if want := fmt.Sprintf("the %d whitelisted metrics", len(Keys())); !strings.Contains(doc, want) {
+		t.Errorf("docs/03 must say %q", want)
 	}
 }
