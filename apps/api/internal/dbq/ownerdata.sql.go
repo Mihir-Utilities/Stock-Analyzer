@@ -56,19 +56,21 @@ func (q *Queries) GetFundamentalMeta(ctx context.Context, instrumentID int32) (G
 }
 
 const getLatestSnapshotFundamentals = `-- name: GetLatestSnapshotFundamentals :one
-SELECT as_of, (indicators -> 'fundamentals')::jsonb AS fundamentals
+SELECT as_of, (indicators -> 'fundamentals')::jsonb AS fundamentals,
+       (indicators -> 'fundamentals_meta')::jsonb AS fundamentals_meta
 FROM analysis_snapshot WHERE instrument_id = $1 ORDER BY as_of DESC LIMIT 1
 `
 
 type GetLatestSnapshotFundamentalsRow struct {
-	AsOf         pgtype.Date
-	Fundamentals []byte
+	AsOf             pgtype.Date
+	Fundamentals     []byte
+	FundamentalsMeta []byte
 }
 
 func (q *Queries) GetLatestSnapshotFundamentals(ctx context.Context, instrumentID int32) (GetLatestSnapshotFundamentalsRow, error) {
 	row := q.db.QueryRow(ctx, getLatestSnapshotFundamentals, instrumentID)
 	var i GetLatestSnapshotFundamentalsRow
-	err := row.Scan(&i.AsOf, &i.Fundamentals)
+	err := row.Scan(&i.AsOf, &i.Fundamentals, &i.FundamentalsMeta)
 	return i, err
 }
 

@@ -161,6 +161,7 @@ func (s *Service) Fundamentals(ctx context.Context, symbol, basis, period string
 	switch {
 	case serr == nil:
 		in.Snapshot = json.RawMessage(snap.Fundamentals)
+		in.SnapshotMeta = json.RawMessage(snap.FundamentalsMeta)
 		if snap.AsOf.Valid {
 			a := snap.AsOf.Time
 			in.SnapshotAsOf = &a
@@ -184,7 +185,7 @@ func (s *Service) Fundamentals(ctx context.Context, symbol, basis, period string
 		res.Warnings = append(res.Warnings, Warning{"MIXED_SOURCES", "source_by_metric names the source of the latest period only; these metrics mix sources across periods: " + strings.Join(data.MixedSources, ", ")})
 	}
 	if data.DerivedStale {
-		res.Warnings = append(res.Warnings, Warning{"DERIVED_STALE", "Derived figures, ratios and valuation come from an older analysis snapshot than the latest entered values; they refresh on the next recompute."})
+		res.Warnings = append(res.Warnings, Warning{"DERIVED_STALE", "Derived figures, ratios and valuation were computed before the latest entered values; they refresh on the next recompute."})
 	}
 	if u := data.UpdatedAt(); !u.IsZero() {
 		ref := u

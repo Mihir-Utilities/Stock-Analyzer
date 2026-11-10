@@ -20,7 +20,8 @@ ORDER BY period_end, metric_key;
 SELECT status, last_success, last_fetched FROM fundamental_meta WHERE instrument_id = $1;
 
 -- name: GetLatestSnapshotFundamentals :one
-SELECT as_of, (indicators -> 'fundamentals')::jsonb AS fundamentals
+SELECT as_of, (indicators -> 'fundamentals')::jsonb AS fundamentals,
+       (indicators -> 'fundamentals_meta')::jsonb AS fundamentals_meta
 FROM analysis_snapshot WHERE instrument_id = $1 ORDER BY as_of DESC LIMIT 1;
 
 -- name: ListShareholding :many

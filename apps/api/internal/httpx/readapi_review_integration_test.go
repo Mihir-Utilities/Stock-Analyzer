@@ -326,6 +326,49 @@ func TestFundamentalsDerivedAsOfAndStaleWarning(t *testing.T) {
 	}
 }
 
+// FND-104, FND-105 (D05b-9/10): the stale rule compares computed_at with the newest entry (far-apart fixed
+// timestamps; the entry is stamped by the database), and the worker's extra fields come through.
+func TestFundamentalsComputedAtStaleAndPassThrough(t *testing.T) {
+	e := newOwnerEnv(t)
+	e.addStock("CMP", "Computed Co")
+	e.fund("CMP", "consolidated", "Q", "2026-06-30", "pnl.revenue", 100, "manual")
+	snap := `{"fundamentals":{"consolidated":{"Q":{"periods":["2026-06-30"],"derived":{"op_margin_source":["ebitda"]},
+	  "ratios":{"roe":12.5},"valuation":{"ev_ebitda":29.0,"market_cap_cr":36000.0,"pe_ttm":null},
+	  "null_reasons":{"derived":{},"ratios":{},"valuation":{"pe_ttm":"loss_making"}},
+	  "ratio_meta":{"roe_basis":"ending","ratio_period":{"roe":"2026-03-31"}}}}},
+	  "fundamentals_meta":{"computed_at":"2099-01-01T00:00:00+00:00"}}`
+	// as_of far in the past: the old rule would say stale; computed_at far in the future says fresh.
+	e.exec(`INSERT INTO analysis_snapshot (instrument_id, as_of, indicators, scores, version)
+	        SELECT id, '2001-01-05', $1::jsonb, '{}', 'v1' FROM instrument WHERE symbol='CMP'`, snap)
+	b, code := e.getEnv("/api/v1/stocks/CMP/fundamentals")
+	if code != 200 || b.Data["derived_as_of"] != "2099-01-01T00:00:00Z" {
+		t.Fatalf("%d derived_as_of=%v", code, b.Data["derived_as_of"])
+	}
+	for _, w := range b.Warnings {
+		if w.Code == "DERIVED_STALE" {
+			t.Fatalf("flagged stale although computed_at is after the entry")
+		}
+	}
+	val, _ := b.Data["valuation"].(map[string]any)
+	if val["ev_ebitda"] != 29.0 || val["market_cap_cr"] != 36000.0 || val["pe_ttm"] != nil {
+		t.Fatalf("valuation %v", val)
+	}
+	nr, _ := b.Data["null_reasons"].(map[string]any)
+	if v, _ := nr["valuation"].(map[string]any); v["pe_ttm"] != "loss_making" {
+		t.Fatalf("null_reasons %v", nr)
+	}
+	// computed_at before the entry: stale
+	e.exec(`UPDATE analysis_snapshot SET indicators = jsonb_set(indicators, '{fundamentals_meta,computed_at}', '"2001-01-01T00:00:00+00:00"')`)
+	b, _ = e.getEnv("/api/v1/stocks/CMP/fundamentals")
+	stale := false
+	for _, w := range b.Warnings {
+		stale = stale || w.Code == "DERIVED_STALE"
+	}
+	if !stale {
+		t.Fatalf("expected DERIVED_STALE, got %+v", b.Warnings)
+	}
+}
+
 // FND-91: a metric whose periods come from different sources is flagged.
 func TestFundamentalsMixedSourcesWarning(t *testing.T) {
 	e := newOwnerEnv(t)

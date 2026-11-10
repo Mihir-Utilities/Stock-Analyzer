@@ -45,6 +45,21 @@ type FundamentalsInput struct {
 	MetaStatus   string                       // fundamental_meta.status, "" when absent
 	Snapshot     json.RawMessage              // analysis_snapshot.indicators.fundamentals, may be empty
 	SnapshotAsOf *time.Time                   // analysis_snapshot.as_of (a date), nil without a snapshot
+	SnapshotMeta json.RawMessage              // analysis_snapshot.indicators.fundamentals_meta (D05b-10), may be empty
+}
+
+// NullReasons are the worker's per-metric reasons for a null (node.null_reasons), passed through
+// unchanged: derived is metric -> period_end -> reason, ratios and valuation are metric -> reason.
+type NullReasons struct {
+	Derived   map[string]map[string]string `json:"derived"`
+	Ratios    map[string]string            `json:"ratios"`
+	Valuation map[string]string            `json:"valuation"`
+}
+
+// RatioMeta says which period and definition a ratio used (node.ratio_meta).
+type RatioMeta struct {
+	RoeBasis    *string           `json:"roe_basis"` // average | ending
+	RatioPeriod map[string]string `json:"ratio_period"`
 }
 
 // Fundamentals is `data` of GET /stocks/{symbol}/fundamentals.
@@ -63,11 +78,13 @@ type Fundamentals struct {
 	MetricsReason     *string               `json:"metrics_reason"`
 	Derived           map[string][]*float64 `json:"derived"`
 	DerivedReason     *string               `json:"derived_reason"`
-	DerivedAsOf       *string               `json:"derived_as_of"` // as_of date of the snapshot behind derived, ratios and valuation
+	DerivedAsOf       *string               `json:"derived_as_of"` // computed_at (UTC RFC 3339) of the D05b run behind derived, ratios and valuation; the snapshot as_of date for older snapshots
 	Ratios            map[string]*float64   `json:"ratios"`
 	RatiosReason      *string               `json:"ratios_reason"`
 	Valuation         map[string]any        `json:"valuation"`
 	ValuationReason   *string               `json:"valuation_reason"`
+	NullReasons       NullReasons           `json:"null_reasons"`
+	RatioMeta         RatioMeta             `json:"ratio_meta"`
 	CompanyType       string                `json:"company_type"`
 	Status            string                `json:"status"`
 	EntryHint         *string               `json:"entry_hint"`
@@ -84,9 +101,14 @@ func (f *Fundamentals) UpdatedAt() time.Time { return f.updatedAt }
 
 // Derived growth/margin keys (docs/03 section 5) and ratio/valuation keys; always present.
 var (
-	derivedKeys   = []string{"revenue_yoy", "net_profit_yoy", "op_margin", "net_margin"}
-	ratioKeys     = []string{"roe", "roce", "debt_equity", "interest_coverage", "cfo_to_pat", "fcf"}
-	valuationKeys = []string{"pe_ttm", "pb", "div_yield", "peg", "pe_percentile_5y"}
+	derivedKeys = []string{"revenue_yoy", "net_profit_yoy", "op_margin", "net_margin"}
+	// optional derived keys: returned only when the worker wrote them (QoQ for quarters, NII for banks)
+	derivedOptionalKeys = []string{"revenue_qoq", "net_profit_qoq", "nii_yoy"}
+	ratioKeys           = []string{"roe", "roce", "debt_equity", "interest_coverage", "cfo_to_pat", "fcf",
+		"revenue_cagr_3y", "revenue_cagr_5y", "net_profit_cagr_3y", "net_profit_cagr_5y", "cfo_to_pat_avg", "eps_cagr_3y"}
+	valuationKeys = []string{"pe_ttm", "pb", "div_yield", "peg", "pe_percentile_5y", "ev_ebitda", "market_cap_cr"}
+	// valuation context written by the worker, returned only when present
+	valuationOptionalKeys = []string{"eps_ttm", "bvps", "pb_source", "eps_period_end", "close"}
 )
 
 // EntryHint is shown when the owner has entered nothing for the stock.
@@ -134,6 +156,8 @@ func BuildFundamentals(in FundamentalsInput) (Fundamentals, error) {
 		Periods: []string{}, Labels: []string{}, Metrics: map[string][]*float64{},
 		Derived: map[string][]*float64{}, Ratios: map[string]*float64{}, Valuation: map[string]any{},
 		CompanyType: in.CompanyType, Status: "none",
+		NullReasons: NullReasons{Derived: map[string]map[string]string{}, Ratios: map[string]string{}, Valuation: map[string]string{}},
+		RatioMeta:   RatioMeta{RatioPeriod: map[string]string{}},
 	}
 	for _, b := range in.Bases {
 		if b.Periods > 0 {
@@ -145,6 +169,12 @@ func BuildFundamentals(in FundamentalsInput) (Fundamentals, error) {
 		rows = in.Rows(basis)
 	}
 	win := winners(rows)
+	var newestFetched time.Time // newest fundamental_value.fetched_at of this basis and period type (D05b-10)
+	for _, r := range rows {
+		if r.FetchedAt.After(newestFetched) {
+			newestFetched = r.FetchedAt
+		}
+	}
 
 	periodSet := map[time.Time]bool{}
 	for k := range win {
@@ -230,7 +260,7 @@ func BuildFundamentals(in FundamentalsInput) (Fundamentals, error) {
 			out.Status = "partial"
 		}
 	}
-	if err := applySnapshot(&out, in, basis, all); err != nil {
+	if err := applySnapshot(&out, in, basis, all, newestFetched); err != nil {
 		return out, err
 	}
 	if len(in.Bases) == 2 && in.Requested == "auto" {
@@ -282,14 +312,47 @@ func fillNulls(out *Fundamentals, n int) {
 }
 
 // snapshotNode is the worker's contract (B05-4): indicators.fundamentals.<basis>.<Q|A>.
+// Derived is kept raw: the worker also writes text arrays there (op_margin_source), which must not
+// break the numeric ones.
 type snapshotNode struct {
-	Periods   []string              `json:"periods"`
-	Derived   map[string][]*float64 `json:"derived"`
-	Ratios    map[string]*float64   `json:"ratios"`
-	Valuation map[string]any        `json:"valuation"`
+	Periods     []string                   `json:"periods"`
+	Derived     map[string]json.RawMessage `json:"derived"`
+	Ratios      map[string]*float64        `json:"ratios"`
+	Valuation   map[string]any             `json:"valuation"`
+	NullReasons NullReasons                `json:"null_reasons"`
+	RatioMeta   RatioMeta                  `json:"ratio_meta"`
 }
 
-func applySnapshot(out *Fundamentals, in FundamentalsInput, basis string, periods []time.Time) error {
+// snapshotMeta is indicators.fundamentals_meta (worker D05b): when the run happened.
+type snapshotMeta struct {
+	ComputedAt *string `json:"computed_at"`
+}
+
+// computedAt is the worker's computed_at, nil when absent or unreadable (older snapshots).
+func computedAt(raw json.RawMessage) *time.Time {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var m snapshotMeta
+	if json.Unmarshal(raw, &m) != nil || m.ComputedAt == nil {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339Nano, *m.ComputedAt)
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
+func floatSeries(raw json.RawMessage) ([]*float64, bool) {
+	var s []*float64
+	if len(raw) == 0 || json.Unmarshal(raw, &s) != nil {
+		return nil, false
+	}
+	return s, true
+}
+
+func applySnapshot(out *Fundamentals, in FundamentalsInput, basis string, periods []time.Time, newestFetched time.Time) error {
 	fillNulls(out, len(periods))
 	var tree map[string]map[string]snapshotNode
 	if len(in.Snapshot) > 0 && string(in.Snapshot) != "null" {
@@ -303,20 +366,45 @@ func applySnapshot(out *Fundamentals, in FundamentalsInput, basis string, period
 		out.DerivedReason, out.RatiosReason, out.ValuationReason = &r, &r, &r
 		return nil
 	}
-	if in.SnapshotAsOf != nil {
+	if c := computedAt(in.SnapshotMeta); c != nil {
+		// D05b-10: stale when an entry is newer than the run that computed the snapshot.
+		d := c.UTC().Format(time.RFC3339)
+		out.DerivedAsOf = &d
+		out.DerivedStale = newestFetched.After(*c)
+	} else if in.SnapshotAsOf != nil {
+		// Older snapshots carry no computed_at: the as_of date (the last bar) is all there is, so an
+		// entry fetched on a later IST day reads stale.
 		d := in.SnapshotAsOf.Format(time.DateOnly)
 		out.DerivedAsOf = &d
-		// The snapshot is stale when a stored value was fetched on a later IST day than its as_of.
 		if !out.updatedAt.IsZero() && istDate(out.updatedAt).After(*in.SnapshotAsOf) {
 			out.DerivedStale = true
 		}
+	}
+	if node.NullReasons.Derived != nil {
+		out.NullReasons.Derived = node.NullReasons.Derived
+	}
+	if node.NullReasons.Ratios != nil {
+		out.NullReasons.Ratios = node.NullReasons.Ratios
+	}
+	if node.NullReasons.Valuation != nil {
+		out.NullReasons.Valuation = node.NullReasons.Valuation
+	}
+	out.RatioMeta.RoeBasis = node.RatioMeta.RoeBasis
+	if node.RatioMeta.RatioPeriod != nil {
+		out.RatioMeta.RatioPeriod = node.RatioMeta.RatioPeriod
 	}
 	pos := map[string]int{}
 	for i, p := range node.Periods {
 		pos[p] = i
 	}
-	for _, k := range derivedKeys {
-		src := node.Derived[k]
+	for _, k := range append(append([]string{}, derivedKeys...), derivedOptionalKeys...) {
+		src, ok := floatSeries(node.Derived[k])
+		if !ok {
+			continue // absent, or not a numeric array: the key stays all-null (or absent when optional)
+		}
+		if out.Derived[k] == nil {
+			out.Derived[k] = make([]*float64, len(periods))
+		}
 		for i, p := range periods {
 			if j, ok := pos[p.Format(time.DateOnly)]; ok && j < len(src) {
 				out.Derived[k][i] = src[j]
@@ -327,6 +415,11 @@ func applySnapshot(out *Fundamentals, in FundamentalsInput, basis string, period
 		out.Ratios[k] = node.Ratios[k]
 	}
 	for _, k := range valuationKeys {
+		if v, ok := node.Valuation[k]; ok {
+			out.Valuation[k] = v
+		}
+	}
+	for _, k := range valuationOptionalKeys {
 		if v, ok := node.Valuation[k]; ok {
 			out.Valuation[k] = v
 		}

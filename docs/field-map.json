@@ -127,6 +127,8 @@
     "derived_reason": "fnd-derived-note",
     "derived_as_of": "fnd-warning-DERIVED_STALE|fnd-scalar-*|fnd-pe-strip",
     "ratios": "fnd-scalar-*",
+    "null_reasons": "not-rendered|per-metric reasons not yet shown (D05bGo-1)",
+    "ratio_meta": "not-rendered|ratio period and ROE basis not yet shown (D05bGo-1)",
     "ratios_reason": "fnd-scalar-*|fnd-roe-decomposition",
     "valuation": "fnd-scalar-*|fnd-pe-strip",
     "valuation_reason": "fnd-scalar-*|fnd-pe-strip",

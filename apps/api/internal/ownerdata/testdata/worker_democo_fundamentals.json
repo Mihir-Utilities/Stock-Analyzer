@@ -1,0 +1,274 @@
+{
+ "consolidated": {
+  "A": {
+   "derived": {
+    "net_margin": [
+     11.428571428571429,
+     12.307692307692308,
+     13.18181818181818,
+     14.374999999999998
+    ],
+    "net_profit_yoy": [
+     null,
+     19.999999999999996,
+     20.833333333333325,
+     18.965517241379317
+    ],
+    "op_margin": [
+     null,
+     null,
+     null,
+     23.333333333333332
+    ],
+    "op_margin_source": [
+     null,
+     null,
+     null,
+     "operating_income"
+    ],
+    "revenue_yoy": [
+     null,
+     11.428571428571432,
+     12.82051282051282,
+     9.090909090909083
+    ]
+   },
+   "labels": [
+    "FY23",
+    "FY24",
+    "FY25",
+    "FY26"
+   ],
+   "null_reasons": {
+    "derived": {
+     "net_margin": {},
+     "net_profit_yoy": {
+      "2023-03-31": "n/m"
+     },
+     "op_margin": {
+      "2023-03-31": "missing_input",
+      "2024-03-31": "missing_input",
+      "2025-03-31": "missing_input"
+     },
+     "revenue_yoy": {
+      "2023-03-31": "n/m"
+     }
+    },
+    "ratios": {
+     "cfo_to_pat_avg": "insufficient_history",
+     "net_profit_cagr_5y": "insufficient_history",
+     "revenue_cagr_5y": "insufficient_history"
+    },
+    "valuation": {
+     "div_yield": "no_dividend_data",
+     "pe_percentile_5y": "insufficient_history"
+    }
+   },
+   "periods": [
+    "2023-03-31",
+    "2024-03-31",
+    "2025-03-31",
+    "2026-03-31"
+   ],
+   "ratio_meta": {
+    "ratio_period": {
+     "cfo_to_pat": "2026-03-31",
+     "debt_equity": "2026-03-31",
+     "eps_cagr_3y": "2026-03-31",
+     "fcf": "2026-03-31",
+     "interest_coverage": "2026-03-31",
+     "net_profit_cagr_3y": "2026-03-31",
+     "revenue_cagr_3y": "2026-03-31",
+     "roce": "2026-03-31",
+     "roe": "2026-03-31"
+    },
+    "roe_basis": "average"
+   },
+   "ratios": {
+    "cfo_to_pat": 1.1594202898550725,
+    "cfo_to_pat_avg": null,
+    "debt_equity": 0.2727272727272727,
+    "eps_cagr_3y": 17.325075463364527,
+    "fcf": 500.0,
+    "interest_coverage": 12.5,
+    "net_profit_cagr_3y": 19.930515328992104,
+    "net_profit_cagr_5y": null,
+    "revenue_cagr_3y": 11.102644857564847,
+    "revenue_cagr_5y": null,
+    "roce": 24.691358024691358,
+    "roe": 33.65853658536586
+   },
+   "valuation": {
+    "bvps": 110.0,
+    "close": 1800.0,
+    "div_yield": null,
+    "eps_period_end": "2026-03-31",
+    "eps_ttm": 32.3,
+    "ev_ebitda": 29.0,
+    "market_cap_cr": 36000.0,
+    "pb": 16.363636363636363,
+    "pb_source": "computed",
+    "pe_basis": "ttm",
+    "pe_percentile_5y": null,
+    "pe_percentile_points": 1,
+    "pe_ttm": 55.72755417956657,
+    "peg": 3.2165836332088498
+   },
+   "version": "d05b-1",
+   "warnings": []
+  },
+  "Q": {
+   "derived": {
+    "net_margin": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "net_profit_qoq": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "net_profit_yoy": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "op_margin": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "op_margin_source": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "revenue_qoq": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "revenue_yoy": [
+     null,
+     null,
+     null,
+     null
+    ]
+   },
+   "labels": [
+    "Q1 FY26",
+    "Q2 FY26",
+    "Q3 FY26",
+    "Q4 FY26"
+   ],
+   "null_reasons": {
+    "derived": {
+     "net_margin": {
+      "2025-06-30": "missing_input",
+      "2025-09-30": "missing_input",
+      "2025-12-31": "missing_input",
+      "2026-03-31": "missing_input"
+     },
+     "net_profit_qoq": {
+      "2025-06-30": "missing_input",
+      "2025-09-30": "missing_input",
+      "2025-12-31": "missing_input",
+      "2026-03-31": "missing_input"
+     },
+     "net_profit_yoy": {
+      "2025-06-30": "missing_input",
+      "2025-09-30": "missing_input",
+      "2025-12-31": "missing_input",
+      "2026-03-31": "missing_input"
+     },
+     "op_margin": {
+      "2025-06-30": "missing_input",
+      "2025-09-30": "missing_input",
+      "2025-12-31": "missing_input",
+      "2026-03-31": "missing_input"
+     },
+     "revenue_qoq": {
+      "2025-06-30": "missing_input",
+      "2025-09-30": "missing_input",
+      "2025-12-31": "missing_input",
+      "2026-03-31": "missing_input"
+     },
+     "revenue_yoy": {
+      "2025-06-30": "missing_input",
+      "2025-09-30": "missing_input",
+      "2025-12-31": "missing_input",
+      "2026-03-31": "missing_input"
+     }
+    },
+    "ratios": {
+     "cfo_to_pat_avg": "insufficient_history",
+     "net_profit_cagr_5y": "insufficient_history",
+     "revenue_cagr_5y": "insufficient_history"
+    },
+    "valuation": {
+     "div_yield": "no_dividend_data",
+     "pe_percentile_5y": "insufficient_history"
+    }
+   },
+   "periods": [
+    "2025-06-30",
+    "2025-09-30",
+    "2025-12-31",
+    "2026-03-31"
+   ],
+   "ratio_meta": {
+    "ratio_period": {
+     "cfo_to_pat": "2026-03-31",
+     "debt_equity": "2026-03-31",
+     "eps_cagr_3y": "2026-03-31",
+     "fcf": "2026-03-31",
+     "interest_coverage": "2026-03-31",
+     "net_profit_cagr_3y": "2026-03-31",
+     "revenue_cagr_3y": "2026-03-31",
+     "roce": "2026-03-31",
+     "roe": "2026-03-31"
+    },
+    "roe_basis": "average"
+   },
+   "ratios": {
+    "cfo_to_pat": 1.1594202898550725,
+    "cfo_to_pat_avg": null,
+    "debt_equity": 0.2727272727272727,
+    "eps_cagr_3y": 17.325075463364527,
+    "fcf": 500.0,
+    "interest_coverage": 12.5,
+    "net_profit_cagr_3y": 19.930515328992104,
+    "net_profit_cagr_5y": null,
+    "revenue_cagr_3y": 11.102644857564847,
+    "revenue_cagr_5y": null,
+    "roce": 24.691358024691358,
+    "roe": 33.65853658536586
+   },
+   "valuation": {
+    "bvps": 110.0,
+    "close": 1800.0,
+    "div_yield": null,
+    "eps_period_end": "2026-03-31",
+    "eps_ttm": 32.3,
+    "ev_ebitda": 29.0,
+    "market_cap_cr": 36000.0,
+    "pb": 16.363636363636363,
+    "pb_source": "computed",
+    "pe_basis": "ttm",
+    "pe_percentile_5y": null,
+    "pe_percentile_points": 1,
+    "pe_ttm": 55.72755417956657,
+    "peg": 3.2165836332088498
+   },
+   "version": "d05b-1",
+   "warnings": []
+  }
+ }
+}

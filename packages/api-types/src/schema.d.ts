@@ -2339,7 +2339,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Owner-entered fundamentals for one basis (never mixed), with derived values read from analysis_snapshot (data.derived_as_of is that snapshot's as_of date; warnings DERIVED_STALE and MIXED_SOURCES). Nulls carry *_reason. data.redirect_symbol for an old symbol. */
+            /** @description Owner-entered fundamentals for one basis (never mixed), with derived values read from analysis_snapshot (data.derived_as_of is the worker's computed_at, UTC RFC 3339, or the snapshot as_of date for older snapshots; warnings DERIVED_STALE when the newest entry is later than computed_at, and MIXED_SOURCES). Nulls carry *_reason and, per metric, data.null_reasons {derived, ratios, valuation}; data.ratio_meta {roe_basis, ratio_period}; valuation also holds ev_ebitda and market_cap_cr. data.redirect_symbol for an old symbol. */
             200: {
                 headers: {
                     [name: string]: unknown;
