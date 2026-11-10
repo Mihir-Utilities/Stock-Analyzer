@@ -26,6 +26,7 @@ import (
 	"github.com/india-analyzer/api/internal/logx"
 	"github.com/india-analyzer/api/internal/portfolio"
 	"github.com/india-analyzer/api/internal/prices"
+	"github.com/india-analyzer/api/internal/screener"
 )
 
 func main() {
@@ -79,6 +80,7 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts, Jobs: jobSvc, Alerts: alertDeps, Stocks: instSvc,
 		Prices: prices.New(pool, instSvc), OwnerData: ownerSvc,
 		MF:               mfService(pool, jobSvc),
+		Screener:         screener.New(pool),
 		Portfolio:        portfolio.New(pool),
 		Imports:          importService(cfg, pool, jobSvc, log),
 		Actions:          actions.New(pool, jobSvc, log),

@@ -465,3 +465,13 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - **Stale rule.** The API marks `DERIVED_STALE` when the newest entered value was fetched on a later IST day than the snapshot `as_of` (the last bar date), so an entry made after the last imported bar shows stale even after a recompute (D05b-10). Compare `fundamentals_meta.computed_at` with `inputs_fetched_at`: it is truly stale only when `inputs_fetched_at` is later.
 - **Checking a ratio.** Look at `ratio_meta.ratio_period` (annual period used), `ratio_meta.roe_basis` (`average` or `ending`), `warnings` (`UNIT_MISMATCH:<key>`: a row in an unexpected unit was ignored) and `null_reasons`. Only confirmed split or bonus actions adjust EPS and book value per share.
 - Tests: `uv run pytest tests/test_fundamentals.py tests/test_scores.py` (no database) and `tests/test_fundamentals_db.py` (needs `TEST_DATABASE_URL`).
+
+## 59. Screener, compare and peers (B13)
+
+- **What it serves.** `POST /screener/query`, `GET|POST /screener/saved`, `DELETE /screener/saved/{name}`, `GET /compare` and `GET /stocks/{symbol}/peers`, all read-only over `screener_row` (written by the worker's `compute_analysis`), `instrument`, `price_daily` and the owner-entered `fundamental_value` and `shareholding` rows. No third-party call. No new environment variable or job.
+- **Empty screener.** If a screen returns nothing for every stock, check `SELECT count(*) FROM screener_row` and run the worker job `compute_analysis` (section 16). A stock appears only after its row exists.
+- **Stale or missing "last updated".** `last_updated` and `stale` come from the owner's own entries (results and shareholding imports); derived rows never count. A stock showing `no_owner_data` needs a fundamentals or shareholding import.
+- **Peers say `no_sector_data`.** The stock has no sector and industry: import `instrument_meta`. `no_market_cap`: the worker has no market cap for it (needs shares outstanding and a price).
+- **Saved screens** live in one `app_setting` row (`saved_screens`, at most 30). To reset: `DELETE FROM app_setting WHERE key = 'saved_screens'`.
+- **Adding a metric.** Only if the worker writes it to `screener_row.metrics`: add it to docs/03 section 9, to `internal/screener/metrics.go` (key, unit, direction), keep `TestWhitelistMatchesDocs` and `TestWhitelistMatchesWorker` green.
+- Tests: `cd apps/api && go test ./internal/screener` (no database, includes `FuzzSpecSQL`; `go test ./internal/screener -fuzz FuzzSpecSQL -fuzztime 30s` for a longer run) and `go test ./internal/httpx -run 'Screener|Compare|Peers'` (needs `TEST_DATABASE_URL`).

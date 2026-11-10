@@ -57,6 +57,9 @@ func (rt route) handler(d Deps) http.Handler {
 	if h := ownerDataHandler(rt, d); h != nil { // B05 (ownerdata_handlers.go)
 		return h
 	}
+	if h := screenerHandler(rt, d); h != nil { // B13 (screener_handlers.go)
+		return h
+	}
 	if h := mfHandler(rt, d); h != nil { // B10 (mf_handlers.go)
 		return h
 	}
@@ -150,9 +153,9 @@ var routes = []route{
 	{Method: mGet, Path: "/compare"},
 
 	// Screener (section 9)
-	{Method: mPost, Path: "/screener/query"},
+	{Method: mPost, Path: "/screener/query", Body: screenerBodyLimit},
 	{Method: mGet, Path: "/screener/saved"},
-	{Method: mPost, Path: "/screener/saved"},
+	{Method: mPost, Path: "/screener/saved", Body: screenerBodyLimit},
 	{Method: mDelete, Path: "/screener/saved/{name}"},
 
 	// Mutual funds (section 10)

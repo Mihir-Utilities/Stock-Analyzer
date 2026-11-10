@@ -951,13 +951,15 @@ paths:
           description: "Comma separated symbols (temporary)."
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success. data: symbol, sector, industry, basis (industry|sector), market_cap_band, note (\"few comparable peers\" or null), units, peers[] and self (symbol, name, origin self|auto|added, market_cap_cr, ret_1y, pe, pb, roe, rev_growth_3y, op_margin, debt_equity as numbers or null with value_reasons, percentile_rank (percent 0-100 or null), as_of, last_updated, last_updated_source, stale, stale_reason), percentile_method. An old symbol answers data.redirect_symbol. 404 DATA_UNAVAILABLE reason no_sector_data or no_market_cap."
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         "422":
           "$ref": "#/components/responses/Unprocessable"
         "429":
@@ -1272,13 +1274,15 @@ paths:
           description: "Comma separated whitelist."
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success. data: range, symbols[] (symbol, name, bars, first_date, last_date, short_history, prices_reason, metrics_as_of, last_updated, last_updated_source, stale, stale_reason), rebased {base_date, dates, series (null for a stock without prices), unit, reason}, metrics {SYM: {metric: value|null}}, metric_reasons, units, best {metric: SYM|null}. Duplicates are removed; 2-5 symbols else 422."
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         "422":
           "$ref": "#/components/responses/Unprocessable"
         "429":
@@ -1307,7 +1311,7 @@ paths:
               "$ref": "#/components/schemas/ScreenerQuery"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success. data: items[] (symbol, name, as_of, values, value_reasons, coverage, last_updated, last_updated_source, stale, stale_reason), next_cursor, total, units. meta.excluded_for_missing counts stocks lacking each filtered metric. 422 names the offending field (filters[i].metric|op|value, sort.metric|dir, columns[i], universe.*, limit, cursor)."
           content:
             "application/json":
               schema:
@@ -1334,7 +1338,7 @@ paths:
       summary: "List saved screens (max 30). (docs/03 section 9)"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Success. data: items[] ({name, spec, saved_at}, ordered by name), next_cursor null, max_saved 30, presets[] ({name, spec}: Quality, Value, Growth, Momentum)."
           content:
             "application/json":
               schema:
@@ -1365,14 +1369,26 @@ paths:
             schema:
               "$ref": "#/components/schemas/SavedScreenCreate"
       responses:
+        "200":
+          description: "Existing screen (same name, case-insensitive) replaced; idempotent. data: {name, spec, saved_at}."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
         "201":
-          description: "Success (stub: 501 until implemented)"
+          description: "Screen created. data: {name, spec, saved_at}."
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "409":
+          description: "CONFLICT: 30 screens already saved (details.reason saved_screens_limit)."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
         "422":
           "$ref": "#/components/responses/Unprocessable"
         "429":
@@ -1401,13 +1417,15 @@ paths:
         - "$ref": "#/components/parameters/CsrfHeader"
       responses:
         "200":
-          description: "Success (stub: 501 until implemented)"
+          description: "Deleted. data: {ok: true}."
           content:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/SuccessEnvelope"
         "401":
           "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
         "429":
           "$ref": "#/components/responses/RateLimited"
         "501":
@@ -3348,13 +3366,21 @@ components:
               enum:
                 - "asc"
                 - "desc"
+        columns:
+          type: "array"
+          description: "Extra whitelisted metrics to return in values (max 40). values always holds the filter and sort metrics too."
+          items:
+            type: "string"
+          maxItems: 40
         limit:
           type: "integer"
           minimum: 1
           maximum: 200
+          description: "Default 50; above 200 is clamped; non-integer or < 1 is a 422."
         cursor:
           type: "string"
           nullable: true
+          description: "Opaque; valid only with the same filters, sort, columns and universe."
         universe:
           type: "object"
           properties:

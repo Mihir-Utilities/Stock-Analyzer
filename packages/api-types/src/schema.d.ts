@@ -1234,7 +1234,11 @@ export interface components {
                 /** @enum {string} */
                 dir?: "asc" | "desc";
             };
+            /** @description Extra whitelisted metrics to return in values (max 40). values always holds the filter and sort metrics too. */
+            columns?: string[];
+            /** @description Default 50; above 200 is clamped; non-integer or < 1 is a 422. */
             limit?: number;
+            /** @description Opaque; valid only with the same filters, sort, columns and universe. */
             cursor?: string | null;
             universe?: {
                 index?: string;
@@ -2511,7 +2515,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data: symbol, sector, industry, basis (industry|sector), market_cap_band, note ("few comparable peers" or null), units, peers[] and self (symbol, name, origin self|auto|added, market_cap_cr, ret_1y, pe, pb, roe, rev_growth_3y, op_margin, debt_equity as numbers or null with value_reasons, percentile_rank (percent 0-100 or null), as_of, last_updated, last_updated_source, stale, stale_reason), percentile_method. An old symbol answers data.redirect_symbol. 404 DATA_UNAVAILABLE reason no_sector_data or no_market_cap. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2521,6 +2525,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
@@ -2863,7 +2868,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data: range, symbols[] (symbol, name, bars, first_date, last_date, short_history, prices_reason, metrics_as_of, last_updated, last_updated_source, stale, stale_reason), rebased {base_date, dates, series (null for a stock without prices), unit, reason}, metrics {SYM: {metric: value|null}}, metric_reasons, units, best {metric: SYM|null}. Duplicates are removed; 2-5 symbols else 422. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2873,6 +2878,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
@@ -2903,7 +2909,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data: items[] (symbol, name, as_of, values, value_reasons, coverage, last_updated, last_updated_source, stale, stale_reason), next_cursor, total, units. meta.excluded_for_missing counts stocks lacking each filtered metric. 422 names the offending field (filters[i].metric|op|value, sort.metric|dir, columns[i], universe.*, limit, cursor). */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2936,7 +2942,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data: items[] ({name, spec, saved_at}, ordered by name), next_cursor null, max_saved 30, presets[] ({name, spec}: Quality, Value, Growth, Momentum). */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2975,7 +2981,16 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Existing screen (same name, case-insensitive) replaced; idempotent. data: {name, spec, saved_at}. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
+            /** @description Screen created. data: {name, spec, saved_at}. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -2985,6 +3000,15 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            /** @description CONFLICT: 30 screens already saved (details.reason saved_screens_limit). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
@@ -3014,7 +3038,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Deleted. data: {ok: true}. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3024,6 +3048,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
             /** @description Error envelope */

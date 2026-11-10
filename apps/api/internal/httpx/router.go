@@ -64,6 +64,9 @@ type Deps struct {
 	// MF serves the /mf/* read routes (B10); nil keeps them 501 stubs.
 	MF MFService
 
+	// Screener serves GET /stocks/{symbol}/peers, GET /compare and /screener/* (B13); nil keeps them 501 stubs.
+	Screener ScreenerService
+
 	// Portfolio serves /watchlist and /portfolio/* (B11); nil keeps them 501 stubs.
 	Portfolio PortfolioService
 
