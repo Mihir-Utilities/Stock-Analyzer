@@ -685,3 +685,10 @@ Claude Code: add questions here instead of guessing. The owner answers; move ans
 | B13-12 | Compare metrics default and symbol charset | Default 13 metrics (docs/03 says `pe,pb,roe,...`); symbols `^[A-Za-z0-9&._-]{1,20}$`, upper-cased, duplicates removed; alias symbols resolve to the current symbol without a redirect | `compare.go` |
 | B13-13 | `GET /stocks/{symbol}/peers` and `/compare` read only `screener_row` | Metrics are never recomputed in the API (docs/03 section 5 rule); a stock without a row has null metrics with reason `no_screener_row` | `lookup.go` |
 | B13-14 | sqlc cannot run here (needs Docker plus network) | The new queries are raw pgx over `dbq.DBTX` in `internal/screener`, parameterised, with only fixed whitelist fragments concatenated; move to `db/queries` and sqlc when convenient | `internal/screener` |
+
+## AMFI redirect host (Claude, 2026-11-10; OWNER DECISION NEEDED, blocks `sync_mf_schemes`)
+| # | Question | Observed | Proposed |
+|---|---|---|---|
+| AMFI-1 | `https://www.amfiindia.com/spages/NAVAll.txt` (docs/01 section 5, allowed) now answers HTTP 302 to a `portal.amfiindia.com` URL. `config/allowed_hosts.json` has only `www.amfiindia.com`, so the egress guard refuses the redirect hop with `EgressDenied` and the whole `sync_mf_schemes` run fails (nothing written; the mfapi.in pages before it were fetched fine). | Seen 2026-11-10 during the first local run. Also the D-N rule says a new host needs an owner decision. | Owner decides: (a) add the exact host `portal.amfiindia.com` (AMFI's own domain, same public NAV file, https 443) to the allow-list, or (b) keep the list and make the AMFI enrichment optional so a refused redirect degrades to "mfapi only" (docs/01 section 12, "AMFI down -> mfapi only"). |
+
+**AMFI-1 decision (owner, 2026-11-10): option (a).** `portal.amfiindia.com` added as an exact host (https, 443) in `config/allowed_hosts.json`; it is only the redirect target of the already-allowed NAVAll.txt.
