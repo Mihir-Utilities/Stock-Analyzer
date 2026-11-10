@@ -320,3 +320,15 @@ func TestSAF06NoNetworkImports(t *testing.T) {
 }
 
 var _ = time.Second
+
+// ROCE definition used by the worker (equity_plus_debt primary, assets_less_cl fallback) is passed through.
+func TestRatioMetaPassesRoceBasis(t *testing.T) {
+	bases := []BasisCount{{"consolidated", 1}}
+	rows := []FundRow{row("2026-03-31", "pnl.revenue", 100, "manual", "2026-05-01")}
+	snap := `{"consolidated":{"A":{"periods":["2026-03-31"],"derived":{},"ratios":{"roce":12.5},
+	  "valuation":{},"ratio_meta":{"roce_basis":"equity_plus_debt","ratio_period":{"roce":"2026-03-31"}}}}}`
+	got := build(t, "auto", "A", bases, rows, snap)
+	if got.RatioMeta.RoceBasis == nil || *got.RatioMeta.RoceBasis != "equity_plus_debt" {
+		t.Fatalf("ratio_meta %+v", got.RatioMeta)
+	}
+}

@@ -115,9 +115,32 @@ def test_fnd16_ratios_known_answers() -> None:
     assert r["revenue_cagr_5y"] is None
 
 
-def test_fnd16_roce_uses_capital_employed() -> None:
+def test_fnd16_roce_falls_back_to_assets_less_current_liabilities() -> None:
+    # democo has no FY25 borrowings, so equity + debt is not available for both years and the fallback applies.
     # CE_t = 5200 - 900 = 4300; CE_{t-1} = 4600 - 800 = 3800; avg 4050; ebit = 920 + 80 = 1000
     assert ratios(democo())["roce"] == ap(1000 / 4050 * 100, abs=1e-9)
+    assert node(democo())["ratio_meta"]["roce_basis"] == "assets_less_cl"
+
+
+def with_fy25_borrowings() -> list[FundRow]:
+    return [*democo(), row("A", FY25, "bs.borrowings", 500.0)]
+
+
+def test_roce_prefers_equity_plus_debt_screener_definition() -> None:
+    # CE_t = 2200 + 600 = 2800; CE_{t-1} = 1900 + 500 = 2400; avg 2600; ebit 1000
+    assert ratios(with_fy25_borrowings())["roce"] == ap(1000 / 2600 * 100, abs=1e-9)
+    assert node(with_fy25_borrowings())["ratio_meta"]["roce_basis"] == "equity_plus_debt"
+
+
+def test_roce_works_without_current_liabilities_and_without_interest_row() -> None:
+    rows = [
+        x for x in with_fy25_borrowings() if x.key not in ("bs.current_liabilities", "pnl.interest")
+    ]
+    # no interest row -> interest 0, ebit = pbt = 920; CE avg 2600
+    assert ratios(rows)["roce"] == ap(920 / 2600 * 100, abs=1e-9)
+    assert node(rows)["ratio_meta"]["roce_basis"] == "equity_plus_debt"
+    assert ratios(rows)["interest_coverage"] is None
+    assert reasons(rows, "ratios")["interest_coverage"] == "no_interest"
 
 
 def test_fnd16_valuation_known_answers() -> None:
@@ -251,7 +274,7 @@ def test_roce_needs_prior_year_and_non_positive_capital_employed() -> None:
     bad += [
         row("A", FY26, "bs.current_liabilities", 6000.0),
         row("A", FY25, "bs.current_liabilities", 6000.0),
-    ]
+    ]  # no FY25 borrowings, so the assets-less-current-liabilities basis is the one that applies
     assert ratios(bad)["roce"] is None
     assert reasons(bad, "ratios")["roce"] == "n/m"
 

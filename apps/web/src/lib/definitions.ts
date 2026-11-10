@@ -133,12 +133,12 @@ export const definitions = {
   "roce": {
     label: "ROCE",
     section: "5",
-    text: "ROCE = ebit / average(capital_employed_t, _{t-1}) * 100, capital_employed = total_assets - current_liabilities.",
+    text: "ROCE = ebit / average(capital_employed_t, _{t-1}) * 100. Primary capital_employed = equity + borrowings (Screener's published definition: share capital + reserves + borrowings); fallback total_assets - current_liabilities when equity or borrowings is missing in either year. The basis used is stored as roce_basis (equity_plus_debt | assets_less_cl) and the two are never mixed in one ranking. A missing interest row counts as 0 (ebit = pbt). Known difference: Screener excludes exceptional items from ROCE; we use pbt + interest, so values can differ for companies with large one-offs.",
   },
   "debt_equity": {
     label: "Debt / equity",
     section: "5",
-    text: "debt_equity = borrowings / equity (latest annual); equity <= 0 -> null. interest_coverage = ebit / interest (interest 0 or missing -> null reason no_interest).",
+    text: "debt_equity = borrowings / equity (latest annual); equity <= 0 -> null. interest_coverage = ebit / interest (interest 0 or missing -> null reason no_interest, consistent with ROCE treating missing interest as 0).",
   },
   "cfo_to_pat": {
     label: "CFO / PAT",

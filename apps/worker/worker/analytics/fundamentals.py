@@ -392,23 +392,47 @@ def annual_ratios(
         )
         out.meta["ratio_period"] = periods
         return out
-    # ROCE
-    t = _latest_with(a, [PBT, INTEREST, ASSETS, CURLIAB])
+
+    # ROCE = EBIT / average capital employed. Primary basis follows Screener's published
+    # definition (share capital + reserves + borrowings); total assets - current liabilities is
+    # the fallback when equity or borrowings is missing. roce_basis records which was used so
+    # bases are never mixed.
+    # A missing interest row counts as no interest (EBIT = PBT), as in interest coverage below.
+    def _ce(t: date, basis: str) -> float | None:
+        if basis == "equity_plus_debt":
+            eq, bor = _val(a, EQUITY, t), _val(a, BORROW, t)
+            return None if eq is None or bor is None else eq + bor
+        ta, cl = _val(a, ASSETS, t), _val(a, CURLIAB, t)
+        return None if ta is None or cl is None else ta - cl
+
+    t = _latest_with(a, [PBT])
     if t is None:
         put("roce", None, "missing_input", None)
     else:
         ebit = (_val(a, PBT, t) or 0.0) + (_val(a, INTEREST, t) or 0.0)
-        ce = (_val(a, ASSETS, t) or 0.0) - (_val(a, CURLIAB, t) or 0.0)
-        prev = _match(a.get(ASSETS, {}), shift_months(t, -12))
-        ce_prev = None
-        if prev is not None and _val(a, CURLIAB, prev) is not None:
-            ce_prev = (_val(a, ASSETS, prev) or 0.0) - (_val(a, CURLIAB, prev) or 0.0)
-        if ce_prev is None:
-            put("roce", None, "no_prior_period", t)
-        elif (ce + ce_prev) / 2.0 <= 0:
-            put("roce", None, "n/m", t)
+        prev = _match({**a.get(ASSETS, {}), **a.get(EQUITY, {})}, shift_months(t, -12))
+        bases = ("equity_plus_debt", "assets_less_cl")
+        basis = next(
+            (
+                b
+                for b in bases
+                if _ce(t, b) is not None and prev is not None and _ce(prev, b) is not None
+            ),
+            None,
+        )
+        if basis is None:
+            has_now = any(_ce(t, b) is not None for b in bases)
+            reason = "no_prior_period" if has_now else "missing_input"
+            put("roce", None, reason, t if has_now else None)
         else:
-            put("roce", ebit / ((ce + ce_prev) / 2.0) * 100.0, None, t)
+            ce, ce_prev = _ce(t, basis), _ce(prev, basis)  # type: ignore[arg-type]
+            if ce is None or ce_prev is None:  # not reachable: basis needs both years
+                put("roce", None, "missing_input", t)
+            elif (ce + ce_prev) / 2.0 <= 0:
+                put("roce", None, "n/m", t)
+            else:
+                put("roce", ebit / ((ce + ce_prev) / 2.0) * 100.0, None, t)
+                out.meta["roce_basis"] = basis
     # D/E
     t = _latest_with(a, [BORROW, EQUITY])
     if t is None:

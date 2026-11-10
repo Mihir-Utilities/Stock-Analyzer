@@ -499,6 +499,7 @@ describe("D05b web follow-ups (F10: derived_as_of timestamp, null_reasons, ratio
     },
     ratio_meta: {
       roe_basis: "ending",
+      roce_basis: "assets_less_cl",
       ratio_period: { roe: "2026-03-31", roce: "2025-03-31" },
     },
   };
@@ -517,6 +518,9 @@ describe("D05b web follow-ups (F10: derived_as_of timestamp, null_reasons, ratio
       "No value: missing input",
     );
     expect(screen.getByTestId("fnd-scalar-period-roce")).toHaveTextContent("31 Mar 2025");
+    expect(screen.getByTestId("fnd-scalar-note-roce")).toHaveTextContent(
+      "total assets less current liabilities",
+    );
     expect(screen.getByTestId("fnd-scalar-reason-debt_equity")).toHaveTextContent("no debt data");
     await user.click(screen.getByTestId("fnd-group-valuation"));
     expect(screen.getByTestId("fnd-scalar-reason-pe_ttm")).toHaveTextContent("loss making");

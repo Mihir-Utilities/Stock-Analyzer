@@ -58,7 +58,8 @@ type NullReasons struct {
 
 // RatioMeta says which period and definition a ratio used (node.ratio_meta).
 type RatioMeta struct {
-	RoeBasis    *string           `json:"roe_basis"` // average | ending
+	RoeBasis    *string           `json:"roe_basis"`  // average | ending
+	RoceBasis   *string           `json:"roce_basis"` // equity_plus_debt | assets_less_cl
 	RatioPeriod map[string]string `json:"ratio_period"`
 }
 
@@ -390,6 +391,7 @@ func applySnapshot(out *Fundamentals, in FundamentalsInput, basis string, period
 		out.NullReasons.Valuation = node.NullReasons.Valuation
 	}
 	out.RatioMeta.RoeBasis = node.RatioMeta.RoeBasis
+	out.RatioMeta.RoceBasis = node.RatioMeta.RoceBasis
 	if node.RatioMeta.RatioPeriod != nil {
 		out.RatioMeta.RatioPeriod = node.RatioMeta.RatioPeriod
 	}

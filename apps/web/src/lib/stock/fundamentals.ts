@@ -50,6 +50,7 @@ export const fundamentalsFullSchema = z.object({
   ratio_meta: z
     .object({
       roe_basis: z.string().nullish(),
+      roce_basis: z.string().nullish(),
       ratio_period: z.record(z.string(), z.string()).nullish(),
     })
     .nullish(),
@@ -338,7 +339,7 @@ export interface ScalarRow {
   reason: string;
   /** Period end the ratio used (`ratio_meta.ratio_period`), an ISO date; null when not sent. */
   period: string | null;
-  /** Definition note, e.g. the ROE basis (`ratio_meta.roe_basis`). */
+  /** Definition note, e.g. the ROE basis (`ratio_meta.roe_basis`, `ratio_meta.roce_basis`). */
   note: string | null;
 }
 
@@ -350,6 +351,7 @@ export function scalarRows(d: FundamentalsFull, group: "ratios" | "valuation"): 
   const blockWords = blockReason ? humanReason(blockReason) : "not available for this stock";
   const perMetric = (group === "ratios" ? d.null_reasons?.ratios : d.null_reasons?.valuation) ?? {};
   const roeBasis = d.ratio_meta?.roe_basis;
+  const roceBasis = d.ratio_meta?.roce_basis;
   return [...keys, ...extra].map((k) => ({
     key: k,
     label: metricLabel(k),
@@ -362,7 +364,11 @@ export function scalarRows(d: FundamentalsFull, group: "ratios" | "valuation"): 
         ? roeBasis === "average"
           ? "Net profit over the average of opening and closing equity."
           : "Net profit over closing equity: the earlier year's equity was not entered."
-        : null,
+        : group === "ratios" && k === "roce" && roceBasis
+          ? roceBasis === "equity_plus_debt"
+            ? "Profit before tax plus interest, over the average of equity plus borrowings."
+            : "Profit before tax plus interest, over the average of total assets less current liabilities: equity or borrowings was not entered."
+          : null,
   }));
 }
 
