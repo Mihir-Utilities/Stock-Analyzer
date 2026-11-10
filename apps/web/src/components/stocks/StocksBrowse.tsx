@@ -8,6 +8,7 @@ import { Banner } from "@/components/ui/banners";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FormField, inputClass } from "@/components/ui/FormField";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { MAX_COMPARE, MIN_COMPARE } from "@/lib/screener/compare";
 import { describeError } from "@/lib/dashboard/state";
 import {
   listStocks,
@@ -29,7 +30,17 @@ function label(s: string): string {
   return s.replace(/_/g, " ");
 }
 
-function Row({ s }: { s: StockRow }) {
+function Row({
+  s,
+  selected,
+  canSelect,
+  onToggle,
+}: {
+  s: StockRow;
+  selected: boolean;
+  canSelect: boolean;
+  onToggle: () => void;
+}) {
   const tags = [s.sector, s.industry].filter((x): x is string => !!x);
   return (
     <li
@@ -37,6 +48,18 @@ function Row({ s }: { s: StockRow }) {
       className="flex flex-col gap-1 border-t border-border py-3"
     >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <label className="touch-target inline-flex items-center gap-2 text-caption text-text-2">
+          <input
+            type="checkbox"
+            data-testid={`stocks-select-${s.symbol}`}
+            checked={selected}
+            disabled={!selected && !canSelect}
+            aria-describedby={!selected && !canSelect ? "stocks-compare-hint" : undefined}
+            onChange={onToggle}
+          />
+          <span className="sr-only">Compare {s.symbol}</span>
+          <span aria-hidden="true">Compare</span>
+        </label>
         <Link
           href={`/stocks/${encodeURIComponent(s.symbol)}`}
           data-testid={`stocks-link-${s.symbol}`}
@@ -65,6 +88,9 @@ export function StocksBrowse() {
     [form, dq, dsector],
   );
   const typing = form.q !== dq || form.sector !== dsector;
+  const [picked, setPicked] = useState<string[]>([]);
+  const toggle = (symbol: string) =>
+    setPicked((p) => (p.includes(symbol) ? p.filter((x) => x !== symbol) : [...p, symbol]));
   const set = (patch: Partial<BrowseParams>) => setForm((f) => ({ ...f, ...patch }));
 
   const q = useInfiniteQuery({
@@ -163,10 +189,57 @@ export function StocksBrowse() {
       </form>
 
       <Banner testId="stocks-unavailable-note">
-        Price, 1D and 1Y change, P/E, quality score, valuation and sector percentile filters are not
-        available yet. The list shows only what the stock list returns; scores and valuation wait
-        for analytics step D05b, which is on hold. Open a stock to see its prices.
+        This list shows names, sectors and whether prices are imported. Price, P/E, scores and
+        valuation are not listed here, to avoid one request per row. Use the{" "}
+        <Link
+          href="/screener"
+          data-testid="stocks-go-screener"
+          className="touch-target inline-flex items-center text-accent underline"
+        >
+          Screener
+        </Link>{" "}
+        to filter and sort on those, and tick stocks below to compare them.
       </Banner>
+
+      <div className="flex flex-wrap items-center gap-2" data-testid="stocks-compare-bar">
+        {picked.length >= MIN_COMPARE ? (
+          <Link
+            href={`/compare?symbols=${encodeURIComponent(picked.join(","))}`}
+            data-testid="stocks-compare-go"
+            className={`${BTN} no-underline`}
+          >
+            Compare {picked.length} selected
+          </Link>
+        ) : (
+          <button
+            type="button"
+            data-testid="stocks-compare-go"
+            disabled
+            aria-describedby="stocks-compare-hint"
+            className={BTN}
+          >
+            Compare selected
+          </button>
+        )}
+        <span
+          id="stocks-compare-hint"
+          data-testid="stocks-compare-hint"
+          className="text-caption text-text-2"
+        >
+          {picked.length} selected. Pick {MIN_COMPARE} to {MAX_COMPARE} stocks to compare
+          {picked.length >= MAX_COMPARE ? " (the most is selected)" : ""}.
+        </span>
+        {picked.length > 0 ? (
+          <button
+            type="button"
+            data-testid="stocks-compare-clear"
+            onClick={() => setPicked([])}
+            className={BTN}
+          >
+            Clear selection
+          </button>
+        ) : null}
+      </div>
 
       <div aria-live="polite" data-testid="stocks-status-line" className="text-caption text-text-2">
         {q.isPending || typing
@@ -216,7 +289,13 @@ export function StocksBrowse() {
       ) : (
         <ul aria-label="Stocks" data-testid="stocks-list" className="flex flex-col">
           {items.map((s) => (
-            <Row key={s.id} s={s} />
+            <Row
+              key={s.id}
+              s={s}
+              selected={picked.includes(s.symbol)}
+              canSelect={picked.length < MAX_COMPARE}
+              onToggle={() => toggle(s.symbol)}
+            />
           ))}
         </ul>
       )}

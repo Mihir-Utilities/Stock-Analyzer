@@ -18,6 +18,7 @@ import {
   formatPercent,
 } from "@/lib/format";
 import { humanReason, performanceRows, weekRange } from "@/lib/stock/derive";
+import { formatDerivedAsOf } from "@/lib/stock/fundamentals";
 import type { Load } from "@/lib/stock/load";
 import type {
   Bar,
@@ -105,7 +106,7 @@ export function KpiGrid({
   const range = weekRange(profile, indicators);
   const mcap = profile.quote?.market_cap_cr ?? null;
   const fin = fundamentals.state === "ready" ? fundamentals.data : null;
-  const asOf = fin?.derived_as_of ? formatDate(fin.derived_as_of).text : null;
+  const asOf = fin?.derived_as_of ? formatDerivedAsOf(fin.derived_as_of).text : null;
   const missing = (block: "ratios" | "valuation"): string => {
     if (fundamentals.state === "unavailable") return fundamentals.reason;
     if (fundamentals.state === "error") return "results could not be loaded";

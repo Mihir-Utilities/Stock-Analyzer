@@ -1,6 +1,7 @@
 "use client";
 
 import { Fmt } from "@/components/imports/Fmt";
+import { formatDate } from "@/lib/format";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { cx } from "@/components/ui/cx";
 import { formatByUnit, unitWords, type ScalarRow, type SeriesRow } from "@/lib/stock/fundamentals";
@@ -98,7 +99,7 @@ export function PeriodsTable({
                   data-testid={`fnd-cell-${r.key}-${periods[i] ?? i}`}
                   className="whitespace-nowrap px-2 py-1 text-right tabular-nums text-text-1"
                 >
-                  <Fmt f={formatByUnit(r.unit, v, r.reason)} />
+                  <Fmt f={formatByUnit(r.unit, v, r.reasons?.[i] ?? r.reason)} />
                 </td>
               ))}
               <td className="px-2 py-1">
@@ -168,7 +169,24 @@ export function ScalarTable({
                 )}
               </td>
               <td className="px-2 py-1 text-caption text-text-2">{unitWords(r.unit)}</td>
-              <td className="px-2 py-1 text-caption text-text-2">{asOfText}</td>
+              <td className="px-2 py-1 text-caption text-text-2">
+                {asOfText}
+                {r.period ? (
+                  <span className="block" data-testid={`fnd-scalar-period-${r.key}`}>
+                    Period used: {formatDate(r.period).text}
+                  </span>
+                ) : null}
+                {r.note ? (
+                  <span className="block" data-testid={`fnd-scalar-note-${r.key}`}>
+                    {r.note}
+                  </span>
+                ) : null}
+                {r.value === null ? (
+                  <span className="block" data-testid={`fnd-scalar-reason-${r.key}`}>
+                    No value: {r.reason}
+                  </span>
+                ) : null}
+              </td>
             </tr>
           ))}
         </tbody>

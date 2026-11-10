@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
-import { NotAvailable } from "@/components/shell/NotAvailable";
+import { Suspense } from "react";
+import { ComparePage } from "@/components/compare/ComparePage";
 
 export const metadata: Metadata = { title: "Compare" };
 
 export default function CompareRoute() {
   return (
-    <NotAvailable
-      testId="compare-na"
-      title="Compare"
-      waitingFor="Comparing stocks needs peers and scores from analytics step D05b, which is on hold. Fund comparison is available under Funds."
-    />
+    <Suspense fallback={null}>
+      <ComparePage />
+    </Suspense>
   );
 }

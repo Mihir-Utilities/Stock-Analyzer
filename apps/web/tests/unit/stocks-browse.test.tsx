@@ -24,8 +24,6 @@ vi.mock("@/components/shell/AppShell", () => ({
 }));
 
 import AdminStatusRoute from "@/app/(app)/admin/status/page";
-import CompareRoute from "@/app/(app)/compare/page";
-import ScreenerRoute from "@/app/(app)/screener/page";
 import NotFound from "@/app/not-found";
 import { StocksBrowse } from "@/components/stocks/StocksBrowse";
 
@@ -82,7 +80,8 @@ describe("stocks browse (docs/06 6.3; UI-95)", () => {
     expect(mm).toHaveTextContent("sector not known");
     expect(mm).toHaveTextContent("Not tracked: import prices to see history");
     expect(mm).toHaveTextContent("Status: suspended");
-    expect(screen.getByTestId("stocks-unavailable-note")).toHaveTextContent("D05b");
+    expect(screen.getByTestId("stocks-unavailable-note")).toHaveTextContent("Screener");
+    expect(screen.getByTestId("stocks-go-screener")).toHaveAttribute("href", "/screener");
     expect(mock.calls).toHaveLength(1);
     expect(mock.calls[0]?.path).toBe("/stocks");
     expect(mock.calls[0]?.query.get("kind")).toBe("equity");
@@ -156,21 +155,53 @@ describe("stocks browse (docs/06 6.3; UI-95)", () => {
   });
 });
 
-describe("not-available pages and not-found (UI-96)", () => {
-  it.each([
-    ["compare-na", CompareRoute, "D05b"],
-    ["screener-na", ScreenerRoute, "D05b"],
-    ["admin-status-na", AdminStatusRoute, "B14"],
-  ])("%s says what it waits for and makes no request", (id, Route, token) => {
-    const mock = createMockFetch({});
-    vi.stubGlobal("fetch", mock.impl);
-    render(<Route />);
-    expect(screen.getByTestId(`${id}-note`)).toHaveTextContent("Not available yet");
-    expect(screen.getByTestId(`${id}-note`)).toHaveTextContent(token);
-    expect(screen.getByTestId(`${id}-home`)).toHaveAttribute("href", "/");
-    expect(screen.getByTestId(`${id}-stocks`)).toHaveAttribute("href", "/stocks");
-    expect(mock.calls).toHaveLength(0);
+describe("compare selection on the browse list (F10-d)", () => {
+  it("needs 2 to 5 ticks, links with encoded symbols and makes no per-row request", async () => {
+    const user = userEvent.setup();
+    const mock = renderBrowse({
+      "GET /stocks": page([
+        row(1, "TCS"),
+        row(2, "M&M"),
+        row(3, "A"),
+        row(4, "B"),
+        row(5, "C"),
+        row(6, "D"),
+      ]),
+    });
+    await screen.findByTestId("stocks-row-TCS");
+    const go = screen.getByTestId("stocks-compare-go");
+    expect(go).toBeDisabled();
+    expect(go.getAttribute("aria-describedby")).toBe("stocks-compare-hint");
+    await user.click(screen.getByTestId("stocks-select-TCS"));
+    expect(screen.getByTestId("stocks-compare-go")).toBeDisabled();
+    await user.click(screen.getByTestId("stocks-select-M&M"));
+    expect(screen.getByTestId("stocks-compare-go")).toHaveAttribute(
+      "href",
+      "/compare?symbols=TCS%2CM%26M",
+    );
+    for (const s of ["A", "B", "C"]) await user.click(screen.getByTestId(`stocks-select-${s}`));
+    expect(screen.getByTestId("stocks-select-D")).toBeDisabled();
+    expect(screen.getByTestId("stocks-compare-hint")).toHaveTextContent("5 selected");
+    await user.click(screen.getByTestId("stocks-compare-clear"));
+    expect(screen.getByTestId("stocks-compare-go")).toBeDisabled();
+    expect(mock.calls).toHaveLength(1);
   });
+});
+
+describe("not-available pages and not-found (UI-96)", () => {
+  it.each([["admin-status-na", AdminStatusRoute, "B14"]])(
+    "%s says what it waits for and makes no request",
+    (id, Route, token) => {
+      const mock = createMockFetch({});
+      vi.stubGlobal("fetch", mock.impl);
+      render(<Route />);
+      expect(screen.getByTestId(`${id}-note`)).toHaveTextContent("Not available yet");
+      expect(screen.getByTestId(`${id}-note`)).toHaveTextContent(token);
+      expect(screen.getByTestId(`${id}-home`)).toHaveAttribute("href", "/");
+      expect(screen.getByTestId(`${id}-stocks`)).toHaveAttribute("href", "/stocks");
+      expect(mock.calls).toHaveLength(0);
+    },
+  );
 
   it("not-found keeps its testids and adds a Stocks link", () => {
     render(<NotFound />);

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { setTheme } from "./theme";
 import type { MockReply } from "../mocks/imports-fixtures";
+import * as f10 from "../mocks/f10-fixtures";
 import * as f8 from "../mocks/f08-fixtures";
 import * as fx from "../mocks/stock-fixtures";
 
@@ -40,6 +41,7 @@ async function mockApi(page: Page, state: { decided: boolean; patches: unknown[]
       "GET /stocks/TCS/indicators": fx.indicatorsFull(),
       "GET /stocks/TCS/events": events,
       "GET /stocks/TCS/links": fx.links,
+      "GET /stocks/TCS/peers": f10.peers({ stalePeer: true, note: "few comparable peers" }),
       "GET /stocks/TCS/fundamentals": fx.fundamentalsNotComputed,
       "GET /stocks/TCS/shareholding": f8.shareholdingNoMf,
       "GET /settings/prices-adjustment": f8.adjustment(false),
@@ -79,7 +81,8 @@ test("other tabs render their honest states (SHP-01, peers, data)", async ({ pag
   await page.goto("/stocks/TCS?tab=ownership");
   await expect(page.getByTestId("mf-missing-note")).toContainText("DII (includes mutual funds)");
   await page.getByTestId("tab-peers").click();
-  await expect(page.getByTestId("peers-unavailable")).toContainText("not available yet");
+  await expect(page.getByTestId("peers-table")).toBeVisible();
+  await expect(page.getByTestId("peers-note")).toContainText("Few comparable peers");
   await page.getByTestId("tab-data").click();
   await expect(page.getByTestId("adjustment-state")).toContainText("treated as raw");
   await expect(page.getByTestId("delete-prices")).toBeVisible();
@@ -95,7 +98,7 @@ test.describe("axe and touch targets on the F08 tabs", () => {
         await page.setViewportSize({ width, height: 900 });
         const waits: Record<string, string> = {
           ownership: "chart-ownership-stack",
-          peers: "peers-unavailable",
+          peers: "peers-table",
           events: "detected-action",
           data: "data-coverage",
         };

@@ -482,3 +482,63 @@ describe("F07 review: toggles, honesty and form reuse", () => {
     );
   });
 });
+
+describe("D05b web follow-ups (F10: derived_as_of timestamp, null_reasons, ratio_meta)", () => {
+  const snapshot = {
+    derived_as_of: "2026-11-10T10:00:00Z",
+    derived_reason: null,
+    derived: { revenue_yoy: [null, 10, 11, 12] },
+    ratios: { roe: 18.5, roce: null, debt_equity: null },
+    ratios_reason: null,
+    valuation: { pe_ttm: null, pb: 6.1 },
+    valuation_reason: null,
+    null_reasons: {
+      derived: { revenue_yoy: { "2025-12-31": "insufficient_history" } },
+      ratios: { roce: "missing_input", debt_equity: "no_debt_data" },
+      valuation: { pe_ttm: "loss_making" },
+    },
+    ratio_meta: {
+      roe_basis: "ending",
+      ratio_period: { roe: "2026-03-31", roce: "2025-03-31" },
+    },
+  };
+
+  it("shows the RFC 3339 derived_as_of in IST, per-metric reasons, the ratio period and the ROE basis", async () => {
+    const user = userEvent.setup();
+    renderTab({ "GET /stocks/TCS/fundamentals": fnd.fundamentals(snapshot) });
+    await user.click(await screen.findByTestId("fnd-group-ratios"));
+    const roe = screen.getByTestId("fnd-scalar-roe");
+    expect(roe).toHaveTextContent("Analytics snapshot, as of 10 Nov 2026, 15:30 IST");
+    expect(screen.getByTestId("fnd-scalar-period-roe")).toHaveTextContent(
+      "Period used: 31 Mar 2026",
+    );
+    expect(screen.getByTestId("fnd-scalar-note-roe")).toHaveTextContent("closing equity");
+    expect(screen.getByTestId("fnd-scalar-reason-roce")).toHaveTextContent(
+      "No value: missing input",
+    );
+    expect(screen.getByTestId("fnd-scalar-period-roce")).toHaveTextContent("31 Mar 2025");
+    expect(screen.getByTestId("fnd-scalar-reason-debt_equity")).toHaveTextContent("no debt data");
+    await user.click(screen.getByTestId("fnd-group-valuation"));
+    expect(screen.getByTestId("fnd-scalar-reason-pe_ttm")).toHaveTextContent("loss making");
+  });
+
+  it("a derived cell takes its per-period reason from null_reasons", () => {
+    const d = parse(fnd.fundamentals(snapshot));
+    const row = seriesRows(d, "pnl").find((r) => r.key === "revenue_yoy");
+    expect(row?.reasons?.[0]).toBe("insufficient history");
+    expect(row?.reasons?.[1]).toBeNull();
+    expect(row?.source).toBe("Analytics snapshot, as of 10 Nov 2026, 15:30 IST");
+    const ratios = scalarRows(d, "ratios");
+    expect(ratios.find((r) => r.key === "roe")?.note).toMatch(/closing equity/);
+    expect(ratios.find((r) => r.key === "roce")?.reason).toBe("missing input");
+  });
+
+  it("without null_reasons the block reason is used, as before", () => {
+    const d = parse(fnd.fundamentals({ ratios: { roe: null }, ratios_reason: "not_computed" }));
+    expect(scalarRows(d, "ratios").find((r) => r.key === "roe")).toMatchObject({
+      reason: "not computed yet",
+      period: null,
+      note: null,
+    });
+  });
+});

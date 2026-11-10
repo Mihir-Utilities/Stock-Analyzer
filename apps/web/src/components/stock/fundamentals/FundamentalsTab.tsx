@@ -19,6 +19,7 @@ import {
   getFundamentalsFull,
   GROUPS,
   hasAnyValue,
+  formatDerivedAsOf,
   scalarRows,
   seriesRows,
   sourceText,
@@ -373,7 +374,7 @@ export function FundamentalsTab({ symbol }: { symbol: string }) {
           {group === "ratios" || group === "valuation" ? (
             <ScalarTable
               rows={scalarRows(d, group)}
-              asOfText={`Analytics snapshot, as of ${formatDate(d.derived_as_of ?? null).reason === null ? formatDate(d.derived_as_of ?? null).text : "unknown"}`}
+              asOfText={`Analytics snapshot, as of ${formatDerivedAsOf(d.derived_as_of).reason === null ? formatDerivedAsOf(d.derived_as_of).text : "unknown"}`}
               caption={group === "ratios" ? "Ratios, latest" : "Valuation, latest"}
             />
           ) : shown.length === 0 ? (
