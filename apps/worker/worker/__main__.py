@@ -8,7 +8,7 @@ import json
 import sys
 
 from worker import job_defs, jobs
-from worker.logs import configure_logging
+from worker.logs import configure_logging, scrub_value
 from worker.runner import RunResult, RunStore, run_job
 
 job_defs.register_all()  # idempotent; keeps the import used
@@ -70,20 +70,19 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     configure_logging()
     result = asyncio.run(_run(args))
-    print(
-        json.dumps(
-            {
-                "job": result.job,
-                "status": result.status,
-                "run_id": result.run_id,
-                "rows_written": result.rows_written,
-                "items_total": result.items_total,
-                "items_failed": result.items_failed,
-                "error": result.error,
-                "dry_run": bool(args.dry_run),
-            }
-        )
-    )
+    out: dict[str, object] = {
+        "job": result.job,
+        "status": result.status,
+        "run_id": result.run_id,
+        "rows_written": result.rows_written,
+        "items_total": result.items_total,
+        "items_failed": result.items_failed,
+        "error": result.error,
+        "dry_run": bool(args.dry_run),
+    }
+    if args.dry_run:  # scrubbed, counts-only details of what a real run would do
+        out["details"] = scrub_value(result.details)
+    print(json.dumps(out))
     return 1 if result.status == "failed" else 0
 
 

@@ -1,4 +1,4 @@
-# backup_user_data: Sunday 12:30 IST (docs/04 3.11). Encrypts to AGE_PUBLIC_KEY (public key only) and uploads only the ciphertext, kept 30 days. GitHub cron is UTC and best-effort; the job works from data state, so a late or
+# backup_user_data: Sunday 12:30 IST (docs/04 3.11). Encrypts to AGE_PUBLIC_KEY (public key only) and uploads only the ciphertext, kept 14 days. GitHub cron is UTC and best-effort; the job works from data state, so a late or
 # skipped run catches up on the next one (SYS-03). Actions are pinned by commit SHA (docs/04 1.8).
 name: backup_user_data
 
@@ -24,6 +24,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          version: "0.11.7"
       - name: Install worker environment and age
         run: |
           uv sync --project apps/worker --locked
@@ -40,5 +42,5 @@ jobs:
         with:
           name: user-data-backup
           path: backup-out/*.age
-          retention-days: 30
+          retention-days: 14
           if-no-files-found: error
