@@ -716,7 +716,7 @@ paths:
             type: "string"
       responses:
         "200":
-          description: "Success. Latest analysis_snapshot: returns, technicals, scores, null_reasons, units and series/analysis arrays as [[date, value]] pairs (nulls at warm-up positions, last 750 rows). 404 DATA_UNAVAILABLE reason no_prices_imported or no_history (fewer than 60 valid bars or snapshot not computed yet). An alias answers data = {redirect_symbol}."
+          description: "Success. Latest analysis_snapshot: returns, technicals, scores, null_reasons, units and series/analysis arrays as [[date, value]] pairs (nulls at warm-up positions, last 750 rows). 404 DATA_UNAVAILABLE reason no_prices_imported or no_history (fewer than 60 valid bars or snapshot not computed yet). An alias answers data = {redirect_symbol}. INV (proposed, B16): data.analysis also carries the optional investment-context blocks year_returns, seasonality, position, drawdown_profile, holding_periods, entry_study, vol_regime, sip_backtest and risk_adjusted (schema InvAnalysisBlocks, docs/03 4a, docs/05 section 12); month_year keeps its shape. There is no GET /stocks/{symbol}/analysis route."
           content:
             "application/json":
               schema:
@@ -1724,7 +1724,7 @@ paths:
       summary: "Watchlist stocks and funds. (docs/03 section 11)"
       responses:
         "200":
-          description: "Success"
+          description: "Success. INV (proposed, B16): each stocks[] row also carries seasonality (schema WatchlistSeasonality) for the current IST calendar month, or null with seasonality_reason (no_prices_imported | no_history)."
           content:
             "application/json":
               schema:
@@ -3566,6 +3566,737 @@ components:
       required:
         - "data"
       description: "Success envelope. Each owning task replaces the generic `data` schema with the exact shape of its endpoint (contract change rule: docs/03, openapi.yaml, docs/field-map.json together)."
+    InvBestWorst:
+      type: "object"
+      description: "A monthly or yearly return with the calendar year it happened in (percent number)."
+      properties:
+        pct:
+          type: "number"
+        year:
+          type: "integer"
+      required:
+        - "pct"
+        - "year"
+    InvYearReturn:
+      type: "object"
+      description: "One row of analysis.year_returns (docs/05 12.1): price return of a calendar year in percent (dividends excluded). kind full = December close over the prior December close; partial_first = first year of history from the first month-end close; ytd = running year to the last bar."
+      properties:
+        year:
+          type: "integer"
+        return_pct:
+          type: "number"
+          nullable: true
+        return_pct_reason:
+          type: "string"
+          nullable: true
+          description: "no_base | gap_before when return_pct is null."
+        kind:
+          type: "string"
+          enum:
+            - "full"
+            - "partial_first"
+            - "ytd"
+        months_covered:
+          type: "integer"
+        base_date:
+          type: "string"
+          format: "date"
+          nullable: true
+        end_date:
+          type: "string"
+          format: "date"
+          nullable: true
+      required:
+        - "year"
+        - "return_pct"
+        - "kind"
+        - "months_covered"
+    InvSeasonalityMonth:
+      type: "object"
+      description: "Statistics of one calendar month over all closed past months with a return (docs/05 12.2). Percent fields are percent numbers; green_pct is null with reason too_few_years below min_years."
+      properties:
+        month:
+          type: "integer"
+          minimum: 1
+          maximum: 12
+        n_years:
+          type: "integer"
+        n_green:
+          type: "integer"
+        green_pct:
+          type: "number"
+          nullable: true
+        green_pct_reason:
+          type: "string"
+          nullable: true
+        avg_pct:
+          type: "number"
+          nullable: true
+        median_pct:
+          type: "number"
+          nullable: true
+        best:
+          allOf:
+            - "$ref": "#/components/schemas/InvBestWorst"
+          nullable: true
+        worst:
+          allOf:
+            - "$ref": "#/components/schemas/InvBestWorst"
+          nullable: true
+        small_sample:
+          type: "boolean"
+      required:
+        - "month"
+        - "n_years"
+        - "n_green"
+        - "green_pct"
+        - "small_sample"
+    InvSeasonalityYears:
+      type: "object"
+      description: "Same statistics over the full calendar years only (the Year column summary)."
+      properties:
+        n:
+          type: "integer"
+        n_green:
+          type: "integer"
+        green_pct:
+          type: "number"
+          nullable: true
+        green_pct_reason:
+          type: "string"
+          nullable: true
+        avg_pct:
+          type: "number"
+          nullable: true
+        median_pct:
+          type: "number"
+          nullable: true
+        best:
+          allOf:
+            - "$ref": "#/components/schemas/InvBestWorst"
+          nullable: true
+        worst:
+          allOf:
+            - "$ref": "#/components/schemas/InvBestWorst"
+          nullable: true
+        small_sample:
+          type: "boolean"
+      required:
+        - "n"
+        - "n_green"
+        - "green_pct"
+        - "small_sample"
+    InvSeasonalityRunning:
+      type: "object"
+      description: "The running (open) calendar month: month to date, never part of any statistic."
+      properties:
+        year:
+          type: "integer"
+        month:
+          type: "integer"
+        mtd_return_pct:
+          type: "number"
+          nullable: true
+        mtd_reason:
+          type: "string"
+          nullable: true
+          description: "no_base | gap_before"
+        base_date:
+          type: "string"
+          format: "date"
+          nullable: true
+        as_of:
+          type: "string"
+          format: "date"
+      required:
+        - "year"
+        - "month"
+        - "mtd_return_pct"
+    InvMonthPick:
+      type: "object"
+      description: "Best or worst calendar month by median return (needs at least 2 months with 3 or more years)."
+      properties:
+        month:
+          type: "integer"
+        median_pct:
+          type: "number"
+        n_years:
+          type: "integer"
+      required:
+        - "month"
+        - "median_pct"
+        - "n_years"
+    InvSeasonality:
+      type: "object"
+      description: "analysis.seasonality (docs/05 12.2): month-of-year statistics over all available history (not only the displayed 10 years), the Year column summary and the running month."
+      properties:
+        as_of:
+          type: "string"
+          format: "date"
+        bars:
+          type: "integer"
+        first_bar:
+          type: "string"
+          format: "date"
+        last_bar:
+          type: "string"
+          format: "date"
+        years_of_history:
+          type: "number"
+        min_years:
+          type: "integer"
+        small_sample_years:
+          type: "integer"
+        running:
+          "$ref": "#/components/schemas/InvSeasonalityRunning"
+        months:
+          type: "array"
+          description: "Always 12 entries, month 1..12."
+          items:
+            "$ref": "#/components/schemas/InvSeasonalityMonth"
+        best_month:
+          allOf:
+            - "$ref": "#/components/schemas/InvMonthPick"
+          nullable: true
+        worst_month:
+          allOf:
+            - "$ref": "#/components/schemas/InvMonthPick"
+          nullable: true
+        best_worst_reason:
+          type: "string"
+          nullable: true
+          description: "too_few_months when best_month and worst_month are null."
+        years:
+          "$ref": "#/components/schemas/InvSeasonalityYears"
+      required:
+        - "as_of"
+        - "bars"
+        - "first_bar"
+        - "last_bar"
+        - "min_years"
+        - "running"
+        - "months"
+        - "years"
+    InvPricePosition:
+      type: "object"
+      description: "analysis.position (docs/05 12.3). Close-based; percent numbers; percentiles 0-100. Nulls carry a sibling *_reason."
+      properties:
+        as_of:
+          type: "string"
+          format: "date"
+        bars:
+          type: "integer"
+        close:
+          type: "number"
+        high_52w_close:
+          type: "number"
+          nullable: true
+        low_52w_close:
+          type: "number"
+          nullable: true
+        range_pos_52w_pct:
+          type: "number"
+          nullable: true
+        range_pos_52w_reason:
+          type: "string"
+          nullable: true
+        range_band:
+          type: "string"
+          nullable: true
+          enum:
+            - "lower"
+            - "middle"
+            - "upper"
+        dist_high_52w_pct:
+          type: "number"
+          nullable: true
+        dist_high_all_pct:
+          type: "number"
+          nullable: true
+        high_all_date:
+          type: "string"
+          format: "date"
+          nullable: true
+        history_first_date:
+          type: "string"
+          format: "date"
+        pctile_52w:
+          type: "number"
+          nullable: true
+        pctile_52w_reason:
+          type: "string"
+          nullable: true
+        pctile_all:
+          type: "number"
+          nullable: true
+        pctile_all_reason:
+          type: "string"
+          nullable: true
+        pctile_all_n:
+          type: "integer"
+        sma200:
+          type: "number"
+          nullable: true
+        ext_sma200_pct:
+          type: "number"
+          nullable: true
+        ext_sma200_reason:
+          type: "string"
+          nullable: true
+      required:
+        - "as_of"
+        - "bars"
+        - "close"
+    InvDrawdownProfile:
+      type: "object"
+      description: "analysis.drawdown_profile (docs/05 12.4) over the full available history. Percent numbers (drawdowns are 0 or negative)."
+      properties:
+        as_of:
+          type: "string"
+          format: "date"
+        bars:
+          type: "integer"
+        first_date:
+          type: "string"
+          format: "date"
+        current_dd_pct:
+          type: "number"
+        days_since_high:
+          type: "integer"
+        max_dd:
+          type: "object"
+          properties:
+            depth_pct:
+              type: "number"
+            peak_date:
+              type: "string"
+              format: "date"
+              nullable: true
+            trough_date:
+              type: "string"
+              format: "date"
+              nullable: true
+            recovery_date:
+              type: "string"
+              format: "date"
+              nullable: true
+            recovered:
+              type: "boolean"
+          required:
+            - "depth_pct"
+            - "recovered"
+        underwater_rows:
+          type: "integer"
+        time_under_water_pct:
+          type: "number"
+        avg_underwater_depth_pct:
+          type: "number"
+          nullable: true
+        episodes_total:
+          type: "integer"
+        recovery:
+          type: "array"
+          description: "Thresholds 10 and 20."
+          items:
+            type: "object"
+            properties:
+              threshold_pct:
+                type: "integer"
+              episodes:
+                type: "integer"
+              recovered:
+                type: "integer"
+              open:
+                type: "integer"
+              median_days:
+                type: "number"
+                nullable: true
+              median_days_reason:
+                type: "string"
+                nullable: true
+              small_sample:
+                type: "boolean"
+            required:
+              - "threshold_pct"
+              - "episodes"
+              - "recovered"
+              - "open"
+              - "median_days"
+              - "small_sample"
+      required:
+        - "as_of"
+        - "bars"
+        - "current_dd_pct"
+        - "max_dd"
+        - "recovery"
+    InvHoldingPeriods:
+      type: "object"
+      description: "analysis.holding_periods (docs/05 12.5): rolling cumulative returns (not per year) over 1m, 3m, 6m, 1y, 3y trading-row windows. Windows overlap."
+      properties:
+        as_of:
+          type: "string"
+          format: "date"
+        bars:
+          type: "integer"
+        windows:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              key:
+                type: "string"
+                enum:
+                  - "1m"
+                  - "3m"
+                  - "6m"
+                  - "1y"
+                  - "3y"
+              rows:
+                type: "integer"
+              windows:
+                type: "integer"
+              independent_periods:
+                type: "integer"
+              share_positive_pct:
+                type: "number"
+                nullable: true
+              median_pct:
+                type: "number"
+                nullable: true
+              best_pct:
+                type: "number"
+                nullable: true
+              best_end_date:
+                type: "string"
+                format: "date"
+                nullable: true
+              worst_pct:
+                type: "number"
+                nullable: true
+              worst_end_date:
+                type: "string"
+                format: "date"
+                nullable: true
+              reason:
+                type: "string"
+                nullable: true
+                description: "insufficient_history | too_few_windows"
+              small_sample:
+                type: "boolean"
+            required:
+              - "key"
+              - "rows"
+              - "windows"
+              - "independent_periods"
+              - "small_sample"
+      required:
+        - "as_of"
+        - "bars"
+        - "windows"
+    InvEntryStudy:
+      type: "object"
+      description: "analysis.entry_study (docs/05 12.6): forward 3 and 6 month returns after a fresh close 10 or 20 percent below the 52-week highest close. Past episodes only; hidden (null with reason) below 3 episodes."
+      properties:
+        as_of:
+          type: "string"
+          format: "date"
+        bars:
+          type: "integer"
+        w52_rows:
+          type: "integer"
+        rows:
+          type: "array"
+          description: "Four rows: drawdown_pct 10 and 20, horizon 3m and 6m."
+          items:
+            type: "object"
+            properties:
+              drawdown_pct:
+                type: "integer"
+              horizon:
+                type: "string"
+                enum:
+                  - "3m"
+                  - "6m"
+              horizon_rows:
+                type: "integer"
+              episodes:
+                type: "integer"
+              pending:
+                type: "integer"
+              median_pct:
+                type: "number"
+                nullable: true
+              worst_pct:
+                type: "number"
+                nullable: true
+              best_pct:
+                type: "number"
+                nullable: true
+              share_positive_pct:
+                type: "number"
+                nullable: true
+              all_windows_median_pct:
+                type: "number"
+                nullable: true
+              last_event_date:
+                type: "string"
+                format: "date"
+                nullable: true
+              reason:
+                type: "string"
+                nullable: true
+                description: "too_few_episodes | insufficient_history"
+              small_sample:
+                type: "boolean"
+            required:
+              - "drawdown_pct"
+              - "horizon"
+              - "episodes"
+              - "pending"
+              - "small_sample"
+      required:
+        - "as_of"
+        - "bars"
+        - "rows"
+    InvVolRegime:
+      type: "object"
+      description: "analysis.vol_regime (docs/05 12.7): the current 21-row volatility against the stock's own history. Describes size of swings, not direction."
+      properties:
+        as_of:
+          type: "string"
+          format: "date"
+        window_rows:
+          type: "integer"
+        current_vol_pct:
+          type: "number"
+          nullable: true
+        percentile:
+          type: "number"
+          nullable: true
+        sample:
+          type: "integer"
+        band:
+          type: "string"
+          nullable: true
+          enum:
+            - "lower"
+            - "typical"
+            - "higher"
+        first_date:
+          type: "string"
+          format: "date"
+          nullable: true
+        reason:
+          type: "string"
+          nullable: true
+      required:
+        - "as_of"
+        - "window_rows"
+        - "sample"
+    InvSipVariant:
+      type: "object"
+      description: "One SIP versus lump sum backtest (docs/05 12.8) for a day rule. day null = first trading day; 1..28 = day of month. INR figures are hypothetical, 2 decimals."
+      properties:
+        day:
+          type: "integer"
+          nullable: true
+          minimum: 1
+          maximum: 28
+        installments:
+          type: "integer"
+        skipped:
+          type: "integer"
+        first_date:
+          type: "string"
+          format: "date"
+          nullable: true
+        last_date:
+          type: "string"
+          format: "date"
+          nullable: true
+        span_days:
+          type: "integer"
+          nullable: true
+        invested_inr:
+          type: "number"
+          nullable: true
+        sip_value_inr:
+          type: "number"
+          nullable: true
+        lump_value_inr:
+          type: "number"
+          nullable: true
+        value_ratio:
+          type: "number"
+          nullable: true
+        sip_absolute_return_pct:
+          type: "number"
+          nullable: true
+        lump_absolute_return_pct:
+          type: "number"
+          nullable: true
+        sip_xirr_pct:
+          type: "number"
+          nullable: true
+        lump_xirr_pct:
+          type: "number"
+          nullable: true
+        xirr_reason:
+          type: "string"
+          nullable: true
+          description: "under_one_year | no_sign_change | insufficient_flows"
+        sip_worst_unrealised_pct:
+          type: "number"
+          nullable: true
+        lump_worst_unrealised_pct:
+          type: "number"
+          nullable: true
+        reason:
+          type: "string"
+          nullable: true
+          description: "history_under_12_months nulls every figure."
+      required:
+        - "day"
+        - "installments"
+        - "skipped"
+    InvSipBacktest:
+      type: "object"
+      description: "analysis.sip_backtest: 29 variants (day null and 1..28), fixed INR 1,000 per instalment. A backtest on past prices with hindsight, not an estimate."
+      properties:
+        as_of:
+          type: "string"
+          format: "date"
+        amount_per_month_inr:
+          type: "integer"
+        price_basis:
+          type: "string"
+        variants:
+          type: "array"
+          items:
+            "$ref": "#/components/schemas/InvSipVariant"
+      required:
+        - "as_of"
+        - "amount_per_month_inr"
+        - "variants"
+    InvRiskAdjusted:
+      type: "object"
+      description: "analysis.risk_adjusted (docs/05 12.9): Calmar-style ratio and downside-deviation ratio over the calendar 3-year window. No risk-free rate, no Sharpe."
+      properties:
+        as_of:
+          type: "string"
+          format: "date"
+        window:
+          type: "string"
+          enum:
+            - "3y"
+        cagr_3y_pct:
+          type: "number"
+          nullable: true
+        maxdd_3y_window_pct:
+          type: "number"
+          nullable: true
+        calmar_3y:
+          type: "number"
+          nullable: true
+        calmar_3y_reason:
+          type: "string"
+          nullable: true
+          description: "insufficient_history | no_drawdown"
+        downside_dev_3y_pct:
+          type: "number"
+          nullable: true
+        return_per_downside_3y:
+          type: "number"
+          nullable: true
+        downside_reason:
+          type: "string"
+          nullable: true
+      required:
+        - "as_of"
+        - "window"
+    InvAnalysisBlocks:
+      type: "object"
+      description: "The investment-context additions to GET /stocks/{symbol}/indicators data.analysis (docs/03 4a, docs/05 section 12). All optional: an older snapshot lacks them. month_year keeps its [year, month, percent|null] shape."
+      properties:
+        year_returns:
+          type: "array"
+          items:
+            "$ref": "#/components/schemas/InvYearReturn"
+        seasonality:
+          "$ref": "#/components/schemas/InvSeasonality"
+        position:
+          "$ref": "#/components/schemas/InvPricePosition"
+        drawdown_profile:
+          "$ref": "#/components/schemas/InvDrawdownProfile"
+        holding_periods:
+          "$ref": "#/components/schemas/InvHoldingPeriods"
+        entry_study:
+          "$ref": "#/components/schemas/InvEntryStudy"
+        vol_regime:
+          "$ref": "#/components/schemas/InvVolRegime"
+        sip_backtest:
+          "$ref": "#/components/schemas/InvSipBacktest"
+        risk_adjusted:
+          "$ref": "#/components/schemas/InvRiskAdjusted"
+    WatchlistSeasonality:
+      type: "object"
+      description: "stocks[].seasonality of GET /watchlist (docs/03 section 11): the current IST calendar month across past years. green_pct is a percent number; the running month is never counted; data_since is the first imported bar, not the listing date."
+      properties:
+        month:
+          type: "integer"
+          minimum: 1
+          maximum: 12
+        month_name:
+          type: "string"
+        as_of:
+          type: "string"
+          format: "date"
+        data_since:
+          type: "string"
+          format: "date"
+        years_of_history:
+          type: "number"
+        n_years:
+          type: "integer"
+        n_green:
+          type: "integer"
+        green_pct:
+          type: "number"
+          nullable: true
+        green_pct_reason:
+          type: "string"
+          nullable: true
+          description: "too_few_years"
+        small_sample:
+          type: "boolean"
+        min_years:
+          type: "integer"
+        avg_pct:
+          type: "number"
+          nullable: true
+        median_pct:
+          type: "number"
+          nullable: true
+        mtd_return_pct:
+          type: "number"
+          nullable: true
+        mtd_reason:
+          type: "string"
+          nullable: true
+          description: "no_bar_this_month | no_base | gap_before"
+        mtd_as_of:
+          type: "string"
+          format: "date"
+          nullable: true
+      required:
+        - "month"
+        - "as_of"
+        - "data_since"
+        - "n_years"
+        - "n_green"
+        - "green_pct"
+        - "small_sample"
+        - "min_years"
     FieldError:
       type: "object"
       properties:

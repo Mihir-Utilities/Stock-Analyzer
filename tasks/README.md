@@ -6,9 +6,9 @@ Each file is a self-contained work package: goal, scope, out-of-scope, deliverab
 | Track | Folder | Tasks | What it covers |
 |---|---|---|---|
 | Foundation | `foundation/` | T00-T02 | Repo, CI, safety guards, spikes, migrations |
-| Backend (Go API) | `backend/` | B01-B14 (+ B15 proposed, D-MF) | HTTP API, auth, imports, portfolio, alerts API, MF API |
+| Backend (Go API) | `backend/` | B01-B14 (+ B15 proposed, D-MF; + B16 proposed, INV) | HTTP API, auth, imports, portfolio, alerts API, MF API |
 | Data/Worker (Python) | `data/` | D01-D08 | Ingestion jobs (`post_import`), analytics, alerts, ML, housekeeping (broker adapter D02 removed) |
-| Frontend (Next.js) | `frontend/` | F01-F15 (+ F16 proposed, D-MF) | Design system, screens, visualisations |
+| Frontend (Next.js) | `frontend/` | F01-F15 (+ F16 proposed, D-MF; + F17 proposed, INV) | Design system, screens, visualisations |
 
 ## Recommended order (sequential waves; tasks inside a wave can run in parallel)
 | Wave | Tasks | Notes |
@@ -25,6 +25,7 @@ Each file is a self-contained work package: goal, scope, out-of-scope, deliverab
 | 9 | D07, B14, F09 | Experimental predictions |
 | 10 | D08, F15 | Hardening, workflows, polish |
 | 11 (PROPOSED, D-MF) | S18 spike, B15, then F16 | Mutual fund holdings: backend ledger/API/importer (B15, needs B11, B06a, B10; `.xlsx` reader gated by S18), then the web views (F16, needs F11, F13, B15). Not started until the owner answers MFH-2..MFH-5, MFH-14, MFH-15 |
+| 12 (PROPOSED, INV) | B16, then F17 | Investment-context analytics ("best time to buy", honest edition): worker blocks (seasonality, position, drawdown profile, holding periods, entry-point study, volatility regime, SIP vs lump sum, risk-adjusted) and `stocks[].seasonality` on `GET /watchlist` (B16, needs D05, B04, B11), then the Analysis cards, heatmap Year column and Home tile "This month, across the years" (F17, needs F04, F06, F03, B16). Spec: docs/05 section 12, docs/03 4a and 11, docs/06 6.2a and 6.4a, docs/07 `INV-*`. Not started until the owner answers or accepts the defaults of INV-1..INV-28 |
 
 ## Contract-first rule (lets frontend and backend run in parallel)
 1. B01 produces `openapi.yaml` and generated TypeScript types from `docs/03-api-spec.md`.
@@ -32,14 +33,14 @@ Each file is a self-contained work package: goal, scope, out-of-scope, deliverab
 3. Any change to an endpoint contract must update `docs/03-api-spec.md`, `openapi.yaml` and `docs/field-map.json` in the same PR.
 
 ## Counts
-39 active task files (T00-T02, B01-B14, D01 and D03-D08, F01-F15; D02 is a REMOVED stub). Tracked work items in `PROGRESS.md` = 42: D05 -> D05a + D05b, B06 -> B06a + B06b, F13 -> F13a + F13b.
+39 active task files (plus B15, F16 built, and B16, F17 proposed) (T00-T02, B01-B14, D01 and D03-D08, F01-F15; D02 is a REMOVED stub). Tracked work items in `PROGRESS.md` = 42: D05 -> D05a + D05b, B06 -> B06a + B06b, F13 -> F13a + F13b.
 
 ## Dependency summary
 ```
 T00 -> T01, T02
 T00,T02 -> B01 -> B02 -> B03,B08(status only),B10,B12 ; B03 -> B04,B05,B11 ; D01 -> B09 ; B03,B09 -> B06a ; B05,B06a -> B06b -> B07
 T00,T02 -> D01 -> D03 -> D05 -> D07 ; D01 -> D04 ; D03,B12 -> D06 ; D01,D03..D07 -> D08      (D02 removed)
-B11,B06a,B10 -> B15 -> F16 (D-MF, proposed)      F11,F13a,F13b -> F16
+B11,B06a,B10 -> B15 -> F16 (D-MF, proposed)      D05,B04,B11 -> B16 -> F17 (INV, proposed); F04,F06,F03 -> F17      F11,F13a,F13b -> F16
 T00,B01 -> F01 -> F02 -> F03 -> F04..F14 -> F15 ; F13a needs B06a, F13b needs B06b
 ```
 

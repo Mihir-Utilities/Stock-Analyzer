@@ -104,6 +104,80 @@ Owner-initiated "Trim history": body `{ "symbols": ["TCS","INFY"], "before": "20
 ### GET `/stocks/{symbol}/indicators`
 Returns the latest `analysis_snapshot` (see `05-analytics-spec.md`): `{ "as_of": "...", "returns": {...}, "technicals": {...}, "scores": { "trend": {...}, "risk": {...}, "quality": {...} }, "series": { "sma50": [[d,v]...], "sma200":..., "rsi14":..., "macd": {...}, "bollinger": {...} } }`. `series` limited to the last 750 trading days. If the series requested exceeds data, arrays contain nulls at warm-up positions (never fabricated).
 
+### 4a. Investment-context blocks of `analysis` (decision INV, PROPOSED; built by B16; formulas in `05` section 12)
+
+There is **no new route**. The request named `GET /stocks/{symbol}/analysis`; no such route exists (the analysis arrays are served by `GET /stocks/{symbol}/indicators`, `data.analysis`), so the blocks below are added to that response (INV-11). All are optional (older snapshots lack them; the web treats a missing block as "not computed yet", never as zero). Conventions: percent fields are percent numbers (12.34 = 12.34%) including `*_pct` shares of years, windows and percentiles (0-100); ratios are plain numbers; a null scalar has a sibling `<name>_reason` from the enum in `05` 12.0; every block has `as_of` (date of the last bar used) and `bars`; sample sizes (`n_years`, `windows`, `episodes`) and `small_sample` travel with the numbers; dates are `YYYY-MM-DD` (IST). `meta.source` of the endpoint stays "owner-imported prices" and `price_basis` "adj_close (price return, excludes dividends)".
+
+```json
+"analysis": {
+  "...existing arrays unchanged (drawdown, rolling_vol_21/63, rolling_beta_252, return_histogram, calendar)": "",
+  "month_year": [[2023, 1, -10.0], [2024, 2, -10.0]],
+  "year_returns": [
+    { "year": 2022, "return_pct": 10.0, "return_pct_reason": null, "kind": "partial_first", "months_covered": 1, "base_date": "2022-11-30", "end_date": "2022-12-30" },
+    { "year": 2023, "return_pct": -1.99, "return_pct_reason": null, "kind": "full", "months_covered": 12, "base_date": "2022-12-30", "end_date": "2023-12-29" },
+    { "year": 2024, "return_pct": -1.0, "return_pct_reason": null, "kind": "ytd", "months_covered": 2, "base_date": "2023-12-29", "end_date": "2024-02-15" }
+  ],
+  "seasonality": {
+    "as_of": "2024-02-15", "bars": 330, "first_bar": "2022-11-14", "last_bar": "2024-02-15", "years_of_history": 1.3,
+    "min_years": 3, "small_sample_years": 5,
+    "running": { "year": 2024, "month": 2, "mtd_return_pct": -10.0, "mtd_reason": null, "base_date": "2024-01-31", "as_of": "2024-02-15" },
+    "months": [
+      { "month": 12, "n_years": 4, "n_green": 2, "green_pct": 50.0, "green_pct_reason": null, "avg_pct": 1.5, "median_pct": 1.5,
+        "best": { "pct": 5.0, "year": 2019 }, "worst": { "pct": -2.0, "year": 2020 }, "small_sample": true }
+    ],
+    "best_month": { "month": 3, "median_pct": 2.0, "n_years": 3 }, "worst_month": { "month": 12, "median_pct": 1.5, "n_years": 4 },
+    "best_worst_reason": null,
+    "years": { "n": 4, "n_green": 3, "green_pct": 75.0, "green_pct_reason": null, "avg_pct": 7.0, "median_pct": 8.0,
+               "best": { "pct": 20.0, "year": 2021 }, "worst": { "pct": -8.0, "year": 2020 }, "small_sample": true }
+  },
+  "position": {
+    "as_of": "...", "bars": 0, "close": 0, "high_52w_close": 0, "low_52w_close": 0,
+    "range_pos_52w_pct": 80.0, "range_pos_52w_reason": null, "range_band": "upper",
+    "dist_high_52w_pct": -6.67, "dist_high_all_pct": -30.0, "high_all_date": "...", "history_first_date": "...",
+    "pctile_52w": 70.0, "pctile_52w_reason": null, "pctile_all": 50.0, "pctile_all_reason": null, "pctile_all_n": 7,
+    "sma200": 0, "ext_sma200_pct": 5.0, "ext_sma200_reason": null
+  },
+  "drawdown_profile": {
+    "as_of": "...", "bars": 13, "first_date": "...", "current_dd_pct": -4.55, "days_since_high": 1,
+    "max_dd": { "depth_pct": -20.0, "peak_date": "...", "trough_date": "...", "recovery_date": "...", "recovered": true },
+    "underwater_rows": 8, "time_under_water_pct": 61.54, "avg_underwater_depth_pct": -11.82, "episodes_total": 4,
+    "recovery": [ { "threshold_pct": 10, "episodes": 2, "recovered": 2, "open": 0, "median_days": 3.0, "median_days_reason": null, "small_sample": true } ]
+  },
+  "holding_periods": {
+    "as_of": "...", "bars": 0,
+    "windows": [ { "key": "3m", "rows": 63, "windows": 0, "independent_periods": 0, "share_positive_pct": 0, "median_pct": 0,
+                   "best_pct": 0, "best_end_date": "...", "worst_pct": 0, "worst_end_date": "...", "reason": null, "small_sample": false } ]
+  },
+  "entry_study": {
+    "as_of": "...", "bars": 0, "w52_rows": 252,
+    "rows": [ { "drawdown_pct": 10, "horizon": "3m", "horizon_rows": 63, "episodes": 3, "pending": 0, "median_pct": 10.0, "worst_pct": -10.0, "best_pct": 12.5,
+                "share_positive_pct": 66.67, "all_windows_median_pct": -5.0, "last_event_date": "...", "reason": null, "small_sample": true } ]
+  },
+  "vol_regime": { "as_of": "...", "window_rows": 21, "current_vol_pct": 0, "percentile": 58.33, "sample": 0, "band": "typical", "reason": null, "first_date": "..." },
+  "sip_backtest": {
+    "as_of": "...", "amount_per_month_inr": 1000, "price_basis": "adj_close",
+    "variants": [ { "day": null, "installments": 0, "skipped": 0, "first_date": "...", "last_date": "...", "span_days": 0,
+                    "invested_inr": 0, "sip_value_inr": 0, "lump_value_inr": 0, "value_ratio": 1.125,
+                    "sip_absolute_return_pct": 125.0, "lump_absolute_return_pct": 100.0,
+                    "sip_xirr_pct": null, "lump_xirr_pct": null, "xirr_reason": "under_one_year",
+                    "sip_worst_unrealised_pct": -25.0, "lump_worst_unrealised_pct": -50.0, "reason": null } ]
+  },
+  "risk_adjusted": {
+    "as_of": "...", "window": "3y", "cagr_3y_pct": 15.0, "maxdd_3y_window_pct": -30.0, "calmar_3y": 0.5, "calmar_3y_reason": null,
+    "downside_dev_3y_pct": 35.5, "return_per_downside_3y": 0.4226, "downside_reason": null
+  }
+}
+```
+
+Rules.
+- `month_year` keeps its shape `[year, month, pct|null]` (last 10 calendar years, `HEATMAP_YEARS`); changes: a month whose previous calendar month has no bar is `null` (not paired across the gap, INV-4); the running month's cell is the month-to-date value and is identified by `seasonality.running` (the web marks it; it is excluded from every statistic).
+- `year_returns` rows are for the same displayed years, ascending; `kind` is `full | partial_first | ytd`.
+- `seasonality.months` always has 12 entries (`month` 1..12); `seasonality` and `years` statistics use **all** available history, not only the displayed 10 years (INV-3), and `years` is the year-column summary over full years. A month with no data has `n_years` 0 and null statistics with `green_pct_reason: "too_few_years"`.
+- `sip_backtest.variants` has 29 entries: `day: null` (first trading day) and `day: 1..28`; `reason` `history_under_12_months` nulls every figure of a variant. INR figures are hypothetical, 2 decimals, JSON numbers.
+- `holding_periods.windows[*].key` is `1m|3m|6m|1y|3y`; `entry_study.rows` has the 4 combinations `drawdown_pct` 10/20 x `horizon` `3m`/`6m`; `drawdown_profile.recovery` has the thresholds 10 and 20.
+- All new blocks together add roughly 12 KB to the stored snapshot (the 29 SIP variants dominate); the snapshot stays under the 200 KB budget (RET-89). The expansion step of B04 (`prices/expand.go`) passes the new blocks through unchanged (they carry their own dates; nothing is aligned to `series.dates`).
+- Errors and `DATA_UNAVAILABLE` reasons are those of `/indicators` above. No endpoint takes a parameter for these blocks.
+
 ## 5. Fundamentals, ownership, events, peers, research links
 
 ### GET `/stocks/{symbol}/fundamentals?basis=consolidated|standalone|auto&period=Q|A`
@@ -233,7 +307,7 @@ Implementation notes (B10):
 
 ## 11. Watchlist
 
-`GET /watchlist` -> `{ "stocks":[{symbol,name,ltp,change_pct,added_at,note}], "funds":[{code,name,nav,change_pct}] }`. `POST /watchlist` body `{"type":"stock","symbol":"TCS","note":""}` or `{"type":"mf","code":120503}` -> 201; duplicate -> 409. Adding a stock sets `is_tracked=true, tracked_reason='watchlist'` (if not already tracked for another reason); no backfill in manual mode. `DELETE /watchlist/{id}`: unsets tracked unless portfolio, imported prices or the LRU keep it. `PATCH /watchlist/{id}` updates note (max 500 chars).
+`GET /watchlist` -> `{ "stocks":[{symbol,name,ltp,change_pct,added_at,note}], "funds":[{code,name,nav,change_pct}] }`. **Seasonality addition (INV, PROPOSED, B16; formulas `05` 12.2, screen `06` 6.2a):** each `stocks[]` row also carries `seasonality` for the **current calendar month in IST** (`month` 1..12 chosen by the API from today's IST date; no recompute is needed when the month changes), read from the newest `analysis_snapshot.indicators.analysis.seasonality`: `{ "month": 11, "month_name": "November", "as_of": "2026-11-10", "data_since": "2019-03-01", "years_of_history": 7.7, "n_years": 6, "n_green": 4, "green_pct": 66.67, "green_pct_reason": null, "small_sample": false, "min_years": 3, "avg_pct": 1.2, "median_pct": 1.5, "mtd_return_pct": 1.23, "mtd_reason": null, "mtd_as_of": "2026-11-10" }`. `green_pct` is a percent number (66.67); `n_years` counts only closed past months with a return (the running month never counts); `data_since` is the first imported bar (not the listing date); `green_pct` is `null` with reason `too_few_years` below `min_years` (3). `mtd_return_pct` is the running month's price change so far and is `null` with `mtd_reason` `no_bar_this_month` when the snapshot's `as_of` month is not the current IST month (the share is still valid), or `no_base` / `gap_before`. A stock without a snapshot has `"seasonality": null` and `"seasonality_reason": "no_prices_imported"` or `"no_history"`. This is the smallest contract change: one optional field on an existing endpoint, no new route and no new query parameter (INV-8). Cost: the handler reads one jsonb path per stock from the newest snapshot (the whole value is detoasted, about 100-200 KB per stock); the watchlist is small (a few dozen stocks) and B16 measures it; if it breaks the budget the fallback is a small `analysis_snapshot.seasonality` column added by a forward-only migration (INV-8). `POST /watchlist` body `{"type":"stock","symbol":"TCS","note":""}` or `{"type":"mf","code":120503}` -> 201; duplicate -> 409. Adding a stock sets `is_tracked=true, tracked_reason='watchlist'` (if not already tracked for another reason); no backfill in manual mode. `DELETE /watchlist/{id}`: unsets tracked unless portfolio, imported prices or the LRU keep it. `PATCH /watchlist/{id}` updates note (max 500 chars).
 
 ## 12. Portfolio (stocks; mutual fund holdings and the All/Equity/Mutual funds views are in section 12a)
 

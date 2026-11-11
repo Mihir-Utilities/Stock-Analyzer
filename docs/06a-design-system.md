@@ -65,14 +65,14 @@ Breakpoints: 0-639 (mobile), 640-1023 (tablet), 1024-1439 (desktop), 1440+ (wide
 | `FormField` | Label, hint, unit suffix, inline error, accessible description |
 | `Wizard` | Multi-step (upload, validate, preview, commit) with progress |
 | `Timeline` | Corporate actions/events list with markers |
-| `Heatmap` | Calendar or month x year matrix with diverging scale and legend |
+| `Heatmap` | Calendar or month x year matrix with diverging scale and legend. INV (F17, PROPOSED): optional `trailingColumns` (a separated last column with its own scale, for example Year) and `footerRows` (summary rows such as Average, Median, % of years green, Best, Worst, Years; plain numbers, no diverging tint except Average and Median) plus per-cell `marker` text (`MTD`, `YTD`, `partial`) shown as visible text with a tooltip; the scroll region keeps the first and the trailing column pinned |
 
 ## 5. Visualization catalogue (maximum visual coverage; all via `ChartFrame`)
 | Area | Visuals (all with "Show data") |
 |---|---|
 | Stock overview | Price+volume candlestick (mini, 1Y); 52-week RangeBar; performance bar chart (1W..5Y returns, diverging colors); Gauges for trend/risk/quality; Radar of quality components; Sparkline KPIs |
 | Stock chart | Candlestick/line/area, volume, SMA/EMA/Bollinger overlays, RSI/MACD/Stochastic/ADX panes, compare overlay, corporate-action markers, support/resistance bands, log scale |
-| Stock analysis (inside Chart tab, "Analysis" sub-tab) | Drawdown (underwater) chart; rolling volatility line; daily-return histogram with normal overlay; month x year returns heatmap (seasonality); calendar heatmap of daily returns; rolling beta line; return distribution boxplot by month |
+| Stock analysis (inside Chart tab, "Analysis" sub-tab) | Drawdown (underwater) chart; rolling volatility line; daily-return histogram with normal overlay; month x year returns heatmap (seasonality) with a Year (price return) column and summary rows; investment-context cards (price position range bar, drawdown profile table, holding-period table, entry-point table, SIP versus lump table; tables and one range bar only, no new chart types; `06` 6.4a); calendar heatmap of daily returns; rolling beta line; return distribution boxplot by month |
 | Fundamentals | Grouped bars (revenue, EBITDA, net profit) + YoY line; margins lines; EPS bars; P&L waterfall for the latest period (revenue -> costs -> EBITDA -> D&A -> interest -> PBT -> tax -> PAT); stacked balance-sheet composition; cash-flow bars (CFO/CFI/CFF) with FCF line; DuPont-style ROE decomposition bars; valuation band (P/E percentile strip) |
 | Ownership | Stacked bars/area per quarter (promoter/FII/DII-ex-MF/MF/public/govt); pledge line; QoQ diverging bars; small multiples per holder |
 | Peers | Bubble scatter (x=P/E or choice, y=ROE or choice, size=market cap); percentile bars; radar overlay vs peer median; ranked bar chart for a chosen metric |

@@ -913,3 +913,100 @@ Test IDs carry a letter so they cannot be confused with the question numbers MFH
 | MFHW-E3 | F16 review S6: axe on the import wizard | No axe violation on the upload and review steps | E |
 | MFHW-E4 | F16 review S6: keyboard | The switcher works by arrows, Home and End, rapid arrows end on the last view, the URL follows; All's stock sections show stock numbers | E |
 | MFHW-E5 | F16 review S6: 375 px layout | The MF table scrolls inside its own region and its scheme column stays in view | E |
+
+## INV: investment-context analytics (decision INV, PROPOSED; worker B16, web F17; formulas docs/05 section 12, API docs/03 4a and 11, screens docs/06 6.2a and 6.4a)
+
+Worker rows (INV-M, INV-S, INV-P, INV-D, INV-H, INV-E, INV-V, INV-L, INV-R) are U tests in `apps/worker/tests/test_inv_*.py` with the hand-computed vectors of docs/05 section 12 (names VM1, VS1, ... in the Case column); API rows (INV-A, INV-W) are I tests in `apps/api/internal/httpx`; web rows (INV-C, INV-T, INV-U, INV-E) are U/E tests.
+
+| ID | Case | Expected | Type |
+|---|---|---|---|
+| INV-M01 | Month return = month-end close over the previous month-end close (VM1) | 2022-12 +10.00, 2023-01 -10.00, 2023-02 +10.00, 2023-03 -10.00, 2023-04 +10.00, 2023-05..12 0.00, 2024-01 +10.00; the first month (2022-11) has no return | U |
+| INV-M02 | Month after a gap (VM2): no bars in the previous calendar month | The return is `null` (`gap_before`), never `121/110-1`; regression for the old `month_year` pairing of non-adjacent months | U |
+| INV-M03 | Running month (VM1, 2024-02) | Cell is month to date `-10.00` and is identified by `seasonality.running`; it is in no statistic; a month is closed only when a later month has a bar | U |
+| INV-M04 | Year return, full year (VM1, 2023) | `-1.99`, kind `full`, `months_covered` 12, base the December-2022 close, end the December-2023 close | U |
+| INV-M05 | Year return, first year of history (VM1, 2022) | `+10.00`, kind `partial_first`, `months_covered` 1, base = the close of the first (partial) month; labelled partial | U |
+| INV-M06 | Year to date (VM1, 2024) | `-1.00`, kind `ytd`, `months_covered` 2, `end_date` = the last bar; a year becomes `full` only when a bar exists in the next year | U |
+| INV-M07 | Year edge cases | Data starting in December: first-year return `null` (`no_base`); a December without a bar before a later year: `null` (`gap_before`); a single bar: no rows | U |
+| INV-M08 | Chain identity | For every full and partial year `1 + Y/100` equals the product of the covered monthly `1 + r/100` within 1e-9 (property test on random data) | U |
+| INV-M09 | Price basis and suspect rows | Computed from `adj_close` of valid bars only; a suspect row never becomes a month end; no dividends are added | U |
+| INV-M10 | Year column label | The cell header text is `Year (price return)` and its tooltip says dividends are excluded; the words "total return" never appear without the qualifier "excludes dividends" (grep test over `AnalysisTab` and `definitions.ts`) | U |
+| INV-S01 | Seasonality stats (VS1) | Jan: n 2, green 1, share hidden (`too_few_years`), avg 0.00, median 0.00, best +10.00 (2024), worst -10.00 (2023); Dec: n 2, avg 5.00, median 5.00; Nov (flat 0.00): n 1, green 0 | U |
+| INV-S02 | Green means strictly above zero on the unrounded value | A 0.00 month is not green; +0.004% is green and still shows `+0.0%`; -0.004% is not | U |
+| INV-S03 | Share and small-sample flags (VS2) | Month A: n 4, green 2, `green_pct` 50.00, avg 1.50, median 1.50, small; Month B: n 3, `green_pct` 66.67, median 2.0, small; Month C: n 2, share `null` (`too_few_years`) | U |
+| INV-S04 | Best and worst calendar month (VS2) | Best = B (median 2.0), worst = A (1.5); C not eligible; fewer than 2 eligible months: both `null` (`too_few_months`) | U |
+| INV-S05 | Year column summary (VS3) | n 4, green 3, 75.00, avg 7.00, median 8.00, best +20.0 (2021), worst -8.0 (2020); partial first year and YTD excluded | U |
+| INV-S06 | All history, not only the displayed 10 years | A 14-year series: `seasonality.months[*].n_years` counts all years while `month_year` and `year_returns` return the last 10 calendar years | U |
+| INV-S07 | Data depth | `first_bar`, `last_bar`, `years_of_history` correct; a 14-month history has `n_years` of at most 1 per month and no share anywhere | U |
+| INV-S08 | `analysis` stays strict-JSON safe | No NaN/Infinity in any new block; every null scalar has its sibling `*_reason`; the snapshot grows by less than 20 KB and stays under 200 KB (extends RET-89) | U |
+| INV-P01 | Price position vector (VP1) | Range position 80.0 (band `upper`), distance from the 52-week highest close -6.6667, `pctile_52w` 70.0, `pctile_all` 50.0, distance from the highest close in history -30.0, extension over the average 5.0 | U |
+| INV-P02 | Band edges | Position exactly 100/3 is `middle`, just under is `lower`; exactly 200/3 is `upper` | U |
+| INV-P03 | Flat range and short history | High equals low: `null` (`flat_range`); under 252 rows: 52-week values `null` (`insufficient_history`); under 504 rows: `pctile_all` `null`; under 200 bars: extension `null` | U |
+| INV-P04 | Percentile ties | A sample of equal values gives exactly 50.0 for the last value (mid-rank) | U |
+| INV-D01 | Drawdown profile vector (VD1) | Current -4.5455, 1 day since the high, time below a high 61.5385, average depth -11.8182, 4 episodes | U |
+| INV-D02 | Maximum drawdown with dates (VD1) | -20.0, peak 2024-01-01, trough 2024-01-03 (the earlier of two ties), recovery 2024-01-05, recovered true | U |
+| INV-D03 | Recovery time from a 10% and a 20% fall (VD1, minimum lowered to 2) | 10%: episodes 2, recovered 2, open 0, median 3.0 days; 20%: median 2.0 days; crossing date to recovery date, calendar days | U |
+| INV-D04 | Minimum episodes rule | At the default minimum (3 recovered) the same data gives `median_days` `null` (`too_few_episodes`); counts are still returned | U |
+| INV-D05 | Open episode | The open episode is counted in `open` and excluded from the median; `recovered` false for `max_dd` when it never recovered | U |
+| INV-D06 | Float tolerance | `90/100-1` counts as a 10% fall (tolerance 1e-9); 89.99 vs 100 does as well; 90.01 does not | U |
+| INV-D07 | Monotonic series | No drawdown: current 0, `max_dd` depth 0 with null dates, no episodes, medians `null` | U |
+| INV-H01 | Rolling window vector (VH1, w = 2) | windows 4, share positive 75.0, median 16.25, best 20.0 (first end date of the tie), worst -10.0, independent periods 2, small sample true | U |
+| INV-H02 | Window availability | `N <= w`: `null` (`insufficient_history`); windows under 20: `null` (`too_few_windows`); the 3-year row needs 756 rows plus 20 windows | U |
+| INV-H03 | Overlap statement | The UI card prints that windows overlap and shows `independent_periods`; a snapshot test of the card text | U |
+| INV-E01 | Entry-point vector (VE1, X 10, h 2) | Events at rows 3, 7, 12; forward +10.0, +12.5, -10.0; episodes 3, median 10.0, best 12.5, worst -10.0, share positive 66.67, pending 0 | U |
+| INV-E02 | Conditional versus unconditional | `all_windows_median_pct` = -5.0 for VE1 and is shown next to the conditional median | U |
+| INV-E03 | Minimum sample (VE1, X 20) | One episode: statistics `null` (`too_few_episodes`), count shown, no number hidden behind a 0 | U |
+| INV-E04 | Pending forward windows (VE1 cut to 14 rows) | The event at row 12 is counted in `pending`, not in `episodes`; episodes 2, hidden | U |
+| INV-E05 | Non-overlapping rule (VE1, h 5) | The crossing at row 7 inside the first event's window is skipped and not deferred; events at rows 3 and 12 | U |
+| INV-E06 | Fresh crossing only | A stock already below the line at its first defined row has no event there; a day further below an existing breach is not a new event | U |
+| INV-E07 | Strong small-sample copy | Fewer than 10 episodes always renders the sentence "Only {n} past episodes. This is an anecdote about this stock, not a pattern." inside the card (not a tooltip only) | U |
+| INV-V01 | Volatility percentile (VV1) | Sample [12, 18, 15, 18, 25, 18], current 18: 58.3333, band `typical` | U |
+| INV-V02 | Band edges and history | 19.99 `lower`, 20.0 `typical`, 79.99 `typical`, 80.0 `higher`; fewer than 252 volatility values: `null` (`insufficient_history`) | U |
+| INV-V03 | Window is 21 trading rows | The block's values equal `analysis.rolling_vol_21` for the same dates (INV-13) | U |
+| INV-L01 | SIP vs lump vector (VL1, minimum lowered to 4) | Units 45, invested 4000, SIP value 9000, lump value 8000, ratio 1.125, absolute 125.0 and 100.0, worst unrealised -25.0 and -50.0, XIRR `null` (`under_one_year`) | U |
+| INV-L02 | XIRR of the two plans | SIP vector -1000 on 2024-01-05, 02-05, 03-05 and +3300 on 2025-03-05 = 0.09213; lump -4000 on 2024-01-01 and +8000 on 2025-01-01 = 0.99622 (1e-4); uses the section 8.3 solver | U |
+| INV-L03 | Chosen day and skipped instalments | `day = 15` with bars 01-16, 02-15, 03-15, 04-10: instalments 3, skipped 1; execution on the first bar on or after the day | U |
+| INV-L04 | Minimum history | Fewer than 12 instalments: every figure `null` (`history_under_12_months`); exactly 12 are computed | U |
+| INV-L05 | Variants | 29 variants (`day` null and 1..28), each internally consistent; amounts 2 decimals; the amount only scales INR figures, never the percents | U |
+| INV-L06 | Backtest wording | The card shows "A replay of the past with hindsight, not an estimate of the future" and never uses the words "return you will get" | U |
+| INV-R01 | Downside deviation (VR1) | Returns +1, -2, +3, -4 percent: 35.4965 (1e-3); an all-positive window: 0 and the ratio is `null` | U |
+| INV-R02 | Return per downside | CAGR 15.0 over 35.4965 = 0.4226 | U |
+| INV-R03 | Calmar | CAGR 15.0 and maximum drawdown -30.0 = 0.5; maximum drawdown 0: `null` (`no_drawdown`); under 3 years: `null` (`insufficient_history`) | U |
+| INV-R04 | Same window | CAGR and maximum drawdown use the same calendar 3-year window (a series where the 756-row and the calendar window differ proves it) | U |
+| INV-R05 | No Sharpe in the card | The risk card never renders `sharpe_3y` and says nothing about a risk-free rate | U |
+| INV-C01 | Entry context composition | The strip shows four facts in the fixed order with each fact's own as-of; no combined figure; no red/green fill, no arrow icons | U |
+| INV-C02 | Context wording | Bands map to "lower / middle / upper third of its 52-week range" and "quieter than usual / typical / bigger than usual for this stock"; the words buy, sell, cheap, expensive, bullish, bearish, target and signal appear nowhere except in the negative sentence "Context, not advice or a signal." (grep test over the new components) | U |
+| INV-C03 | One fact null | The other three still render; the null one shows an em dash with its reason | U |
+| INV-C04 | Current month in the strip | Uses the IST current month entry of `seasonality`; "so far" month-to-date is separate context and never in the share | U |
+| INV-A01 | Contract: indicators | `GET /stocks/{symbol}/indicators` returns the new blocks; an old snapshot without them still answers 200 and the web shows "Not computed yet" | I |
+| INV-A02 | Contract: field map and types | `openapi.yaml`, `packages/api-types` (`npm run check:generated`) and `docs/field-map.json` agree; every new field is mapped | CI |
+| INV-A03 | No new route | `TestRoutesMatchOpenAPI` passes with no new entry in `routes.go`; `GET /stocks/{symbol}/analysis` stays non-existent | I |
+| INV-A04 | Expansion passes the new blocks through | `prices/expand.go` leaves `year_returns`, `seasonality`, `position`, `drawdown_profile`, `holding_periods`, `entry_study`, `vol_regime`, `sip_backtest` and `risk_adjusted` unchanged and still aligns the old arrays | I |
+| INV-A05 | Snapshot lifecycle | Idempotent per `as_of`; pruning of older snapshots keeps `analysis.seasonality` in the newest one; recompute after a price import, trim and delete | I |
+| INV-A06 | Settings | `INV_*` defaults are read from `app_setting` with the documented fallbacks; a changed `INV_MIN_YEARS` changes `min_years` and `share_shown` | U |
+| INV-W01 | Watchlist seasonality field | Each stock row carries `seasonality` for the current IST month with `n_years`, `n_green`, `green_pct`, `data_since`, `small_sample`, `min_years`, `mtd_*` | I |
+| INV-W02 | Month selection | With a fake clock on 2026-11-11 IST the November entry is returned; at 23:59 IST on 30 November the November entry, at 00:00 on 1 December the December entry, with no recompute | I |
+| INV-W03 | Running month excluded | Today's month never counts in `n_years` even when the snapshot already has bars of it | I |
+| INV-W04 | MTD when the snapshot is from an older month | `mtd_return_pct` `null` with `no_bar_this_month`; the share is still returned | I |
+| INV-W05 | No snapshot | `seasonality` `null` with `seasonality_reason` `no_prices_imported` or `no_history`; the watchlist still answers 200 | I |
+| INV-W06 | Fewer than 3 years | `green_pct` `null` with `too_few_years`; `n_years` and `data_since` still present | I |
+| INV-W07 | Existing fields unchanged | `ltp`, `change_pct`, `price_stale` and the funds list are exactly as before (regression on the existing watchlist tests) | I |
+| INV-W08 | Cost | The watchlist with 50 stocks and full-size snapshots answers within the existing budget (p95 under 500 ms locally); if not, the fallback column of INV-8 is required | I |
+| INV-T01 | Tile ranking | Default sort is `green_pct` descending, then more years, then symbol; the "minimum years" select (3, 5, 8) moves stocks into "Not enough years yet" | U |
+| INV-T02 | Tile text | "{n_green} of {n_years} years green ({pct}%)" and "{n_years} years of this month, history starts {Mon YYYY}"; never "since listing" | U |
+| INV-T03 | Tile month to date | Shown separately with sign and arrow or an em dash with the reason; never inside the share | U |
+| INV-T04 | Tile states | Loading, empty (no watchlist), nothing ranked, partial, stale, error each render with their copy; the tile failing does not blank the Dashboard | U |
+| INV-T05 | Tile small sample | Fewer than 5 years shows the "Small sample" chip and "Only {n} years: a rough guide" | U |
+| INV-T06 | Tile keyboard and a11y | Sort and minimum controls operable by keyboard; `aria-sort` follows the sort; a live region announces the count; axe clean in both themes | E |
+| INV-T07 | Tile mobile | At 375 px one column, no horizontal page scroll, targets at least 44 px | E |
+| INV-T08 | Tile footnote | The footnote text of docs/06 6.2a is always present (`dash-seasonality-note`) | U |
+| INV-U01 | Heatmap Year column | Header `Year (price return)`; the first year suffixed "partial", the running year "YTD"; its own colour scale; every cell prints its value | U |
+| INV-U02 | Heatmap summary rows | Average, Median, % of years green, Best, Worst, Years in that order, from `seasonality`; shares under 3 years show an em dash; footnote with the years and the start month | U |
+| INV-U03 | Running month cell | The running month's cell is outlined and suffixed "MTD" (text, not colour only) with its tooltip | U |
+| INV-U04 | Analysis cards: shared parts | Every INV card has the source/as-of chip, the sample size, the "How to read" disclosure and "Past behaviour is not a forecast." | U |
+| INV-U05 | Cards: states | Each card renders loading, not computed, partial, stale and error; one failing card does not blank the tab | U |
+| INV-U06 | Cards: no verdict | No card renders a score, a rank, a target or the words of INV-C02; null reasons are visible text on mobile | U |
+| INV-U07 | Day selector | The SIP day selector switches variants without a request; keyboard operable; a live region announces the result | U |
+| INV-U08 | Analysis tab axe and 375 px | Axe clean in both themes at 375 and 1440 px; no horizontal page scroll; tables scroll inside labelled regions | E |
+| INV-U09 | Definitions | The ten owner-text keys of docs/05 12.12 exist in `definitions.ts` after `npm run gen:definitions`; `--check` passes; the tooltips contain no ids or section numbers | U |
+| INV-U10 | Heatmap component | `Heatmap` with trailing columns and footer rows keeps the existing callers unchanged (MF detail, calendar) and its scroll region stays focusable | U |
+| INV-Z01 | Safe Edition | No new egress, no new dependency with a forbidden licence; deny-list, SAF-13 and licence scan pass | CI |

@@ -1240,6 +1240,298 @@ export interface components {
             meta?: components["schemas"]["Meta"];
             warnings?: components["schemas"]["Warning"][];
         };
+        /** @description A monthly or yearly return with the calendar year it happened in (percent number). */
+        InvBestWorst: {
+            pct: number;
+            year: number;
+        };
+        /** @description One row of analysis.year_returns (docs/05 12.1): price return of a calendar year in percent (dividends excluded). kind full = December close over the prior December close; partial_first = first year of history from the first month-end close; ytd = running year to the last bar. */
+        InvYearReturn: {
+            year: number;
+            return_pct: number | null;
+            /** @description no_base | gap_before when return_pct is null. */
+            return_pct_reason?: string | null;
+            /** @enum {string} */
+            kind: "full" | "partial_first" | "ytd";
+            months_covered: number;
+            /** Format: date */
+            base_date?: string | null;
+            /** Format: date */
+            end_date?: string | null;
+        };
+        /** @description Statistics of one calendar month over all closed past months with a return (docs/05 12.2). Percent fields are percent numbers; green_pct is null with reason too_few_years below min_years. */
+        InvSeasonalityMonth: {
+            month: number;
+            n_years: number;
+            n_green: number;
+            green_pct: number | null;
+            green_pct_reason?: string | null;
+            avg_pct?: number | null;
+            median_pct?: number | null;
+            best?: components["schemas"]["InvBestWorst"] | null;
+            worst?: components["schemas"]["InvBestWorst"] | null;
+            small_sample: boolean;
+        };
+        /** @description Same statistics over the full calendar years only (the Year column summary). */
+        InvSeasonalityYears: {
+            n: number;
+            n_green: number;
+            green_pct: number | null;
+            green_pct_reason?: string | null;
+            avg_pct?: number | null;
+            median_pct?: number | null;
+            best?: components["schemas"]["InvBestWorst"] | null;
+            worst?: components["schemas"]["InvBestWorst"] | null;
+            small_sample: boolean;
+        };
+        /** @description The running (open) calendar month: month to date, never part of any statistic. */
+        InvSeasonalityRunning: {
+            year: number;
+            month: number;
+            mtd_return_pct: number | null;
+            /** @description no_base | gap_before */
+            mtd_reason?: string | null;
+            /** Format: date */
+            base_date?: string | null;
+            /** Format: date */
+            as_of?: string;
+        };
+        /** @description Best or worst calendar month by median return (needs at least 2 months with 3 or more years). */
+        InvMonthPick: {
+            month: number;
+            median_pct: number;
+            n_years: number;
+        };
+        /** @description analysis.seasonality (docs/05 12.2): month-of-year statistics over all available history (not only the displayed 10 years), the Year column summary and the running month. */
+        InvSeasonality: {
+            /** Format: date */
+            as_of: string;
+            bars: number;
+            /** Format: date */
+            first_bar: string;
+            /** Format: date */
+            last_bar: string;
+            years_of_history?: number;
+            min_years: number;
+            small_sample_years?: number;
+            running: components["schemas"]["InvSeasonalityRunning"];
+            /** @description Always 12 entries, month 1..12. */
+            months: components["schemas"]["InvSeasonalityMonth"][];
+            best_month?: components["schemas"]["InvMonthPick"] | null;
+            worst_month?: components["schemas"]["InvMonthPick"] | null;
+            /** @description too_few_months when best_month and worst_month are null. */
+            best_worst_reason?: string | null;
+            years: components["schemas"]["InvSeasonalityYears"];
+        };
+        /** @description analysis.position (docs/05 12.3). Close-based; percent numbers; percentiles 0-100. Nulls carry a sibling *_reason. */
+        InvPricePosition: {
+            /** Format: date */
+            as_of: string;
+            bars: number;
+            close: number;
+            high_52w_close?: number | null;
+            low_52w_close?: number | null;
+            range_pos_52w_pct?: number | null;
+            range_pos_52w_reason?: string | null;
+            /** @enum {string|null} */
+            range_band?: "lower" | "middle" | "upper" | null;
+            dist_high_52w_pct?: number | null;
+            dist_high_all_pct?: number | null;
+            /** Format: date */
+            high_all_date?: string | null;
+            /** Format: date */
+            history_first_date?: string;
+            pctile_52w?: number | null;
+            pctile_52w_reason?: string | null;
+            pctile_all?: number | null;
+            pctile_all_reason?: string | null;
+            pctile_all_n?: number;
+            sma200?: number | null;
+            ext_sma200_pct?: number | null;
+            ext_sma200_reason?: string | null;
+        };
+        /** @description analysis.drawdown_profile (docs/05 12.4) over the full available history. Percent numbers (drawdowns are 0 or negative). */
+        InvDrawdownProfile: {
+            /** Format: date */
+            as_of: string;
+            bars: number;
+            /** Format: date */
+            first_date?: string;
+            current_dd_pct: number;
+            days_since_high?: number;
+            max_dd: {
+                depth_pct: number;
+                /** Format: date */
+                peak_date?: string | null;
+                /** Format: date */
+                trough_date?: string | null;
+                /** Format: date */
+                recovery_date?: string | null;
+                recovered: boolean;
+            };
+            underwater_rows?: number;
+            time_under_water_pct?: number;
+            avg_underwater_depth_pct?: number | null;
+            episodes_total?: number;
+            /** @description Thresholds 10 and 20. */
+            recovery: {
+                threshold_pct: number;
+                episodes: number;
+                recovered: number;
+                open: number;
+                median_days: number | null;
+                median_days_reason?: string | null;
+                small_sample: boolean;
+            }[];
+        };
+        /** @description analysis.holding_periods (docs/05 12.5): rolling cumulative returns (not per year) over 1m, 3m, 6m, 1y, 3y trading-row windows. Windows overlap. */
+        InvHoldingPeriods: {
+            /** Format: date */
+            as_of: string;
+            bars: number;
+            windows: {
+                /** @enum {string} */
+                key: "1m" | "3m" | "6m" | "1y" | "3y";
+                rows: number;
+                windows: number;
+                independent_periods: number;
+                share_positive_pct?: number | null;
+                median_pct?: number | null;
+                best_pct?: number | null;
+                /** Format: date */
+                best_end_date?: string | null;
+                worst_pct?: number | null;
+                /** Format: date */
+                worst_end_date?: string | null;
+                /** @description insufficient_history | too_few_windows */
+                reason?: string | null;
+                small_sample: boolean;
+            }[];
+        };
+        /** @description analysis.entry_study (docs/05 12.6): forward 3 and 6 month returns after a fresh close 10 or 20 percent below the 52-week highest close. Past episodes only; hidden (null with reason) below 3 episodes. */
+        InvEntryStudy: {
+            /** Format: date */
+            as_of: string;
+            bars: number;
+            w52_rows?: number;
+            /** @description Four rows: drawdown_pct 10 and 20, horizon 3m and 6m. */
+            rows: {
+                drawdown_pct: number;
+                /** @enum {string} */
+                horizon: "3m" | "6m";
+                horizon_rows?: number;
+                episodes: number;
+                pending: number;
+                median_pct?: number | null;
+                worst_pct?: number | null;
+                best_pct?: number | null;
+                share_positive_pct?: number | null;
+                all_windows_median_pct?: number | null;
+                /** Format: date */
+                last_event_date?: string | null;
+                /** @description too_few_episodes | insufficient_history */
+                reason?: string | null;
+                small_sample: boolean;
+            }[];
+        };
+        /** @description analysis.vol_regime (docs/05 12.7): the current 21-row volatility against the stock's own history. Describes size of swings, not direction. */
+        InvVolRegime: {
+            /** Format: date */
+            as_of: string;
+            window_rows: number;
+            current_vol_pct?: number | null;
+            percentile?: number | null;
+            sample: number;
+            /** @enum {string|null} */
+            band?: "lower" | "typical" | "higher" | null;
+            /** Format: date */
+            first_date?: string | null;
+            reason?: string | null;
+        };
+        /** @description One SIP versus lump sum backtest (docs/05 12.8) for a day rule. day null = first trading day; 1..28 = day of month. INR figures are hypothetical, 2 decimals. */
+        InvSipVariant: {
+            day: number | null;
+            installments: number;
+            skipped: number;
+            /** Format: date */
+            first_date?: string | null;
+            /** Format: date */
+            last_date?: string | null;
+            span_days?: number | null;
+            invested_inr?: number | null;
+            sip_value_inr?: number | null;
+            lump_value_inr?: number | null;
+            value_ratio?: number | null;
+            sip_absolute_return_pct?: number | null;
+            lump_absolute_return_pct?: number | null;
+            sip_xirr_pct?: number | null;
+            lump_xirr_pct?: number | null;
+            /** @description under_one_year | no_sign_change | insufficient_flows */
+            xirr_reason?: string | null;
+            sip_worst_unrealised_pct?: number | null;
+            lump_worst_unrealised_pct?: number | null;
+            /** @description history_under_12_months nulls every figure. */
+            reason?: string | null;
+        };
+        /** @description analysis.sip_backtest: 29 variants (day null and 1..28), fixed INR 1,000 per instalment. A backtest on past prices with hindsight, not an estimate. */
+        InvSipBacktest: {
+            /** Format: date */
+            as_of: string;
+            amount_per_month_inr: number;
+            price_basis?: string;
+            variants: components["schemas"]["InvSipVariant"][];
+        };
+        /** @description analysis.risk_adjusted (docs/05 12.9): Calmar-style ratio and downside-deviation ratio over the calendar 3-year window. No risk-free rate, no Sharpe. */
+        InvRiskAdjusted: {
+            /** Format: date */
+            as_of: string;
+            /** @enum {string} */
+            window: "3y";
+            cagr_3y_pct?: number | null;
+            maxdd_3y_window_pct?: number | null;
+            calmar_3y?: number | null;
+            /** @description insufficient_history | no_drawdown */
+            calmar_3y_reason?: string | null;
+            downside_dev_3y_pct?: number | null;
+            return_per_downside_3y?: number | null;
+            downside_reason?: string | null;
+        };
+        /** @description The investment-context additions to GET /stocks/{symbol}/indicators data.analysis (docs/03 4a, docs/05 section 12). All optional: an older snapshot lacks them. month_year keeps its [year, month, percent|null] shape. */
+        InvAnalysisBlocks: {
+            year_returns?: components["schemas"]["InvYearReturn"][];
+            seasonality?: components["schemas"]["InvSeasonality"];
+            position?: components["schemas"]["InvPricePosition"];
+            drawdown_profile?: components["schemas"]["InvDrawdownProfile"];
+            holding_periods?: components["schemas"]["InvHoldingPeriods"];
+            entry_study?: components["schemas"]["InvEntryStudy"];
+            vol_regime?: components["schemas"]["InvVolRegime"];
+            sip_backtest?: components["schemas"]["InvSipBacktest"];
+            risk_adjusted?: components["schemas"]["InvRiskAdjusted"];
+        };
+        /** @description stocks[].seasonality of GET /watchlist (docs/03 section 11): the current IST calendar month across past years. green_pct is a percent number; the running month is never counted; data_since is the first imported bar, not the listing date. */
+        WatchlistSeasonality: {
+            month: number;
+            month_name?: string;
+            /** Format: date */
+            as_of: string;
+            /** Format: date */
+            data_since: string;
+            years_of_history?: number;
+            n_years: number;
+            n_green: number;
+            green_pct: number | null;
+            /** @description too_few_years */
+            green_pct_reason?: string | null;
+            small_sample: boolean;
+            min_years: number;
+            avg_pct?: number | null;
+            median_pct?: number | null;
+            mtd_return_pct?: number | null;
+            /** @description no_bar_this_month | no_base | gap_before */
+            mtd_reason?: string | null;
+            /** Format: date */
+            mtd_as_of?: string | null;
+        };
         FieldError: {
             field: string;
             message: string;
@@ -2443,7 +2735,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success. Latest analysis_snapshot: returns, technicals, scores, null_reasons, units and series/analysis arrays as [[date, value]] pairs (nulls at warm-up positions, last 750 rows). 404 DATA_UNAVAILABLE reason no_prices_imported or no_history (fewer than 60 valid bars or snapshot not computed yet). An alias answers data = {redirect_symbol}. */
+            /** @description Success. Latest analysis_snapshot: returns, technicals, scores, null_reasons, units and series/analysis arrays as [[date, value]] pairs (nulls at warm-up positions, last 750 rows). 404 DATA_UNAVAILABLE reason no_prices_imported or no_history (fewer than 60 valid bars or snapshot not computed yet). An alias answers data = {redirect_symbol}. INV (proposed, B16): data.analysis also carries the optional investment-context blocks year_returns, seasonality, position, drawdown_profile, holding_periods, entry_study, vol_regime, sip_backtest and risk_adjusted (schema InvAnalysisBlocks, docs/03 4a, docs/05 section 12); month_year keeps its shape. There is no GET /stocks/{symbol}/analysis route. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3441,7 +3733,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success */
+            /** @description Success. INV (proposed, B16): each stocks[] row also carries seasonality (schema WatchlistSeasonality) for the current IST calendar month, or null with seasonality_reason (no_prices_imported | no_history). */
             200: {
                 headers: {
                     [name: string]: unknown;
