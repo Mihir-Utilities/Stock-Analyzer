@@ -53,6 +53,7 @@
     "warnings": "warning-*",
     "series": "chart-main",
     "analysis": "chart-drawdown",
+    "analysis.month_year_reasons": "conditional:heatmap-month-year|built by F17 after B16 (INV, docs/06 6.4a); the Analysis tab does not render it yet",
     "analysis.year_returns": "conditional:heatmap-year-col|built by F17 after B16 (INV, docs/06 6.4a); the Analysis tab does not render it yet",
     "analysis.year_returns[].return_pct": "conditional:heatmap-year-col|built by F17 after B16 (INV, docs/06 6.4a); the Analysis tab does not render it yet",
     "analysis.year_returns[].return_pct_reason": "conditional:heatmap-year-col|built by F17 after B16 (INV, docs/06 6.4a); the Analysis tab does not render it yet",

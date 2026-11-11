@@ -1249,7 +1249,7 @@ export interface components {
         InvYearReturn: {
             year: number;
             return_pct: number | null;
-            /** @description no_base | gap_before when return_pct is null. */
+            /** @description no_base | gap_before | incomplete_month_data when return_pct is null. */
             return_pct_reason?: string | null;
             /** @enum {string} */
             kind: "full" | "partial_first" | "ytd";
@@ -1289,7 +1289,7 @@ export interface components {
             year: number;
             month: number;
             mtd_return_pct: number | null;
-            /** @description no_base | gap_before */
+            /** @description no_bar_this_month | no_base | gap_before */
             mtd_reason?: string | null;
             /** Format: date */
             base_date?: string | null;
@@ -1496,8 +1496,9 @@ export interface components {
             return_per_downside_3y?: number | null;
             downside_reason?: string | null;
         };
-        /** @description The investment-context additions to GET /stocks/{symbol}/indicators data.analysis (docs/03 4a, docs/05 section 12). All optional: an older snapshot lacks them. month_year keeps its [year, month, percent|null] shape. */
+        /** @description The investment-context additions to GET /stocks/{symbol}/indicators data.analysis (docs/03 4a, docs/05 section 12). All optional: an older snapshot lacks them. month_year keeps its [year, month, percent|null] shape; a null cell has its reason in month_year_reasons ([year, month, no_base|gap_before|incomplete_month_data]). A month is closed when today's IST date is after its last day; a closed month whose prices do not reach its last expected trading day is null (incomplete_month_data) (D-INV). */
         InvAnalysisBlocks: {
+            month_year_reasons?: unknown[][];
             year_returns?: components["schemas"]["InvYearReturn"][];
             seasonality?: components["schemas"]["InvSeasonality"];
             position?: components["schemas"]["InvPricePosition"];

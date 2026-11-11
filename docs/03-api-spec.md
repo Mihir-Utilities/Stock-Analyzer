@@ -111,7 +111,8 @@ There is **no new route**. The request named `GET /stocks/{symbol}/analysis`; no
 ```json
 "analysis": {
   "...existing arrays unchanged (drawdown, rolling_vol_21/63, rolling_beta_252, return_histogram, calendar)": "",
-  "month_year": [[2023, 1, -10.0], [2024, 2, -10.0]],
+  "month_year": [[2023, 1, -10.0], [2023, 2, null], [2024, 2, -10.0]],
+  "month_year_reasons": [[2023, 2, "incomplete_month_data"]],
   "year_returns": [
     { "year": 2022, "return_pct": 10.0, "return_pct_reason": null, "kind": "partial_first", "months_covered": 1, "base_date": "2022-11-30", "end_date": "2022-12-30" },
     { "year": 2023, "return_pct": -1.99, "return_pct_reason": null, "kind": "full", "months_covered": 12, "base_date": "2022-12-30", "end_date": "2023-12-29" },
@@ -170,7 +171,7 @@ There is **no new route**. The request named `GET /stocks/{symbol}/analysis`; no
 ```
 
 Rules.
-- `month_year` keeps its shape `[year, month, pct|null]` (last 10 calendar years, `HEATMAP_YEARS`); changes: a month whose previous calendar month has no bar is `null` (not paired across the gap, INV-4); the running month's cell is the month-to-date value and is identified by `seasonality.running` (the web marks it; it is excluded from every statistic).
+- `month_year` keeps its shape `[year, month, pct|null]` (last 10 calendar years, `HEATMAP_YEARS`); changes: a month whose previous calendar month has no bar is `null` (not paired across the gap, INV-4); a closed month whose imported prices do not reach its last expected trading day is `null` too (`incomplete_month_data`, D-INV), and every null cell has its reason in `month_year_reasons` (`[year, month, reason]`: `no_base`, `gap_before`, `incomplete_month_data`); a month is closed when today's IST date is after its last calendar day (not when a later bar exists), the running calendar month's cell is the month-to-date value and is identified by `seasonality.running` (the web marks it; it is excluded from every statistic).
 - `year_returns` rows are for the same displayed years, ascending; `kind` is `full | partial_first | ytd`.
 - `seasonality.months` always has 12 entries (`month` 1..12); `seasonality` and `years` statistics use **all** available history, not only the displayed 10 years (INV-3), and `years` is the year-column summary over full years. A month with no data has `n_years` 0 and null statistics with `green_pct_reason: "too_few_years"`.
 - `sip_backtest.variants` has 29 entries: `day: null` (first trading day) and `day: 1..28`; `reason` `history_under_12_months` nulls every figure of a variant. INR figures are hypothetical, 2 decimals, JSON numbers.

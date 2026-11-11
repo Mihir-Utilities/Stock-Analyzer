@@ -3589,7 +3589,7 @@ components:
         return_pct_reason:
           type: "string"
           nullable: true
-          description: "no_base | gap_before when return_pct is null."
+          description: "no_base | gap_before | incomplete_month_data when return_pct is null."
         kind:
           type: "string"
           enum:
@@ -3700,7 +3700,7 @@ components:
         mtd_reason:
           type: "string"
           nullable: true
-          description: "no_base | gap_before"
+          description: "no_bar_this_month | no_base | gap_before"
         base_date:
           type: "string"
           format: "date"
@@ -4216,8 +4216,14 @@ components:
         - "window"
     InvAnalysisBlocks:
       type: "object"
-      description: "The investment-context additions to GET /stocks/{symbol}/indicators data.analysis (docs/03 4a, docs/05 section 12). All optional: an older snapshot lacks them. month_year keeps its [year, month, percent|null] shape."
+      description: "The investment-context additions to GET /stocks/{symbol}/indicators data.analysis (docs/03 4a, docs/05 section 12). All optional: an older snapshot lacks them. month_year keeps its [year, month, percent|null] shape; a null cell has its reason in month_year_reasons ([year, month, no_base|gap_before|incomplete_month_data]). A month is closed when today's IST date is after its last day; a closed month whose prices do not reach its last expected trading day is null (incomplete_month_data) (D-INV)."
       properties:
+        month_year_reasons:
+          type: "array"
+          items:
+            type: "array"
+            description: "[year, month, reason]"
+            items: {}
         year_returns:
           type: "array"
           items:
