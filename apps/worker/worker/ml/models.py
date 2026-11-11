@@ -15,7 +15,7 @@ import lightgbm as lgb
 import numpy as np
 from numpy.typing import NDArray
 
-from worker.ml.calibration import Isotonic, apply_band
+from worker.ml.calibration import Isotonic, apply_band, clip_prob
 
 F64 = NDArray[np.float64]
 
@@ -113,8 +113,7 @@ class HorizonModel:
     meta: dict[str, Any] = field(default_factory=dict)
 
     def p_up(self, x: F64) -> F64:
-        clipped: F64 = np.clip(self.iso.predict(predict_booster(self.clf, x)), 0.0, 1.0)
-        return clipped
+        return clip_prob(self.iso.predict(predict_booster(self.clf, x)))
 
     def z_band(self, x: F64) -> F64:
         """Columns ``[q10, q50, q90]`` of the volatility-scaled target, sorted (ML-10) and
@@ -181,8 +180,7 @@ class ScoringModel:
         )
 
     def p_up(self, x: F64) -> F64:
-        clipped: F64 = np.clip(self.iso.predict(predict_booster(self.clf, x)), 0.0, 1.0)
-        return clipped
+        return clip_prob(self.iso.predict(predict_booster(self.clf, x)))
 
     def z_band(self, x: F64) -> F64:
         raw = np.column_stack([predict_booster(b, x) for b in self.quantile])

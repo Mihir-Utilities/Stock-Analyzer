@@ -4,8 +4,14 @@ and the worker-http handler for ``post_import``. Imported by ``__main__`` and ``
 
 from __future__ import annotations
 
+import asyncio
+import logging
+
+import asyncpg
+
 from worker import actions_db, alerts_db, analysis_db, backup, housekeeping, jobs, mf_jobs
 from worker.db import create_pool
+from worker.logs import scrub
 from worker.ml import jobs as ml_jobs
 from worker.notify import TelegramNotifier
 from worker.post_import import (
@@ -15,6 +21,8 @@ from worker.post_import import (
     process_queued_work,
 )
 from worker.runner import JobContext, JobSpec
+
+log = logging.getLogger("worker.job_defs")
 
 DETECT_TIMEOUT_S = 10 * 60
 READJUST_TIMEOUT_S = 10 * 60
@@ -67,6 +75,28 @@ async def readjust_prices_job(ctx: JobContext) -> None:
         await pool.close()
 
 
+async def _predict_after_queue(pool: asyncpg.Pool, ctx: JobContext) -> None:
+    try:
+        if not await ml_jobs.has_models(pool):
+            ctx.extra["predict"] = {"status": "skipped", "reason": "no_model"}
+            return
+        if not await ml_jobs.has_new_bar(pool):
+            ctx.extra["predict"] = {"status": "skipped", "reason": "no_new_bar"}
+            return
+        sub = JobContext(job="predict", dry_run=ctx.dry_run, deadline=ctx.deadline, clock=ctx.clock)
+        await ml_jobs.run_predict(pool, sub)
+        ctx.add_rows(sub.rows_written)
+        ctx.extra["predict"] = sub.extra
+    except asyncio.CancelledError:
+        raise  # cancellation (runner timeout, shutdown) must reach the runner
+    except Exception as exc:
+        log.exception("predict after process_queued_jobs failed")
+        ctx.extra["predict"] = {
+            "status": "error",
+            "error": scrub(f"{type(exc).__name__}: {exc}"),
+        }
+
+
 async def process_queued_jobs_job(ctx: JobContext) -> None:
     pool = await create_pool()
     hooks = analysis_db.production_hooks(pool)
@@ -78,12 +108,9 @@ async def process_queued_jobs_job(ctx: JobContext) -> None:
             hooks=hooks,
         )
         ctx.extra["jobs"] = summaries
-        # docs/04 3.13: `predict` runs here once models exist (Phase 7, deferred by D-4).
-        try:
-            if await ml_jobs.has_models(pool):
-                await ml_jobs.run_predict(pool, ctx)
-        except Exception as exc:  # a prediction failure never fails the queue run
-            ctx.extra["predict_error"] = f"{type(exc).__name__}"
+        # docs/04 3.13: `predict` runs here once models exist and a new bar has arrived. Its
+        # result lives under ctx.extra["predict"]; a failure never fails the queue run.
+        await _predict_after_queue(pool, ctx)
     finally:
         await pool.close()
 

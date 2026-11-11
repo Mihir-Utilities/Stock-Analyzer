@@ -71,30 +71,60 @@ def test_rank_of_a_single_stock_is_dropped_not_invented() -> None:
     assert math.isnan(r[0]) and np.allclose(r[1:], [0.5, 1.0])
 
 
-# ML-02
-def test_ml02_labels_use_the_stocks_own_rows_across_holidays() -> None:
+# ML-02 (decision D07-19: a horizon is exactly h trading days; otherwise the label is NaN)
+def test_ml02_labels_are_exactly_h_trading_days_across_holidays_and_gaps() -> None:
     rng = np.random.default_rng(5)
-    all_days = weekdays(620)
-    gap_days = {all_days[300], all_days[301], all_days[302], all_days[450]}
+    holidays = frozenset({date(2018, 8, 15), date(2018, 10, 2), date(2019, 1, 26)})  # weekdays
+    all_days = weekdays(620, skip=set(holidays))  # the exchange calendar for this test
+    gap_days = {all_days[300], all_days[301], all_days[302], all_days[450]}  # this stock has no bar
     own_days = [d for d in all_days if d not in gap_days]
     full = StockInput("FULL", make_bars(all_days, rng))
     gappy = StockInput("GAPPY", make_bars(own_days, rng))
-    panel = build_panel([full, gappy], MarketInput(), horizons=(5, 21))
+    panel = build_panel([full, gappy], MarketInput(), horizons=(5, 21), holidays=holidays)
+    all_pos = {d: i for i, d in enumerate(all_days)}
+    own_pos = {d: i for i, d in enumerate(own_days)}
+    c = gappy.bars.adj_close
+    shifted = nan_labels = exact = 0
     for h in (5, 21):
-        for i in (260, 299, 440, 445):  # windows that do and do not cross the gap
+        for i in range(260, 440):
             pos = _row(panel, "GAPPY", i)
-            expect_date = gappy.bars.dates[i + h]
-            assert panel.calendar[int(panel.label_end[h][pos])] == expect_date
-            c = gappy.bars.adj_close
-            assert panel.y_ret[h][pos] == pytest.approx(math.log(c[i + h] / c[i]))
-    # the same row offset in calendar days differs from the row offset: the gap shifts the date
-    pos = _row(panel, "GAPPY", 299)
-    assert (gappy.bars.dates[299 + 5] - gappy.bars.dates[299]).days > 7
+            target = all_pos[own_days[i]] + h  # h trading days later on the exchange calendar
+            target_day = all_days[target]
+            if target_day in own_pos:  # the bar exists: exactly h trading days, not h rows
+                j = own_pos[target_day]
+                assert panel.labeled(h)[pos]
+                assert panel.calendar[int(panel.label_end[h][pos])] == target_day
+                assert panel.y_ret[h][pos] == pytest.approx(math.log(c[j] / c[i]))
+                exact += 1
+                shifted += int(j - i != h)  # the row offset differs from h: a gap was crossed
+            else:  # the target day is a gap in this stock's data: the label is NaN
+                assert not panel.labeled(h)[pos]
+                assert math.isnan(panel.y_ret[h][pos]) and panel.label_end[h][pos] == -1
+                nan_labels += 1
+    assert shifted > 0 and nan_labels > 0 and exact > 0  # the test exercises every branch
+    # FULL has every trading day: row + 5 is exactly 5 trading days later
+    full_c = full.bars.adj_close
+    pos = _row(panel, "FULL", 310)
+    assert panel.y_ret[5][pos] == pytest.approx(math.log(full_c[315] / full_c[310]))
     # the last h rows of a stock have no label
     last = _row(panel, "FULL", 619)
     assert not panel.labeled(5)[last]
     assert not panel.labeled(5)[_row(panel, "FULL", 615)]
     assert panel.labeled(5)[_row(panel, "FULL", 614)]
+
+
+def test_ml02_a_bar_that_is_not_a_trading_day_has_no_label() -> None:
+    rng = np.random.default_rng(6)
+    days = weekdays(400)
+    special = days[300]  # an exchange holiday on which this stock still has a (special-session) bar
+    stock = StockInput("S", make_bars(days, rng))
+    other = StockInput("T", make_bars(days, rng))  # ranks need two stocks per date (ML-13)
+    panel = build_panel([stock, other], MarketInput(), horizons=(5,), holidays=frozenset({special}))
+    assert not panel.labeled(5)[_row(panel, "S", 300)]
+    assert panel.labeled(5)[_row(panel, "S", 299)]
+    # the window of row 299 skips the holiday, so its end is 5 trading days after = row 305
+    pos = _row(panel, "S", 299)
+    assert panel.calendar[int(panel.label_end[5][pos])] == days[305]
 
 
 def test_label_direction_is_strictly_positive_return() -> None:
