@@ -114,7 +114,7 @@ describe("PF-01/PF-09 summary, honesty and warnings", () => {
       },
       returns: {
         xirr_pct: null,
-        xirr_reason: "period_too_short",
+        xirr_reason: "under_one_year",
         absolute_return_pct: null,
         absolute_return_basis: "open_holdings",
       },
@@ -140,7 +140,7 @@ describe("PF-01/PF-09 summary, honesty and warnings", () => {
       .getAllByTestId("stat-null")
       .map((n) => n.textContent ?? "");
     expect(nulls.some((t) => /no valid close has been imported/.test(t))).toBe(true);
-    expect(nulls.some((t) => /period is under 30 days/.test(t))).toBe(true);
+    expect(nulls.some((t) => /XIRR is shown after the first year/.test(t))).toBe(true);
     expect(nulls.some((t) => /no Nifty 50 series/.test(t))).toBe(true);
     expect(card.textContent).not.toMatch(/NaN|Infinity/);
     expect(screen.getByTestId("pf-warning-MISSING_PRICE")).toBeInTheDocument();

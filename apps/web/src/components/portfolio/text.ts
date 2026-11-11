@@ -28,6 +28,7 @@ const REASONS: Record<string, string> = {
   no_purchases: "there is no purchase to compare with",
   no_open_holdings: "there are no open holdings",
   not_defined_for_view: "not defined for this view",
+  "n/m": "not meaningful: the cost base is zero",
   unreadable: "the server answer for this figure could not be read",
 };
 

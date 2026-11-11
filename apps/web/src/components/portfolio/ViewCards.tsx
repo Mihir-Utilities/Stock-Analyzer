@@ -376,6 +376,13 @@ export function ViewCards({ s, read, view, asOf, stale, staleNavDate }: ViewCard
             </div>
           ) : null}
         </div>
+        {t.unrealized_pct === null || t.unrealized_pct === undefined ? (
+          t.unrealized_pct_reason ? (
+            <p className="mt-3 text-caption text-text-2" data-testid="pf-unrealized-pct-reason">
+              Unrealized %: {DASH} {reasonText(t.unrealized_pct_reason) ?? t.unrealized_pct_reason}
+            </p>
+          ) : null
+        ) : null}
         {total !== null && total !== undefined ? (
           <p className="mt-3 text-caption text-text-2" data-testid="pf-card-total-pnl">
             For reference only, unrealized + realized{hasMf ? " + IDCW income" : ""} added up:{" "}

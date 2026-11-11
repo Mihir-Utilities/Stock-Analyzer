@@ -26,7 +26,10 @@ const schemes = [mfHoldingSchema.parse(fx.alphaGrowth), mfHoldingSchema.parse(fx
 
 function mount(routes: Record<string, Handler> = {}) {
   const mock = createMockFetch({
-    "GET /portfolio/mf/txns": pf.envelope({ items: [fx.mfTxn, fx.mfTxnImported], next_cursor: null }),
+    "GET /portfolio/mf/txns": pf.envelope({
+      items: [fx.mfTxn, fx.mfTxnImported],
+      next_cursor: null,
+    }),
     "GET /portfolio/mf/fund-mappings": pf.envelope({ items: [fx.mfMapping] }),
     "GET /mf/schemes": pf.envelope(fx.mfSchemeSearch),
     "GET /market/holidays": pf.envelope({ year_loaded: false, items: [] }),
@@ -57,13 +60,22 @@ async function pickScheme(user: ReturnType<typeof userEvent.setup>) {
 
 async function fill(
   user: ReturnType<typeof userEvent.setup>,
-  v: { type?: string; units?: string; nav?: string; amount?: string; stamp?: string; date?: string } = {},
+  v: {
+    type?: string;
+    units?: string;
+    nav?: string;
+    amount?: string;
+    stamp?: string;
+    date?: string;
+  } = {},
 ) {
   await user.click(await screen.findByTestId("pf-mf-txn-add"));
   await pickScheme(user);
   await user.type(screen.getByTestId("pf-mf-txn-folio"), "TEST-F1");
   if (v.type) await user.selectOptions(screen.getByTestId("pf-mf-txn-type"), v.type);
-  fireEvent.change(screen.getByTestId("pf-mf-txn-date"), { target: { value: v.date ?? "2026-09-04" } });
+  fireEvent.change(screen.getByTestId("pf-mf-txn-date"), {
+    target: { value: v.date ?? "2026-09-04" },
+  });
   await user.type(screen.getByTestId("pf-mf-txn-units"), v.units ?? "12.3450");
   await user.type(screen.getByTestId("pf-mf-txn-nav"), v.nav ?? "81");
   await user.type(screen.getByTestId("pf-mf-txn-amount"), v.amount ?? "999.9500");
@@ -130,8 +142,8 @@ describe("MFH-U75 add form", () => {
     const user = userEvent.setup();
     mount();
     await user.click(await screen.findByTestId("pf-mf-txn-add"));
-    const options = [...screen.getByTestId("pf-mf-txn-type").querySelectorAll("option")].map(
-      (o) => o.getAttribute("value"),
+    const options = [...screen.getByTestId("pf-mf-txn-type").querySelectorAll("option")].map((o) =>
+      o.getAttribute("value"),
     );
     expect(options).toEqual(["purchase", "sip", "redemption", "idcw_payout", "idcw_reinvest"]);
     expect(screen.getByTestId("pf-mf-txn-help")).toHaveTextContent(
@@ -155,10 +167,14 @@ describe("MFH-U75 add form", () => {
   it("sends amounts as exact strings with an Idempotency-Key and shows server warnings inline", async () => {
     const user = userEvent.setup();
     const mock = mount({
-      "POST /portfolio/mf/txns": pf.envelope(fx.mfTxn, [
-        { code: "AMOUNT_MISMATCH", message: "amount differs from units x NAV by 1.20" },
-        { code: "DUPLICATE_LOOKING_TXN", message: "a transaction like this already exists" },
-      ], 201),
+      "POST /portfolio/mf/txns": pf.envelope(
+        fx.mfTxn,
+        [
+          { code: "AMOUNT_MISMATCH", message: "amount differs from units x NAV by 1.20" },
+          { code: "DUPLICATE_LOOKING_TXN", message: "a transaction like this already exists" },
+        ],
+        201,
+      ),
     });
     await fill(user, { stamp: "0.05" });
     expect(screen.getByTestId("pf-mf-txn-product")).toHaveTextContent("₹999.95"); // 12.345 x 81, a check only
@@ -180,7 +196,7 @@ describe("MFH-U75 add form", () => {
     expect(call.headers.get("Idempotency-Key")).toMatch(/^[0-9a-f-]{36}$/);
     expect(call.headers.get("X-Requested-With")).toBe("fetch");
     // the form stays for the next entry with the scheme and folio kept
-    expect(screen.getByTestId("pf-mf-txn-folio")).toHaveValue("TEST-F1");
+    expect((screen.getByTestId("pf-mf-txn-folio") as HTMLInputElement).value).toBe("TEST-F1");
   });
 
   it("client checks name the field before any request is sent", async () => {
@@ -205,7 +221,12 @@ describe("MFH-U75 add form", () => {
           error: {
             code: "INSUFFICIENT_UNITS",
             message: "redemption exceeds the units held",
-            details: { transaction_id: 0, date: "2026-09-04", held_units: "5.0000", redeem_units: "12.3450" },
+            details: {
+              transaction_id: 0,
+              date: "2026-09-04",
+              held_units: "5.0000",
+              redeem_units: "12.3450",
+            },
           },
         },
       },
@@ -223,7 +244,13 @@ describe("MFH-U75 add form", () => {
     mount({
       "POST /portfolio/mf/txns": {
         status: 422,
-        body: { error: { code: "MF_TXN_TYPE_NOT_SUPPORTED", message: "this transaction type is not supported", details: {} } },
+        body: {
+          error: {
+            code: "MF_TXN_TYPE_NOT_SUPPORTED",
+            message: "this transaction type is not supported",
+            details: {},
+          },
+        },
       },
     });
     await fill(user);
@@ -239,11 +266,14 @@ describe("MFH-U75 add form", () => {
     const mock = mount({
       "POST /portfolio/mf/txns": () => {
         n += 1;
-        if (n === 1) return { status: 500, body: { error: { code: "INTERNAL", message: "server error" } } };
+        if (n === 1)
+          return { status: 500, body: { error: { code: "INTERNAL", message: "server error" } } };
         if (n === 2) return pf.envelope(fx.mfTxn, [], 201);
         return {
           status: 409,
-          body: { error: { code: "CONFLICT", message: "idempotency key reused with a different request" } },
+          body: {
+            error: { code: "CONFLICT", message: "idempotency key reused with a different request" },
+          },
         };
       },
     });
@@ -301,7 +331,9 @@ describe("MFH-U75 add form", () => {
 describe("MFH-U75 edit and delete", () => {
   it("edit sends only the changed fields, never the scheme, and says the sequence was re-checked", async () => {
     const user = userEvent.setup();
-    const mock = mount({ "PATCH /portfolio/mf/txns/501": pf.envelope({ ...fx.mfTxn, units: "13.0000" }) });
+    const mock = mount({
+      "PATCH /portfolio/mf/txns/501": pf.envelope({ ...fx.mfTxn, units: "13.0000" }),
+    });
     await user.click(await screen.findByTestId("pf-mf-txn-edit-501"));
     expect(screen.getByTestId("pf-mf-txn-scheme")).toHaveTextContent("cannot be changed");
     expect(screen.getByTestId("pf-mf-txn-save")).toBeDisabled(); // nothing changed yet
@@ -312,7 +344,9 @@ describe("MFH-U75 edit and delete", () => {
     await waitFor(() => expect(mock.calls.some((c) => c.method === "PATCH")).toBe(true));
     const patch = mock.calls.find((c) => c.method === "PATCH")!;
     expect(patch.body).toEqual({ units: "13" });
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId("pf-mf-txn-edit-501")));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByTestId("pf-mf-txn-edit-501")),
+    );
   });
 
   it("an edit that would oversell later shows INSUFFICIENT_UNITS from the server", async () => {
@@ -333,7 +367,9 @@ describe("MFH-U75 edit and delete", () => {
     await user.clear(screen.getByTestId("pf-mf-txn-units"));
     await user.type(screen.getByTestId("pf-mf-txn-units"), "2");
     await user.click(screen.getByTestId("pf-mf-txn-save"));
-    expect(await screen.findByTestId("pf-mf-txn-error")).toHaveTextContent("re-checks every later redemption");
+    expect(await screen.findByTestId("pf-mf-txn-error")).toHaveTextContent(
+      "re-checks every later redemption",
+    );
   });
 
   it("delete asks first, sends DELETE and shows the sequence message when it is refused", async () => {
@@ -356,16 +392,22 @@ describe("MFH-U75 edit and delete", () => {
     expect(await screen.findByTestId("pf-mf-txn-delete-error")).toHaveTextContent(
       "a later redemption would exceed the units held",
     );
-    expect(mock.calls.some((c) => c.method === "DELETE" && c.path === "/portfolio/mf/txns/501")).toBe(true);
+    expect(
+      mock.calls.some((c) => c.method === "DELETE" && c.path === "/portfolio/mf/txns/501"),
+    ).toBe(true);
   });
 
   it("delete succeeds and the list is refetched", async () => {
     const user = userEvent.setup();
-    const mock = mount({ "DELETE /portfolio/mf/txns/501": pf.envelope({ deleted: 501, warnings: [] }) });
+    const mock = mount({
+      "DELETE /portfolio/mf/txns/501": pf.envelope({ deleted: 501, warnings: [] }),
+    });
     await user.click(await screen.findByTestId("pf-mf-txn-delete-501"));
     await user.click(screen.getByTestId("confirm-ok"));
     await waitFor(() =>
-      expect(mock.calls.filter((c) => c.method === "GET" && c.path === "/portfolio/mf/txns").length).toBeGreaterThan(1),
+      expect(
+        mock.calls.filter((c) => c.method === "GET" && c.path === "/portfolio/mf/txns").length,
+      ).toBeGreaterThan(1),
     );
   });
 });
@@ -382,7 +424,9 @@ describe("fund-name mappings (MFH-23) in the transactions section", () => {
           ? pf.envelope({ ...fx.mfMapping, scheme_code: body.scheme_code, audit_note: "remapped" })
           : {
               status: 409,
-              body: { error: { code: "FUND_MAPPING_IN_USE", message: "in use", details: { rows: 2 } } },
+              body: {
+                error: { code: "FUND_MAPPING_IN_USE", message: "in use", details: { rows: 2 } },
+              },
             };
       },
     });

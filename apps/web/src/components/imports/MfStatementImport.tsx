@@ -9,11 +9,12 @@ import { Wizard, type WizardStep } from "@/components/ui/Wizard";
 import { ApiError } from "@/lib/api/client";
 import { DASH, formatCount, formatDate } from "@/lib/format";
 import { undoBatch } from "@/lib/imports/api";
-import { describeError, isApiError } from "@/lib/imports/errors";
+import { isApiError } from "@/lib/imports/errors";
 import {
+  blockingErrors,
   canCommit,
+  describeMfError,
   commitMfStatement,
-  otherErrors,
   otherWarnings,
   putMapping,
   readMfPreview,
@@ -30,6 +31,7 @@ import { typeLabel } from "@/lib/portfolio/mf-form";
 import { breaksHoldingsText } from "./BatchesTab";
 import { Fmt } from "./Fmt";
 import { formatCell, IssueList } from "./IssueLists";
+import { MfErrorRows } from "./MfErrorRows";
 import { MfFundMapping, type Choice } from "./MfFundMapping";
 
 const COLUMNS: Array<{ key: string; label: string }> = [
@@ -114,7 +116,7 @@ export function MfStatementImport() {
         setMapError(
           "A stored transaction already depends on a different scheme for this name. Change it in the fund-name mappings list on the Portfolio page.",
         );
-      else setMapError(describeError(e));
+      else setMapError(describeMfError(e));
     },
   });
 
@@ -127,7 +129,7 @@ export function MfStatementImport() {
     },
     onError: (e) => {
       setConfirmOpen(false);
-      setCommitError({ code: e instanceof ApiError ? e.code : "", message: describeError(e) });
+      setCommitError({ code: e instanceof ApiError ? e.code : "", message: describeMfError(e) });
     },
   });
 
@@ -143,7 +145,7 @@ export function MfStatementImport() {
     onError: (e) => {
       setUndoOpen(false);
       setUndoError(
-        isApiError(e, "UNDO_BREAKS_HOLDINGS") ? breaksHoldingsText(e) : describeError(e),
+        isApiError(e, "UNDO_BREAKS_HOLDINGS") ? breaksHoldingsText(e) : describeMfError(e),
       );
     },
   });
@@ -171,7 +173,7 @@ export function MfStatementImport() {
 
   const view = useMemo(() => (validation ? readMfPreview(validation) : null), [validation]);
   const unmappedCount = view?.unmapped.length ?? 0;
-  const allowed = canCommit(validation, unmappedCount);
+  const allowed = canCommit(validation, excluded);
   const dupLines = useMemo(() => {
     const set = new Set<number>();
     for (const g of view?.dupGroups ?? []) for (const r of g.rows) set.add(r);
@@ -205,7 +207,7 @@ export function MfStatementImport() {
           </p>
           <FormField
             label="Statement file"
-            hint="CSV or Excel (.xlsx). Only the normalised rows are shown back to you."
+            hint="CSV is supported now; Excel (.xlsx) files are not enabled yet, so save the statement as CSV. Only the normalised rows are shown back to you."
             required
           >
             {(p) => (
@@ -230,7 +232,7 @@ export function MfStatementImport() {
           ) : null}
           {validate.isError ? (
             <Banner tone="error" testId="mf-import-validate-error">
-              {describeError(validate.error)}
+              {describeMfError(validate.error)}
             </Banner>
           ) : null}
         </div>
@@ -304,10 +306,16 @@ export function MfStatementImport() {
                 {commitError.message}
               </Banner>
             ) : null}
-            <IssueList
-              kind="error"
-              issues={otherErrors(validation.errors)}
-              total={otherErrors(validation.errors).length}
+            <MfErrorRows
+              errors={validation.errors}
+              total={validation.error_count}
+              excluded={excluded}
+              onToggle={toggle}
+              blocking={
+                validation.error_count > validation.errors.length
+                  ? validation.error_count
+                  : blockingErrors(validation.errors, excluded).length
+              }
             />
             {unmappedCount > 0 ? (
               <p className="text-body-sm text-text-2" data-testid="mf-import-unmapped-note">

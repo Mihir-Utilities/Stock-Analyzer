@@ -239,9 +239,7 @@ function ViewBody({
           badRows={read.badRows}
         />
       ) : null}
-      {showStockSections ? (
-        <ChartsSection s={read.legacy} asOf={asOf} />
-      ) : null}
+      {showStockSections ? <ChartsSection s={read.legacy} asOf={asOf} /> : null}
       {showMf && hasMf ? (
         <MfChartsSection
           view={view}
@@ -252,9 +250,7 @@ function ViewBody({
           asOf={asOf}
         />
       ) : null}
-      {showStockSections ? (
-        <DividendsCard s={read.legacy} asOf={asOf} />
-      ) : null}
+      {showStockSections ? <DividendsCard s={read.legacy} asOf={asOf} /> : null}
     </>
   );
 }

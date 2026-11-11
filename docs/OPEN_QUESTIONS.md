@@ -897,3 +897,14 @@ Owner raised `DB_SOFT_LIMIT_MB` from 380 to 1024 for the local database (stock p
 | B15R-7 | B2: what is stored in `import_upload` for `mf_statement` | Only a canonical CSV of the 8 logical columns with original line numbers (blank-line padded); a header-less file stores a stub. The validate-time warning `FOLIO_STORED_AS_NUMBER` is not repeated on commit (the stored form has no cell types). Free text inside the 8 columns of a valid row (fund name, folio) is kept, because it is the data | `importers/mfparse.go` (`canonicalRecord`) |
 | B15R-8 | WEB (F16), N3: `unrealized_pct_reason` | New field on MF holdings items and on `totals` of the MF and All views: `"n/m"` when the cost base is 0 (null otherwise). Show an em dash with the reason, never `0` | apps/web (F16) |
 | B15R-9 | S5: a numeric folio in scientific notation | Row error `FOLIO_INVALID` (the digits are already lost in the file); the owner formats the column as text and exports again | `importers/mfparse.go` |
+
+## F16 notes
+
+| ID | Question or decision | Answer / how it was handled | Where |
+|---|---|---|---|
+| F16-1 | Total P&L next to the three P&L cards | docs/06 says realised, IDCW and unrealised are never merged into one number, but the API sends `totals.total_pnl`. Shown only as a small reference line under the cards, each part keeps its own card | `ViewCards.tsx` |
+| F16-2 | Stock transactions and MF transactions in the All view | Tabs (as 6.7a); the stock tab is the default | `PortfolioPage.tsx` |
+| F16-3 | Per-folio rows | The MF table has a 'Show each folio' toggle that calls `GET /portfolio/mf/holdings?group=folio`; scheme rows list their folios | `MfHoldingsSection.tsx` |
+| F16-4 | Stocks totals row in All | Shown as a line under the stock table from `breakdown` (the DataTable has no totals row) | `PortfolioPage.tsx` |
+| F16-5 | Holdings with under 0.001 units (B15R-3) | Shown normally, never hidden; the owner may still decide to hide them | `MfHoldingsSection.tsx` |
+| F16-6 | MF attribution in the shell footer | The footer shows it only on /mf paths (unchanged); the portfolio MF views carry it inline (`pf-mf-attribution`, card source line) | `MfHoldingsSection.tsx` |

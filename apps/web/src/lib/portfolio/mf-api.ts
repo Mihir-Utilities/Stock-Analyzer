@@ -67,6 +67,12 @@ export const EMPTY_FILTERS: MfTxnFilters = {
 
 const PAGE = 50;
 
+export function validSchemeCode(v: string): string | undefined {
+  if (!/^\d+$/.test(v)) return undefined;
+  const n = Number(v);
+  return n >= 1 && n <= 2147483647 ? String(n) : undefined;
+}
+
 export function useMfTxns(f: MfTxnFilters) {
   return useInfiniteQuery({
     queryKey: mfKeys.txns(f),
@@ -75,7 +81,8 @@ export function useMfTxns(f: MfTxnFilters) {
       apiRequest("/portfolio/mf/txns", {
         schema: mfTxnPageSchema,
         query: {
-          scheme_code: f.schemeCode || undefined,
+          // the API takes an int32 >= 1 (422 otherwise): anything else is not sent
+          scheme_code: validSchemeCode(f.schemeCode),
           folio: f.folio.trim() || undefined,
           type: f.type || undefined,
           from: f.from || undefined,

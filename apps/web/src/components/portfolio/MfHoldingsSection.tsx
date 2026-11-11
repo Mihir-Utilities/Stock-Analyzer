@@ -161,7 +161,15 @@ function Row({ h, testId }: { h: MfHolding; testId: string }) {
       <td className="num p-2">
         <Cell f={inr(h.unrealized_pnl, { signed: true, reason: navReason })} />
         <div className="text-micro text-text-2">
-          <Cell f={pct(h.unrealized_pct, true, navReason)} />
+          <Cell
+            f={pct(
+              h.unrealized_pct,
+              true,
+              h.unrealized_pct_reason
+                ? (reasonText(h.unrealized_pct_reason) ?? h.unrealized_pct_reason)
+                : navReason,
+            )}
+          />
         </div>
       </td>
       <td className="num p-2">

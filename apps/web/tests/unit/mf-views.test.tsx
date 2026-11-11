@@ -225,7 +225,9 @@ describe("MFH-U71 cards of each view", () => {
     mount(<PortfolioPage />, { "GET /portfolio/summary": pf.envelope(bad) });
     await screen.findByTestId("pf-mf-holdings-table");
     expect(screen.getByTestId("pf-mf-row-100001")).toBeInTheDocument();
-    expect(screen.getByTestId("pf-mf-bad-rows")).toHaveTextContent("1 holding rows could not be read");
+    expect(screen.getByTestId("pf-mf-bad-rows")).toHaveTextContent(
+      "1 holding rows could not be read",
+    );
     expect(text("pf-summary")).toMatch(/Could not read: category allocation/);
     expect(text("pf-card-invested")).toContain("₹15,050.00");
     expect(document.body.textContent).not.toMatch(/NaN|Infinity|undefined/);
@@ -235,7 +237,9 @@ describe("MFH-U71 cards of each view", () => {
     const bad = fx.viewSummary("all", { mf_holdings: { broken: true }, breakdown: 7 });
     mount(<PortfolioPage />, { "GET /portfolio/summary": pf.envelope(bad) });
     await screen.findByTestId("pf-holdings");
-    expect(screen.getByTestId("pf-summary")).toHaveTextContent(/Could not read: .*mutual fund holdings/);
+    expect(screen.getByTestId("pf-summary")).toHaveTextContent(
+      /Could not read: .*mutual fund holdings/,
+    );
     expect(screen.getByTestId("pf-card-invested")).toBeInTheDocument();
   });
 });
@@ -296,22 +300,26 @@ describe("MFH-U72 honesty: unknown, stale and partial MF values", () => {
   it("a stale NAV keeps its value and shows the amber chip 'NAV as of {date}' on the row and the card", async () => {
     setUrl("?view=mf");
     const stale = { ...fx.alphaGrowth, nav_stale: true, nav_date: "2026-10-15" };
-    mount(
-      <PortfolioPage />,
-      {
-        "GET /portfolio/summary": pf.envelope(fx.viewSummary("mf", {}, [stale, fx.betaIdcw]), [], 200, {
+    mount(<PortfolioPage />, {
+      "GET /portfolio/summary": pf.envelope(
+        fx.viewSummary("mf", {}, [stale, fx.betaIdcw]),
+        [],
+        200,
+        {
           as_of: "2026-10-24T09:00:00Z",
           source: "mfapi.in",
           stale: true,
-        }),
-      },
-    );
+        },
+      ),
+    });
     await screen.findByTestId("pf-mf-holdings-table");
     const chip = within(screen.getByTestId("pf-mf-row-100001")).getByTestId("pf-mf-stale-chip");
     expect(chip).toHaveTextContent("NAV as of 15 Oct 2026");
     expect(screen.getByTestId("pf-nav-stale-chip")).toHaveTextContent("NAV as of 15 Oct 2026");
     expect(text("pf-mf-row-100001")).toContain("₹12,060.00"); // the value is still shown
-    expect(screen.getAllByTestId("asof-chip").some((c) => /stale/.test(c.textContent ?? ""))).toBe(true);
+    expect(screen.getAllByTestId("asof-chip").some((c) => /stale/.test(c.textContent ?? ""))).toBe(
+      true,
+    );
   });
 });
 
@@ -332,7 +340,9 @@ describe("MFH-U73 under one year", () => {
     const card = await screen.findByTestId("pf-card-absolute-return");
     expect(card).toHaveTextContent("Absolute return");
     expect(card).toHaveTextContent("+4.50%");
-    expect(card).toHaveTextContent("XIRR is shown after the first year. Absolute return is shown instead.");
+    expect(card).toHaveTextContent(
+      "XIRR is shown after the first year. Absolute return is shown instead.",
+    );
     expect(screen.queryByTestId("pf-card-xirr")).toBeNull();
     expect(card.textContent).not.toContain("99.99");
     // no tooltip text on the card carries the annualised figure either
@@ -354,7 +364,12 @@ describe("MFH-U73 under one year", () => {
 
 describe("MFH-U74 empty states", () => {
   const onlyEquity = {
-    mf: fx.viewSummary("mf", { asset_classes_present: ["equity"], mf_holdings: [], allocation_by_scheme: [], allocation_by_category: [] }),
+    mf: fx.viewSummary("mf", {
+      asset_classes_present: ["equity"],
+      mf_holdings: [],
+      allocation_by_scheme: [],
+      allocation_by_category: [],
+    }),
     all: fx.viewSummary("all", {
       asset_classes_present: ["equity"],
       mf_holdings: [],
@@ -490,7 +505,9 @@ describe("MFH-U78 no new network from the browser", () => {
     await user.click(screen.getByTestId("pf-view-mf"));
     await screen.findByTestId("pf-view-body");
     await user.click(screen.getByTestId("pf-view-equity"));
-    await waitFor(() => expect(urls.filter((u) => u.includes("view=equity")).length).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(urls.filter((u) => u.includes("view=equity")).length).toBeGreaterThan(0),
+    );
     expect(urls.length).toBeGreaterThan(2);
     expect(urls.every((u) => u.startsWith("/api/v1/"))).toBe(true);
     expect(document.querySelectorAll("iframe")).toHaveLength(0);

@@ -1,4 +1,5 @@
-import { apiRequest } from "@/lib/api/client";
+import { ApiError, apiRequest } from "@/lib/api/client";
+import { describeError } from "./errors";
 import {
   mfCandidateSchema,
   mfCommitResultSchema,
@@ -111,12 +112,33 @@ export function otherWarnings(w: ReadonlyArray<RowIssue>): RowIssue[] {
   return w.filter((x) => x.code !== "DUPLICATE_IN_FILE");
 }
 
+/** Row 0 (whole file) and row 1 (the header) are file-level problems: they can never be excluded. */
+export function isHeaderIssue(e: RowIssue): boolean {
+  return e.row <= 1;
+}
+
+/** Errors that still block the commit: those not on an unticked data row (B15R-6). */
+export function blockingErrors(errors: ReadonlyArray<RowIssue>, excluded: ReadonlySet<number>) {
+  return errors.filter((e) => isHeaderIssue(e) || !excluded.has(e.row));
+}
+
 /**
- * Commit is allowed only with no error left and every fund name mapped. The error count includes
- * UNMAPPED_FUND rows, so the count alone decides; `unmapped` is checked as well for safety.
+ * Commit is allowed when no error blocks. The API lists only the first 200 errors: when more exist
+ * the hidden ones cannot be unticked, so the count must be zero to proceed.
  */
-export function canCommit(v: MfValidateResult | null, unmapped: number): boolean {
-  return v !== null && v.error_count === 0 && unmapped === 0;
+export function canCommit(v: MfValidateResult | null, excluded: ReadonlySet<number>): boolean {
+  if (v === null) return false;
+  if (v.error_count === 0) return true;
+  if (v.error_count > v.errors.length) return false;
+  return blockingErrors(v.errors, excluded).length === 0;
+}
+
+/** Plain copy for a failed call; the not-enabled .xlsx answer (B15R-1) gets its own sentence. */
+export function describeMfError(e: unknown): string {
+  if (e instanceof ApiError && /xlsx not enabled/i.test(e.message)) {
+    return "Excel files are not enabled yet; save the statement as CSV.";
+  }
+  return describeError(e);
 }
 
 /** Rows that will be written: file rows minus unticked ones minus the ones already stored. */

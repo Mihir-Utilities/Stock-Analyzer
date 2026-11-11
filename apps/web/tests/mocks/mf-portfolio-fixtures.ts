@@ -195,7 +195,8 @@ export function viewSummary(
         xirr_pct: 9.5,
         xirr_reason: null,
         absolute_return_pct: 10,
-        absolute_return_basis: "(value + proceeds + IDCW - invested) / invested; simple, not annualised",
+        absolute_return_basis:
+          "(value + proceeds + IDCW - invested) / invested; simple, not annualised",
         span_days: 900,
         first_flow_date: "2024-01-05",
       },
@@ -301,7 +302,13 @@ export const mfTxn = {
   note: "",
 };
 
-export const mfTxnImported = { ...mfTxn, id: 502, source: "import", import_batch_id: 9, txn_type: "sip" };
+export const mfTxnImported = {
+  ...mfTxn,
+  id: 502,
+  source: "import",
+  import_batch_id: 9,
+  txn_type: "sip",
+};
 
 export const mfSchemeSearch = {
   items: [
@@ -387,7 +394,8 @@ export function mfValidate(sc: ImportScenario = {}) {
         row: p.row,
         column: "fund_name",
         code: "UNMAPPED_FUND",
-        message: 'fund "Example Alpha Fund" has no scheme chosen yet; pick the scheme for this fund name',
+        message:
+          'fund "Example Alpha Fund" has no scheme chosen yet; pick the scheme for this fund name',
       }))
     : [];
   const warnings = dup
