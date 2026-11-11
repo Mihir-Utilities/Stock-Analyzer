@@ -4,15 +4,16 @@ Rule: ONE task per session. Each session does: Execute -> Review -> Fix -> Commi
 A new session starts with: "Resume. Read CLAUDE.md, PROGRESS.md, OPEN_QUESTIONS.md; continue at CURRENT."
 
 ## Pointer
-- LAST UPDATED: 2026-11-10. `main` = 23a0e21 (plus later docs commits). GitHub CI GREEN at 4f0285c (run 42756258902); the two newer commits (D-X ROCE, .gitignore/AGENTS.md) were pushed and their CI run is to be confirmed.
-- CURRENT: every task that does not need an owner decision is built, reviewed and merged. Open items are owner decisions and the deferred D-W implementation (see below). D05bR-2 is CLOSED by decision D-X (ROCE = EBIT / average(equity + borrowings), fallback assets less current liabilities, `ratio_meta.roce_basis`), committed as ab68670.
+- LAST UPDATED: 2026-11-11. `main` = 12628dd (plus later docs commits). GitHub CI GREEN on every job at 12628dd (run 43005544132: guards, Go API with -race, Python worker, Next.js web with Playwright e2e, generated API types).
+- CURRENT: D07, F15, B14, D08 and F09 are built, reviewed, fixed and merged. B15 (mutual fund holdings backend, decision D-MF/D-MF2) is being built; F16 (its web screens) starts after B15 merges. The deferred D-W implementation stays deferred by the owner.
 - MODE: manual price mode (no broker). Each affected task file starts with an "Amendment: manual price mode" block that overrides the text below it.
 - WHAT "DONE" MEANS TODAY: tasks marked DONE completed phases 1 EXEC and 4 COMMIT (merged, CI green). Phase 2 REVIEW and 3 FIX are done for EVERY built task.
 - HOW WORK WAS RUN: each task by a separate agent in its own git worktree (read-only reviewers, fix agents and repair agents too), merged by a coordinator agent (resolve shared docs, renumber RUNBOOK sections and docs/07 row ids, regenerate THIRD_PARTY_NOTICES.md and packages/api-types), pushed, CI confirmed. Reusable lessons are at the bottom.
 - COUNTS: 39 active task files; 42 tracked work items (D05, B06, F13 each split in two; D02 REMOVED).
 
 ### Next tasks that are unblocked (verify the Depends-on line in the task file first)
-- Remaining later waves: B14 market overview + admin status (fills the dashboard market tiles and /admin/status, which show 'not available yet'), D07 forecasts (deferred by owner), F09 prediction tab, D08 housekeeping/backup workflows, F15 admin/PWA/accessibility/performance polish. Ask the owner which to release.
+- B15 mutual fund holdings API and statement importer (spec merged in c666e93; amended for the real statement header: amount excludes stamp duty, no ISIN so owner maps fund names, identical rows are genuine). F16 web (All / Equity / Mutual funds views) after B15.
+- Reviews (Prompt 3) of B15 and F16 when built. Nothing else buildable without an owner decision: forecasts stay deferred (D07-2, D-4).
 - The deferred D-W implementation (when the owner says go): soft-flag Dismiss/Undo routes, delete-action route, DELETE /portfolio/adjustments, server-side soft flag (F05 then switches adapter), adjusted volume, future listing_date rejection, prices delete/trim queue warning, OQ-16 contrast tokens.
 
 ### BLOCKED ON OWNER (nothing blocks coding; these block closing tasks)
@@ -37,6 +38,8 @@ A new session starts with: "Resume. Read CLAUDE.md, PROGRESS.md, OPEN_QUESTIONS.
 - F13b-1 (no calendar-event write route), F13bR-2/3 (holidays template text; cursor param missing in openapi), F14-1..3 (lumpsum formula/endpoint, missing series for calendar-year bars/rolling histogram/band, scatter kind in ChartFrame).
 - Per-task assumption lists to skim and confirm: D01-A1..A4, B01-1..7, B02-1..7 and R1..R3, B03-1..7, B04-1..8, B05-1..9, B06a-1..21, B06b-1..15, B07-1..6 and B07R-1..7, B08-n, B09-1..6, B10-1..9, B11-1..13, B12-1..11, D03-A1..9 and D03R-1..5, D04R-1..6, D05a-A1..8 and D05aR-1..2, D06-1..15, F01-1..5, F02-1..8, F03-1..9, F04-1..12 and F04R-1..11, F05-1..12 and F05R-1..9, F06-1..13 and F06R-1..6, F07-1..10, F08-1..9, F11-1..11 and F11R-1..4, F12-1..11, F13a-1..10, F13b-1..10 and F13bR-1..5, F14-1..9, R-F03F13a-1..5.
 - D05b/B13 (2026-11-10): D05bR-2 (ROCE definition: CLOSED by D-X), D05b-1 resolved as `max(beta, 0)` (D05bR-1: confirm), D05b-5 (split adjustment of shares/dividends), B13-1..14 (stale rule 120 days / shareholding 135 days, percentile example amended 0.3 -> 30.0, /compare with no common dates returns 200 with empty dates while /mf/compare returns 422, opaque offset cursor), D05bGo-1..4 (fields still not returned: op_margin_source, node warnings, pe_percentile_points).
+- 2026-11-11 new owner items: **D07-2** (walk-forward needs about 6 years of prices, only 5 tracked: import more or amend the spec before un-deferring forecasts), D07-17/18/19 (live gate needs >= 20 dates and a 100-resolved recovery window; trading-day horizons), **D08-9** (backups are a public-repo artifact kept 14 days; prefer a private repo or release?), set the repository variable `DB_SOFT_LIMIT_MB` to the same value as the API env (owner chose 1024 locally; a Neon free DB is capped at 512 MB), **B14-4a** (movers liquidity floor now the 60-day average of close x volume, owner to confirm), B14-14 (model card stays visible on stock-level hidden reasons), **F09-1/F09-8** (calibration plot and AUC-by-fold need an API field or a docs/06 6.4 amendment; should the API serve a failed run's card), F15R-1..8 (visual baselines, manual keyboard and screen-reader pass, Lighthouse on main routes, recent-errors deviation, dropped Stocks link on the 501 state, parse-cache-control licence verified BSD-3-Clause), MFH-5 (statement HEADER now known; xlsx vs csv file layout still to be confirmed by the first real upload, spike S18), MFH-23/MFH-24 (fund-name mapping and identical-row handling, defaults pending confirmation; the owner confirmed the repeated purchase row is genuine).
+
 
 ### Housekeeping notes
 - `.gitignore` housekeeping DONE (23a0e21): stray pasted line removed (never committed), Playwright/Storybook ignore lines kept, `*.xlsx`, `*.xls`, `*.xlsm` now ignored; `apps/web/AGENTS.md` (generated by `next dev`) committed.
@@ -95,11 +98,13 @@ Status values: TODO | IN-PROGRESS (phase n) | BLOCKED (reason) | DONE
 | 8 | D06 | DONE (review + fix done) | | 00aaceb; fixes in fa0543f | late-link expiry, first-run news baseline; works without a bot token |
 | 8 | F11 | DONE (review + fix done) | | 66dab14; fixes in ffc96c1 | txn filters with load more, idempotency retry guidance, edit diff, 409 handling, focus return |
 | 8 | F12 | DONE (review + fix done) | | a30a7aa+aa20fd1; fixes in b721c0c | sign-out clears recents and silences late 401, pages no-store, accessible menus, polling window; F12R-1..6 |
-| 9 | D07 | TODO | | | forecasts deferred; insufficient_universe path unless >= 20 eligible stocks |
-| 9 | B14 | TODO | | | |
-| 9 | F09 | TODO | | | |
-| 10 | D08 | TODO | | | |
-| 10 | F15 | TODO | | | |
+| 9 | D07 | DONE (review + fix done) | | 6f2d5da; fixes in e46d479/e92b79b | ML pipeline merged, forecasts deferred (insufficient_universe); universe minimum at predict, live-gate recovery, calibration purge, trading-day horizons; D07-1..20 |
+| 9 | B14 | DONE (review + fix done) | | 8dda7ea; fixes in 8a4d2f0/a1b0022 | prediction, market overview, holidays, admin status APIs; honest as-of/stale, aligned movers, awaiting_predictions/not_tracked/training_aborted, migration 0013; B14-1..15 |
+| 9 | F09 | DONE (review + fix done) | | 8ace1cd; fixes in d18b5de/6080330 | Prediction tab; experimental banner always, state-aware empty copy, unreadable sections, per-block provenance; calibration plot not built (F09-1); F09-1..9 |
+| 10 | D08 | DONE (review + fix done) | | baa9f1a; fixes in f2248e7/c9c1eed | housekeeping, encrypted age backup and safe restore, 8 scheduled workflows; opened MF schemes keep NAV history; D08-1..10 |
+| 10 | F15 | DONE (PARTIAL; review + fix done) | | 0e21564; fixes in 33f6f44/9eb9369 | admin status page, PWA shell, offline banner, bundle and Lighthouse gates; visual baselines, manual a11y pass and Lighthouse on main routes still open (F15R) |
+| 11 | B15 | IN-PROGRESS | | | mutual fund holdings: mf_txn ledger, FIFO/XIRR views, Angel One statement importer with fund-name mapping; spec in c666e93 (D-MF, D-MF2, MFH-1..24) |
+| 11 | F16 | TODO | | | All / Equity / Mutual funds views on the overview and portfolio; needs B15 |
 
 ## Parallel work (only after B01 is DONE)
 Frontend and backend tasks may run in separate git worktrees/sessions. Frontend uses the MSW mock server from openapi.yaml until the backend task lands. Each parallel session updates only its own row here; resolve merge conflicts in this file by keeping both rows' updates.
@@ -147,6 +152,11 @@ Frontend and backend tasks may run in separate git worktrees/sessions. Frontend 
 
 - 2026-11-10: F10 reviewed and fixed (no blockers; six should-fix: filter-level 422, stale-cursor wording, peers add/remove keeps the table, remove cap 10, focus after delete, compare URL sync); merged (4f0285c) from a separate worktree because the main checkout holds another session's uncommitted ROCE work (worker, Go reader, web fundamentals, docs/05, docs/07). The main checkout's local `main` therefore trails origin/main: after that work is committed, run `git pull --rebase origin main`.
 
+- 2026-11-11: Built D07 (ML pipeline) and F15 (polish) in parallel, then B14 (market/admin/prediction API), D08 (housekeeping, backup, workflows), F09 (prediction tab); every one reviewed (Prompt 3) and fixed (Prompt 4) by separate agents and merged with CI watched. The reviews found no data-corrupting blockers in D07/F15/B14/F09, and two real ones in D08 (MF NAV trim deleted history of opened funds; restore could attach data to wrong rows), both fixed. D07 forecasts remain deferred (D07-2).
+- 2026-11-11: Owner asked for mutual fund holdings (All / Equity / Mutual funds views). Decision D-MF (adopted web-chat plan) and D-MF2 (accept the proposed defaults) recorded; spec merged; the real statement header showed amount excludes stamp duty (MFH-6 corrected) and has no ISIN (fund-name mapping, MFH-23); B15 started.
+- 2026-11-11: CI was red on four consecutive pushes after the parallel merges (web field-coverage guard vs F09 ids; three web tests that read predict.go/openapi/docs/05; the Go router-vs-openapi contract test after the MF spec added paths); fixed in 12628dd and green. A network outage killed four agents; resumed with SendMessage from their intact worktrees.
+- 2026-11-11: Owner raised DB_SOFT_LIMIT_MB to 1024 for the local database (recorded in docs/OPEN_QUESTIONS.md).
+
 ## Lessons for running parallel agents (keep)
 - CI runs on Linux with Go 1.22; local is Windows with a newer Go. Anything case- or OS-dependent passes locally and fails in CI (example: `license.md` vs `LICENSE.md`, fixed in license_scan.py). Reproduce with `docker run golang:1.22` and a `git archive` export before guessing.
 - Every merge of parallel branches conflicts in the same shared files: docs/RUNBOOK.md (renumber the sections), docs/07-edge-cases-tests.md (duplicate row ids: check with `grep -o "^| [A-Z]*-[0-9]* |" | sort | uniq -d`), docs/OPEN_QUESTIONS.md, THIRD_PARTY_NOTICES.md (regenerate with `python scripts/license_scan.py --write` after `go mod download`), packages/api-types (`npm run generate`), cmd/api/main.go and httpx/router.go (union of wiring), worker job_defs.py.
@@ -169,3 +179,6 @@ Frontend and backend tasks may run in separate git worktrees/sessions. Frontend 
 - Parity between two implementations of the same rules (Go importers vs TypeScript form validators) needs a shared case table that both test suites read (fixtures/validation-cases.json).
 - Usage-limit resets can remove agent worktrees (and branches without commits): resumed agents then run in the main checkout. Every agent prompt should start with `git rev-parse --show-toplevel` and stop if it is not under .claude/worktrees; after a limit reset, check `git status` in the main checkout before merging and relaunch agents whose worktree is gone.
 - A stalled agent's test process can outlive it; check for stray `go.exe`/test processes and leftover containers before relaunching.
+- Merging several agents' branches can break tests that read OTHER areas (a contract test comparing router and openapi, tests that parse predict.go or docs/05): after merging, run the cross-area tests (Go httpx contract tests, web unit suite, generated checks) before pushing, or expect red CI. Specs that change openapi.yaml must land with matching router stubs.
+- A strict guard added by one agent (field-coverage) can fail another agent's work that was built against the old rule: tell parallel agents which guard files are being rewritten and merge guard fixes before the feature that must satisfy them.
+- A subagent worktree can start from the pushed commit instead of local main: tell it to `git merge main` first and verify the dependency exists before building.
