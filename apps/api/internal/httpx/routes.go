@@ -181,6 +181,13 @@ var routes = []route{
 	{Method: mPatch, Path: "/portfolio/txns/{id}"},
 	{Method: mDelete, Path: "/portfolio/txns/{id}"},
 	{Method: mGet, Path: "/portfolio/summary"},
+	// Mutual fund holdings (docs/03 section 12a, decision D-MF). Declared so the router matches openapi.yaml;
+	// they answer 501 until B15 builds them.
+	{Method: mGet, Path: "/portfolio/mf/txns"},
+	{Method: mPost, Path: "/portfolio/mf/txns"},
+	{Method: mPatch, Path: "/portfolio/mf/txns/{id}"},
+	{Method: mDelete, Path: "/portfolio/mf/txns/{id}"},
+	{Method: mGet, Path: "/portfolio/mf/holdings"},
 	{Method: mGet, Path: "/portfolio/adjustments"},
 	{Method: mPost, Path: "/portfolio/adjustments"},
 

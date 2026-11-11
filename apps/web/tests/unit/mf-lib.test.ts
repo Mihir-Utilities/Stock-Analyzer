@@ -226,7 +226,7 @@ describe("field map for the /mf endpoints (UI-09 style)", () => {
       read("src/components/shell/Footer.tsx"),
       read("src/components/ui/chips.tsx"),
     ].join("\n");
-    const endpoints = Object.keys(map).filter((k) => k.includes("/mf/"));
+    const endpoints = Object.keys(map).filter((k) => /^[A-Z]+ \/mf\//.test(k));
     expect(endpoints).toHaveLength(7);
     for (const ep of endpoints) {
       for (const [field, entry] of Object.entries(map[ep] ?? {})) {
