@@ -1,0 +1,33 @@
+# process_queued_jobs: 19:00 IST daily (docs/04 3.13). GitHub cron is UTC and best-effort; the job works from data state, so a late or
+# skipped run catches up on the next one (SYS-03). Actions are pinned by commit SHA (docs/04 1.8).
+name: process_queued_jobs
+
+on:
+  schedule:
+    - cron: '30 13 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: worker-process-queued
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: process_queued_jobs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+      - name: Install worker environment
+        run: uv sync --project apps/worker --locked
+      - name: Run process_queued_jobs
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: uv run --project apps/worker python -m worker run process_queued_jobs

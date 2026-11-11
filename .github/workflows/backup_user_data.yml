@@ -1,0 +1,44 @@
+# backup_user_data: Sunday 12:30 IST (docs/04 3.11). Encrypts to AGE_PUBLIC_KEY (public key only) and uploads only the ciphertext, kept 30 days. GitHub cron is UTC and best-effort; the job works from data state, so a late or
+# skipped run catches up on the next one (SYS-03). Actions are pinned by commit SHA (docs/04 1.8).
+name: backup_user_data
+
+on:
+  schedule:
+    - cron: '0 7 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: worker-backup
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: backup_user_data
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+      - name: Install worker environment and age
+        run: |
+          uv sync --project apps/worker --locked
+          sudo apt-get update
+          sudo apt-get install -y age
+      - name: Export and encrypt (no plaintext is written to disk)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AGE_PUBLIC_KEY: ${{ secrets.AGE_PUBLIC_KEY }}
+          BACKUP_OUT_DIR: backup-out
+        run: uv run --project apps/worker python -m worker run backup_user_data
+      - name: Upload the encrypted backup
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: user-data-backup
+          path: backup-out/*.age
+          retention-days: 30
+          if-no-files-found: error

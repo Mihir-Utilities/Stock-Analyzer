@@ -4,7 +4,7 @@ and the worker-http handler for ``post_import``. Imported by ``__main__`` and ``
 
 from __future__ import annotations
 
-from worker import actions_db, alerts_db, analysis_db, jobs, mf_jobs
+from worker import actions_db, alerts_db, analysis_db, backup, housekeeping, jobs, mf_jobs
 from worker.db import create_pool
 from worker.ml import jobs as ml_jobs
 from worker.notify import TelegramNotifier
@@ -151,6 +151,13 @@ def register_all() -> None:
     jobs.register_cli_job(JobSpec("sync_mf_schemes", 20 * 60, mf_jobs.sync_mf_schemes_job))
     jobs.register_cli_job(JobSpec("ingest_mf_navs", 30 * 60, mf_jobs.ingest_mf_navs_job))
     jobs.register_http_handler("mf_refresh", mf_jobs.mf_refresh_handler)
+    # D08: housekeeping (docs/04 3.10) and the encrypted backup (3.11)
+    jobs.register_cli_job(
+        JobSpec("housekeeping", housekeeping.HOUSEKEEPING_TIMEOUT_S, housekeeping.housekeeping_job)
+    )
+    jobs.register_cli_job(
+        JobSpec("backup_user_data", backup.BACKUP_TIMEOUT_S, backup.backup_user_data_job)
+    )
 
 
 register_all()

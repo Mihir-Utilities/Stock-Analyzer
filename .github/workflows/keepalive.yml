@@ -1,0 +1,35 @@
+# keepalive: monthly (docs/04 section 2). An empty commit on the heartbeat branch keeps GitHub from disabling schedules in a public repo (SYS-04). GitHub cron is UTC and best-effort; the job works from data state, so a late or
+# skipped run catches up on the next one (SYS-03). Actions are pinned by commit SHA (docs/04 1.8).
+name: keepalive
+
+on:
+  schedule:
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: worker-keepalive
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: keepalive
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Empty commit on the heartbeat branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin heartbeat >/dev/null 2>&1; then
+            git fetch origin heartbeat
+            git checkout -B heartbeat origin/heartbeat
+          else
+            git checkout -B heartbeat
+          fi
+          git commit --allow-empty -m "chore: keepalive heartbeat"
+          git push origin heartbeat
