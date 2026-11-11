@@ -24,7 +24,7 @@ type PortfolioService interface {
 	CreateTxn(ctx context.Context, in portfolio.TxnInput, key string) (portfolio.TxnResult, error)
 	UpdateTxn(ctx context.Context, id int64, in portfolio.TxnInput) (portfolio.TxnResult, error)
 	DeleteTxn(ctx context.Context, id int64) error
-	Summary(ctx context.Context, asOf string, includeExited bool) (portfolio.SummaryResult, error)
+	SummaryView(ctx context.Context, view, asOf string, includeExited bool) (portfolio.ViewResult, error)
 	Adjustments(ctx context.Context) (portfolio.AdjustmentList, error)
 	CreateAdjustment(ctx context.Context, in portfolio.AdjustmentInput) (portfolio.AdjustmentItem, error)
 }
@@ -167,12 +167,19 @@ func portfolioHandler(rt route, d Deps) http.Handler {
 					return ErrValidation(FieldError{Field: "include_exited", Message: "must be true or false"})
 				}
 			}
-			res, err := svc.Summary(r.Context(), q.Get("as_of"), exited)
+			res, err := svc.SummaryView(r.Context(), q.Get("view"), q.Get("as_of"), exited)
 			if err != nil {
 				return mapPortfolioError(err)
 			}
 			s := res.Summary
-			WriteData(w, http.StatusOK, s, WithMeta(NewMeta(time.Now(), portfolioSource, s.Stale, s.StaleAgeHours)),
+			source := portfolioSource
+			switch s.View {
+			case portfolio.ViewAll:
+				source = "mixed"
+			case portfolio.ViewMF:
+				source = mfSource
+			}
+			WriteData(w, http.StatusOK, s, WithMeta(NewMeta(time.Now(), source, s.Stale, s.StaleAgeHours)),
 				WithWarnings(pfWarnings(s.Warnings)...))
 			return nil
 		})

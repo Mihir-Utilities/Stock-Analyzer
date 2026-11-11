@@ -80,13 +80,17 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	mfh := mfHoldingsService(pool, jobSvc)
+	pf := portfolio.New(pool)
+	pf.MF = mfh
 	adminSvc := admin.New(pool, cfg.DBSoftLimitMB, getenv("GIT_SHA"))
 	adminSvc.Scrub = scrub.Scrub
 	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts, Jobs: jobSvc, Alerts: alertDeps, Stocks: instSvc,
 		Prices: prices.New(pool, instSvc), OwnerData: ownerSvc,
 		MF:               mfService(pool, jobSvc),
 		Screener:         screener.New(pool),
-		Portfolio:        portfolio.New(pool),
+		Portfolio:        pf,
+		MFHoldings:       mfh,
 		Imports:          importService(cfg, pool, jobSvc, log),
 		Actions:          actions.New(pool, jobSvc, log),
 		Predict:          predict.New(pool),

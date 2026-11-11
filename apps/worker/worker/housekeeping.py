@@ -87,8 +87,8 @@ _LRU_BEYOND_CAP = (
 
 # MF NAVs older than 12 months (IST calendar) of schemes that are unopened: never opened
 # (`last_opened_at IS NULL`; the API sets it when a scheme page is opened), not tracked, not on the
-# watchlist, not an alert target. A scheme's newest NAV is never deleted, so a scheme whose latest
-# NAV is itself older than 12 months keeps it.
+# watchlist, not an alert target and holds no mutual fund transactions (B15). A scheme's newest NAV
+# is never deleted, so a scheme whose latest NAV is itself older than 12 months keeps it.
 _MF_OLD_NAV = (
     "FROM mf_nav n WHERE n.nav_date < "
     "(((now() AT TIME ZONE 'Asia/Kolkata')::date) - interval '12 months')::date "
@@ -96,7 +96,8 @@ _MF_OLD_NAV = (
     "AND NOT EXISTS (SELECT 1 FROM mf_scheme s WHERE s.code = n.scheme_code "
     "AND (s.is_tracked OR s.last_opened_at IS NOT NULL)) "
     "AND NOT EXISTS (SELECT 1 FROM watchlist_item w WHERE w.mf_scheme_code = n.scheme_code) "
-    "AND NOT EXISTS (SELECT 1 FROM alert a WHERE a.mf_scheme_code = n.scheme_code)"
+    "AND NOT EXISTS (SELECT 1 FROM alert a WHERE a.mf_scheme_code = n.scheme_code) "
+    "AND NOT EXISTS (SELECT 1 FROM mf_txn x WHERE x.scheme_code = n.scheme_code)"
 )
 
 

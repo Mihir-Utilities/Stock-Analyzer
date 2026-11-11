@@ -410,11 +410,11 @@ func TestSummaryXIRRAndTotals(t *testing.T) { // docs/05 8.3 vector, PF-07, PF-1
 	if b.Meta["stale"] != false || b.Meta["source"] == "" {
 		t.Errorf("meta = %v", b.Meta)
 	}
-	// Short span (PF-07): XIRR null with a reason.
+	// Short span (PF-07, amended by MFH-3: the one-year rule): XIRR null with reason under_one_year.
 	e.exec(`DELETE FROM portfolio_txn`)
 	e.post(txnBody("TCS", "buy", "10", "100", "2026-10-15"), nil)
 	s, _ = e.summary("")
-	if s.Returns.XIRRPct != nil || s.Returns.XIRRReason == nil || *s.Returns.XIRRReason != "period_too_short" {
+	if s.Returns.XIRRPct != nil || s.Returns.XIRRReason == nil || *s.Returns.XIRRReason != "under_one_year" {
 		t.Fatalf("short span: %+v", s.Returns)
 	}
 	// Future as_of is rejected; malformed too.

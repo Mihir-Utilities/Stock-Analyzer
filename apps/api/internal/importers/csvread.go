@@ -33,6 +33,9 @@ const (
 
 // LimitsFor returns the limits for a kind. largePrices is true once S9 passed.
 func LimitsFor(kind string, largePrices bool) Limits {
+	if kind == KindMFStatement {
+		return Limits{MaxBytes: mfMaxBytes, MaxRows: mfMaxRows}
+	}
 	if kind == KindPrices && largePrices {
 		return Limits{MaxBytes: largeMaxBytes, MaxRows: largeMaxRows}
 	}

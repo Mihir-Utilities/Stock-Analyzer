@@ -12,10 +12,12 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/india-analyzer/api/internal/importers"
+	"github.com/india-analyzer/api/internal/mfhold"
 	"github.com/india-analyzer/api/internal/pagination"
 )
 
@@ -34,6 +36,7 @@ type ImportService interface {
 	Trim(ctx context.Context, symbols []string, before string, confirm bool) (*importers.TrimResult, error)
 	ListBatches(ctx context.Context, limit int, beforeID int64) ([]importers.Batch, error)
 	Undo(ctx context.Context, id int64) (*importers.UndoResult, error)
+	RevalidateMF(ctx context.Context, uploadID string) (*importers.ValidateResult, error)
 	AddResults(ctx context.Context, symbol string, in importers.ResultsEntry) (*importers.ManualResult, error)
 	AddShareholding(ctx context.Context, symbol string, in importers.ShareholdingEntry) (*importers.ManualResult, error)
 	AddAction(ctx context.Context, symbol string, in importers.ActionEntry) (*importers.ManualResult, error)
@@ -64,6 +67,8 @@ func importsHandler(rt route, d Deps) http.Handler {
 		return wrap(importUndo)
 	case "GET /imports/templates/{kind}":
 		return wrap(importTemplate)
+	case "POST /imports/mf_statement/revalidate":
+		return wrap(importRevalidateMF)
 	case "GET /settings/prices-adjustment":
 		return wrap(adjustmentGet)
 	case "PUT /settings/prices-adjustment":
@@ -104,6 +109,8 @@ func mapImportError(err error) error {
 		uc   *importers.UploadCapError
 		dep  *importers.DependentsError
 		ve   *importers.ValidationError
+		ie   *mfhold.InsufficientError
+		ub   *importers.UndoBreaksError
 		mbe  *http.MaxBytesError
 		file = func(msg string) error { return ErrValidation(FieldError{Field: "file", Message: msg}) }
 	)
@@ -129,6 +136,14 @@ func mapImportError(err error) error {
 		return ErrRateLimited(uc.RetryAfterSeconds)
 	case errors.Is(err, importers.ErrTooManyRows):
 		return file("The file has more rows than this import kind allows")
+	case errors.Is(err, importers.ErrXLSX):
+		return file(strings.TrimPrefix(err.Error(), "importers: workbook rejected: "))
+	case errors.As(err, &ie):
+		return NewError(http.StatusUnprocessableEntity, "INSUFFICIENT_UNITS", "A redemption would exceed the units held on its date",
+			map[string]any{"transaction_id": ie.TxnID, "date": ie.Date.Format(time.DateOnly), "held_units": ie.Held.StringFixed(4), "redeem_units": ie.Wanted.StringFixed(4)})
+	case errors.As(err, &ub):
+		return NewError(http.StatusConflict, "UNDO_BREAKS_HOLDINGS", "This batch cannot be undone: a later redemption would then exceed the units held. Nothing was changed",
+			map[string]any{"scheme_code": ub.Scheme, "folio": ub.Folio, "date": ub.Date.Format(time.DateOnly)})
 	case errors.Is(err, importers.ErrNotText):
 		return file(strings.TrimPrefix(err.Error(), "importers: file is not UTF-8 text: "))
 	case errors.As(err, &ve):
@@ -165,6 +180,9 @@ func importKind(r *http.Request) (string, error) {
 	}
 	return kind, nil
 }
+
+// xlsxTypes are the content types of an .xlsx upload (mf_statement only).
+var xlsxTypes = map[string]bool{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": true, "application/zip": true, "application/x-zip-compressed": true}
 
 // allowed content types of an uploaded CSV; the file name must end in .csv or .txt (SEC-05).
 var csvTypes = map[string]bool{"": true, "text/csv": true, "application/csv": true, "text/plain": true,
@@ -208,7 +226,13 @@ func importValidate(svc ImportService, w http.ResponseWriter, r *http.Request) e
 			}
 			mt, _, _ := mime.ParseMediaType(part.Header.Get("Content-Type"))
 			ext := strings.ToLower(path.Ext(part.FileName()))
-			if !csvTypes[strings.ToLower(mt)] || (ext != ".csv" && ext != ".txt") {
+			if kind == importers.KindMFStatement {
+				// The statement may be CSV or .xlsx: the service decides by content (magic bytes), the name
+				// and type only have to look like one of the two (docs/03 14).
+				if (ext != ".csv" && ext != ".txt" && ext != ".xlsx") || (!csvTypes[strings.ToLower(mt)] && !xlsxTypes[strings.ToLower(mt)]) {
+					return ErrValidation(FieldError{Field: "file", Message: "only a CSV (.csv) or Excel (.xlsx) statement is accepted"})
+				}
+			} else if !csvTypes[strings.ToLower(mt)] || (ext != ".csv" && ext != ".txt") {
 				return ErrValidation(FieldError{Field: "file", Message: "only CSV files (.csv, UTF-8 text) are accepted"})
 			}
 			content, err = io.ReadAll(io.LimitReader(part, lim.MaxBytes+1))
@@ -233,10 +257,11 @@ func importValidate(svc ImportService, w http.ResponseWriter, r *http.Request) e
 }
 
 type commitBody struct {
-	UploadID    string   `json:"upload_id"`
-	UploadIDs   []string `json:"upload_ids"`
-	UploadGroup string   `json:"upload_group"`
-	Note        string   `json:"note"`
+	UploadID     string   `json:"upload_id"`
+	UploadIDs    []string `json:"upload_ids"`
+	UploadGroup  string   `json:"upload_group"`
+	Note         string   `json:"note"`
+	ExcludedRows []int    `json:"excluded_rows"`
 }
 
 func importCommit(svc ImportService, w http.ResponseWriter, r *http.Request) error {
@@ -255,7 +280,29 @@ func importCommit(svc ImportService, w http.ResponseWriter, r *http.Request) err
 		}
 		ids = []string{b.UploadID}
 	}
-	res, err := svc.Commit(r.Context(), kind, importers.CommitRequest{UploadIDs: ids, UploadGroup: b.UploadGroup, Note: b.Note})
+	res, err := svc.Commit(r.Context(), kind, importers.CommitRequest{UploadIDs: ids, UploadGroup: b.UploadGroup, Note: b.Note, ExcludedRows: b.ExcludedRows})
+	if err != nil {
+		return err
+	}
+	if res.MF != nil { // an mf_statement commit has no post_import job (docs/03 12a)
+		WriteData(w, http.StatusOK, res.MF)
+		return nil
+	}
+	WriteData(w, http.StatusOK, res)
+	return nil
+}
+
+func importRevalidateMF(svc ImportService, w http.ResponseWriter, r *http.Request) error {
+	var b struct {
+		UploadID string `json:"upload_id"`
+	}
+	if err := DecodeJSON(r, &b); err != nil {
+		return err
+	}
+	if !importers.IsUUID(b.UploadID) {
+		return ErrValidation(FieldError{Field: "upload_id", Message: "must be a UUID"})
+	}
+	res, err := svc.RevalidateMF(r.Context(), strings.ToLower(b.UploadID))
 	if err != nil {
 		return err
 	}

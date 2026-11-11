@@ -27,14 +27,14 @@ const (
 
 // AllKinds lists every kind of the contract; only Implemented ones are served by this package.
 var AllKinds = []string{"prices", "instruments", "holidays", "results_quarterly", "results_annual",
-	"balance_cashflow", "fundamentals_long", "shareholding", "corporate_actions", "instrument_meta"}
+	"balance_cashflow", "fundamentals_long", "shareholding", "corporate_actions", "instrument_meta", KindMFStatement}
 
 // Implemented reports whether the kind is built (every kind of the contract since B06b).
 func Implemented(kind string) bool { return KnownKind(kind) }
 
 // isOwnerKind: the B06b kinds, committed by commitOwner with rows tagged by the batch id.
 func isOwnerKind(kind string) bool {
-	return kind != KindPrices && kind != KindInstruments && KnownKind(kind)
+	return kind != KindPrices && kind != KindInstruments && kind != KindMFStatement && KnownKind(kind)
 }
 
 // KnownKind reports whether kind is one of the contract's import kinds.
@@ -135,6 +135,9 @@ type Service struct {
 	DBSoftLimitMB int
 	// DBSize returns the current database size in bytes (tests replace it).
 	DBSize func(ctx context.Context) (int64, error)
+
+	// mfRefresh queues mf_refresh for statement schemes without NAV rows (optional).
+	mfRefresh MFRefresher
 
 	chunkSize  int
 	afterChunk func(chunk int) error // test hook: a returned error aborts and rolls back the commit

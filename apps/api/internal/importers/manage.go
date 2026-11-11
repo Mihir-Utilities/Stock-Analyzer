@@ -17,6 +17,7 @@ import (
 // Template header and example rows. A test keeps them equal to fixtures/templates/*.csv.
 var templates = map[string]string{
 	KindPrices:      "symbol,date,open,high,low,close,volume\nDEMOCO,2026-01-05,100.00,102.50,99.20,101.30,1250000\n",
+	KindMFStatement: mfTemplate,
 	KindInstruments: "symbol,name,isin,series,kind,listing_date,face_value,previous_symbol,status\nDEMOCO,Demo Company Limited,INDEMO000001,EQ,equity,2010-05-17,2.00,,active\n",
 	// B06b. The holidays template is the header only: no example dates (docs/01 7.8, D-L).
 	KindHolidays:         "date,description,segment\n",

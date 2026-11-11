@@ -28,6 +28,8 @@ type ValidateResult struct {
 	WarningCount          int              `json:"warning_count"`
 	EstimatedGrowthMB     *float64         `json:"estimated_growth_mb"`
 	PricesAlreadyAdjusted *bool            `json:"prices_already_adjusted"`
+	// MF is data.mf of an mf_statement validation (docs/03 12a); absent for other kinds.
+	MF *MFPreview `json:"mf,omitempty"`
 }
 
 // CommitRequest is the body of POST /imports/{kind}/commit.
@@ -35,6 +37,8 @@ type CommitRequest struct {
 	UploadIDs   []string
 	UploadGroup string
 	Note        string
+	// ExcludedRows are the file lines an owner unticked (mf_statement only, MFH-24).
+	ExcludedRows []int
 }
 
 // CommitResult is the commit response (docs/03 section 14).
@@ -45,6 +49,8 @@ type CommitResult struct {
 	Renamed         int      `json:"renamed"`
 	PostImportJobID *int64   `json:"post_import_job_id"`
 	Warnings        []string `json:"warnings"`
+	// MF replaces the body of an mf_statement commit (it has no post_import job).
+	MF *MFCommitResult `json:"-"`
 }
 
 // Validate parses and checks a file without writing any data, then stores it in import_upload so a
@@ -59,6 +65,9 @@ func (s *Service) Validate(ctx context.Context, kind string, content []byte, gro
 	}
 	if group != "" && !IsUUID(group) {
 		return nil, validation("upload_group", "must be a UUID")
+	}
+	if kind == KindMFStatement {
+		return s.validateMF(ctx, content, group)
 	}
 	idx, err := loadIndex(ctx, s.pool)
 	if err != nil {
@@ -288,6 +297,9 @@ func (s *Service) Commit(ctx context.Context, kind string, req CommitRequest) (*
 	if len(req.Note) > 500 {
 		return nil, validation("note", "must be at most 500 characters")
 	}
+	if len(req.ExcludedRows) > 0 && kind != KindMFStatement {
+		return nil, validation("excluded_rows", "only an mf_statement commit takes excluded_rows")
+	}
 	if len(ids) > 1 && kind != KindPrices && kind != KindInstruments {
 		return nil, validation("upload_ids", "only prices (and instruments) files can be committed as a group of parts")
 	}
@@ -311,6 +323,25 @@ func (s *Service) Commit(ctx context.Context, kind string, req CommitRequest) (*
 	var res *CommitResult
 	var symbols []string
 	var warnCount int
+	if kind == KindMFStatement {
+		var batchID int64
+		if err := tx.QueryRow(ctx, `INSERT INTO import_batch (kind, sha256, row_count, warning_count, note)
+			VALUES ($1, $2, 0, 0, NULLIF($3, '')) RETURNING id`, kind, h.Sum(nil), req.Note).Scan(&batchID); err != nil {
+			return nil, err
+		}
+		mfRes, err := s.commitMF(ctx, tx, parts[0], req.ExcludedRows, batchID)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE import_batch SET row_count = $2, warning_count = $3 WHERE id = $1`, batchID, mfRes.Inserted, len(mfRes.Warnings)); err != nil {
+			return nil, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		s.afterCommitMF(ctx, batchID)
+		return &CommitResult{BatchID: batchID, Inserted: mfRes.Inserted, Warnings: mfRes.Warnings, MF: mfRes}, nil
+	}
 	if isOwnerKind(kind) {
 		// The batch row comes first: every stored row is tagged with its id, which is what undo removes.
 		var batchID int64

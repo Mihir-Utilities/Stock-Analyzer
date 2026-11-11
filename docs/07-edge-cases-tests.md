@@ -267,7 +267,7 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | PF-04 | Same-day buy and sell | Ordered by id; buys before sells | U |
 | PF-05 | Date before listing/future | 422 | I |
 | PF-06 | Weekend/holiday trade date | Warning only | U |
-| PF-07 | XIRR undefined/short span | Null/absolute with message | U |
+| PF-07 | XIRR undefined/short span (amended by MFH-3, 2026-11-11: the one-year rule replaces the 30-day rule) | A span under 365 days: `xirr_pct` null with `xirr_reason: under_one_year` and the absolute return shown; `period_too_short` only when the absolute return itself cannot be computed; no sign change null | U |
 | PF-08 | Fully sold position | Realized retained; hidden by default | E |
 | PF-09 | Split after purchase | Qty/cost adjusted; value invariant | U/E |
 | PF-10 | Missing price | Last close, flagged stale; none -> null | U |

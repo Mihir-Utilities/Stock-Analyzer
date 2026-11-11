@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 
+	"github.com/india-analyzer/api/internal/mfhold"
 	"github.com/india-analyzer/api/internal/pagination"
 )
 
@@ -21,6 +22,8 @@ import (
 type Service struct {
 	db  DB
 	Now func() time.Time
+	// MF serves the mutual fund sleeve of the All and Mutual funds views (nil: no MF data).
+	MF *mfhold.Service
 }
 
 // New builds the service over a pool.

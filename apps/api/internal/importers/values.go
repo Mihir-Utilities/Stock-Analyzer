@@ -21,6 +21,8 @@ type RowIssue struct {
 	Row     int    `json:"row"`
 	Column  string `json:"column"`
 	Message string `json:"message"`
+	// Code is a stable machine code, set by the kinds that have them (mf_statement).
+	Code string `json:"code,omitempty"`
 }
 
 var (

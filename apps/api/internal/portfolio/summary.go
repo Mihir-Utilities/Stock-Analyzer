@@ -11,6 +11,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/india-analyzer/api/internal/finmath"
+	"github.com/india-analyzer/api/internal/mfhold"
 )
 
 // Reasons for a null value (docs/03 section 1: never 0 for unknown).
@@ -91,6 +92,7 @@ type ReviewItem struct {
 
 // Holding is one row of the summary.
 type Holding struct {
+	AssetClass         string       `json:"asset_class"`
 	Symbol             string       `json:"symbol"`
 	Name               string       `json:"name"`
 	Sector             *string      `json:"sector"`
@@ -184,6 +186,7 @@ type Summary struct {
 	StaleAgeHours float64            `json:"-"`
 	Warnings      []Warn             `json:"-"`
 	Flows         []finmath.CashFlow `json:"-"`
+	agg           eqAgg
 }
 
 func money(d decimal.Decimal) string { return d.StringFixed(4) }
@@ -213,6 +216,7 @@ func BuildSummary(in SummaryInput) Summary {
 	invested, realized, mvSum, dayChange := decimal.Zero, decimal.Zero, decimal.Zero, decimal.Zero
 	var unpriced, noDay []string
 	var flows []finmath.CashFlow
+	var dflows []mfhold.Flow
 	inflow, outflow := decimal.Zero, decimal.Zero
 	var firstFlow time.Time
 	divTotal := decimal.Zero
@@ -246,11 +250,12 @@ func BuildSummary(in SummaryInput) Summary {
 			}
 			f, _ := amt.Float64()
 			flows = append(flows, finmath.CashFlow{Date: t.Date, Amount: f})
+			dflows = append(dflows, mfhold.Flow{Date: t.Date, Amount: amt})
 			if firstFlow.IsZero() || t.Date.Before(firstFlow) {
 				firstFlow = t.Date
 			}
 		}
-		h := Holding{Symbol: it.Symbol, Name: it.Name, Sector: it.Sector, Status: it.Status, Flags: []string{},
+		h := Holding{AssetClass: "equity", Symbol: it.Symbol, Name: it.Name, Sector: it.Sector, Status: it.Status, Flags: []string{},
 			Realized: money(pos.Realized()), AdjustmentsApplied: []Applied{}, ReviewNeeded: []ReviewItem{}}
 		realized = realized.Add(pos.Realized())
 		qty, cost := pos.Qty(), pos.Cost()
@@ -359,6 +364,8 @@ func BuildSummary(in SummaryInput) Summary {
 		s.AllocPartial = !allPriced
 	}
 
+	s.agg = eqAgg{Invested: invested, Realized: realized, MarketValue: mvSum, DayChange: dayChange, Outflow: outflow, Inflow: inflow,
+		Open: openCount, Unpriced: unpriced, NoDay: noDay, Flows: dflows}
 	s.returns(in, flows, firstFlow, mvSum, allPriced, openCount, inflow, outflow)
 	s.Flows = flows
 	return s
@@ -511,7 +518,13 @@ func (s *Summary) returns(in SummaryInput, flows []finmath.CashFlow, first time.
 			}
 		}
 	}
-	if end.Sub(first).Hours()/24 < minXIRRDays {
+	days := int(end.Sub(first).Hours() / 24)
+	if outflow.IsPositive() && days < mfhold.OneYearDays { // the one-year rule (MFH-3), supersedes the 30-day rule
+		reason(mfhold.ReasonUnderOneYear)
+		s.Benchmark.Reason = strp(mfhold.ReasonUnderOneYear)
+		return
+	}
+	if days < minXIRRDays {
 		reason(ReasonShortPeriod)
 		s.Benchmark.Reason = strp(ReasonShortPeriod)
 		return
