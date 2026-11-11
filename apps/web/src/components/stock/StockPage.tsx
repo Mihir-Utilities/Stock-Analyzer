@@ -34,6 +34,7 @@ import {
 import { mergeWarnings, StockBanners } from "./StockBanners";
 import { StockHeader } from "./StockHeader";
 import { OverviewTab } from "./OverviewTab";
+import { PredictionHead } from "./prediction/PredictionHead";
 import { ChartTab } from "./chart/ChartTab";
 
 // Heavier tabs load on demand so the route stays within the 250 kB gzip budget (docs/06a section 10).
@@ -54,9 +55,16 @@ const EventsTab = dynamic(() => import("./events/EventsTab").then((m) => m.Event
 const OwnershipTab = dynamic(() => import("./ownership/OwnershipTab").then((m) => m.OwnershipTab), {
   loading: tabLoading,
 });
+// While the chunk loads the experimental banner and the disclaimer are already on screen (not lazy).
+const predictionLoading = () => (
+  <div className="flex flex-col gap-4" data-testid="pred-chunk-loading">
+    <PredictionHead />
+    <Skeleton className="h-40 w-full" label="Loading prediction" />
+  </div>
+);
 const PredictionTab = dynamic(
   () => import("./prediction/PredictionTab").then((m) => m.PredictionTab),
-  { loading: tabLoading },
+  { loading: predictionLoading },
 );
 const PeersTab = dynamic(() => import("./peers/PeersTab").then((m) => m.PeersTab), {
   loading: tabLoading,

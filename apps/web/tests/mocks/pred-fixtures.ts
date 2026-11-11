@@ -1,47 +1,72 @@
 import { ok, type MockReply } from "./imports-fixtures";
 
-// GET /stocks/{symbol}/prediction replies (docs/03 section 6, B14-1/2/7). Fractions for p_up and
-// band returns; the live API today answers the no_model / insufficient_universe shapes.
+// GET /stocks/{symbol}/prediction replies built from the REAL API shapes (apps/api/internal/predict/
+// predict.go, docs/03 section 6). Facts those shapes fix, which the fixtures must keep:
+//  - a hidden horizon carries only {days, shown:false, hidden_reason} plus `model` and `track_record`
+//    (null unless an active model exists for that horizon); p_up, bucket and band are omitted;
+//  - a shown horizon has `hidden_reason: null`;
+//  - when no horizon has an active model (no_model, insufficient_*, guardrail_failed) EVERY horizon
+//    has model:null and track_record:null, and so do the top-level mirrors (predict.go hidden());
+//  - `ref_close_reason` is "no_prediction" when nothing was stored; trend and risk carry
+//    {score:null, label:null, reason:"no_analysis"} when there is no analysis snapshot.
+// Fractions for p_up, rates and band returns.
 
-const DISCLAIMER =
+export const DISCLAIMER =
   "Experimental. Not investment advice. Statistical models often fail out of sample.";
 
-const hiddenNoModel = [
-  { days: 5, shown: false, hidden_reason: "no_model", model: null, track_record: null },
-  { days: 21, shown: false, hidden_reason: "no_model", model: null, track_record: null },
-];
+const hidden = (days: number, hidden_reason: string) => ({
+  days,
+  shown: false,
+  hidden_reason,
+  model: null,
+  track_record: null,
+});
+const hiddenNoModel = [hidden(5, "no_model"), hidden(21, "no_model")];
 
 const noScore = (reason: string) => ({ score: null, label: null, reason });
 
-export const insufficientUniverse = ok({
+const noModelBase = {
   experimental: true,
   disclaimer: DISCLAIMER,
-  state: "insufficient_universe",
-  state_reason: "3 of the 20 stocks needed have enough history",
   as_of: null,
   ref_close: null,
-  ref_close_reason: "no_model",
+  ref_close_reason: "no_prediction",
+  model: null,
+  track_record: null,
+};
+
+export const insufficientUniverse = ok({
+  ...noModelBase,
+  state: "insufficient_universe",
+  state_reason:
+    "Fewer than 20 stocks have enough price history for the experimental model; forecasts stay hidden.",
   horizons: hiddenNoModel,
   trend: noScore("insufficient_history"),
   risk: noScore("universe_too_small"),
-  model: null,
-  track_record: null,
 });
 
 export const noModel = ok({
-  experimental: true,
-  disclaimer: DISCLAIMER,
+  ...noModelBase,
   state: "no_model",
-  state_reason: "No training run has finished yet",
-  as_of: null,
-  ref_close: null,
-  ref_close_reason: "no_model",
+  state_reason: "No model has been trained yet; forecasts are not available.",
   horizons: hiddenNoModel,
   trend: { score: 72, label: "up" },
   risk: { score: 41, label: "medium" },
-  model: null,
-  track_record: null,
 });
+
+/** The shape of every no-active-model state with a given `state` and per-horizon reasons. */
+export const noActiveModel = (
+  state: string,
+  reasons: [string, string] = ["no_model", "no_model"],
+) =>
+  ok({
+    ...noModelBase,
+    state,
+    state_reason: `served reason for ${state}`,
+    horizons: [hidden(5, reasons[0]), hidden(21, reasons[1])],
+    trend: { score: 72, label: "up" },
+    risk: { score: 41, label: "medium" },
+  });
 
 export const model5 = {
   version: "dir_5d@2026-10-04",
@@ -57,9 +82,27 @@ export const track5 = {
   direction_hit_rate: 0.514,
   band_coverage_80: 0.77,
   since: "2026-04-01",
-  reason: null,
 };
 
+const shown5 = {
+  days: 5,
+  shown: true,
+  p_up: 0.54,
+  bucket: "slightly_up",
+  band: {
+    q10: -0.041,
+    q50: 0.002,
+    q90: 0.046,
+    price_q10: 3356,
+    price_q50: 3507,
+    price_q90: 3661,
+  },
+  hidden_reason: null,
+  model: model5,
+  track_record: track5,
+};
+
+/** 5-day model active and shown; the 21-day horizon has no active model (latest one failed its checks). */
 export const okData = {
   experimental: true,
   disclaimer: DISCLAIMER,
@@ -67,32 +110,7 @@ export const okData = {
   state_reason: null,
   as_of: "2026-10-09",
   ref_close: 3500,
-  horizons: [
-    {
-      days: 5,
-      shown: true,
-      p_up: 0.54,
-      bucket: "slightly_up",
-      band: {
-        q10: -0.041,
-        q50: 0.002,
-        q90: 0.046,
-        price_q10: 3356,
-        price_q50: 3507,
-        price_q90: 3661,
-      },
-      hidden_reason: null,
-      model: model5,
-      track_record: track5,
-    },
-    {
-      days: 21,
-      shown: false,
-      hidden_reason: "model_not_better_than_baseline",
-      model: null,
-      track_record: null,
-    },
-  ],
+  horizons: [shown5, hidden(21, "model_not_better_than_baseline")],
   trend: { score: 72, label: "up" },
   risk: { score: 41, label: "medium" },
   model: model5,
@@ -102,38 +120,34 @@ export const okData = {
 export const okState = ok(okData);
 
 export const withHorizon21 = (hidden_reason: string): MockReply =>
-  ok({
-    ...okData,
-    horizons: [
-      okData.horizons[0],
-      { days: 21, shown: false, hidden_reason, model: null, track_record: null },
-    ],
-  });
+  ok({ ...okData, horizons: [shown5, hidden(21, hidden_reason)] });
 
-export const guardrailFailed = ok({
+/** Both horizons have an active model but the 21-day one is hidden near a corporate action. */
+export const nearActionWithModel = ok({
   ...okData,
-  state: "guardrail_failed",
-  state_reason: "the newest run did not pass its checks",
-  as_of: null,
-  ref_close: null,
   horizons: [
-    {
-      days: 5,
-      shown: false,
-      hidden_reason: "model_not_better_than_baseline",
-      model: { ...model5, guardrail_pass: false },
-      track_record: null,
-    },
+    shown5,
     {
       days: 21,
       shown: false,
-      hidden_reason: "insufficient_history",
-      model: null,
-      track_record: null,
+      hidden_reason: "near_corporate_action",
+      model: { ...model5, version: "dir_21d@2026-10-04" },
+      track_record: { ...track5, resolved: 30 },
     },
   ],
-  model: { ...model5, guardrail_pass: false },
-  track_record: null,
+});
+
+/**
+ * guardrail_failed as the API really sends it (predict.go hidden()): no horizon has an active model, so
+ * model and track_record are null on EVERY horizon and at the top level.
+ */
+export const guardrailFailed = ok({
+  ...noModelBase,
+  state: "guardrail_failed",
+  state_reason: "The latest model did not beat the baseline out of sample; forecasts stay hidden.",
+  horizons: [hidden(5, "model_not_better_than_baseline"), hidden(21, "insufficient_history")],
+  trend: { score: 72, label: "up" },
+  risk: { score: 41, label: "medium" },
 });
 
 /** Odd values everywhere: nothing here may blank the tab (degrade per field). */
@@ -154,4 +168,22 @@ export const odd = ok({
   risk: 5,
   model: "nope",
   track_record: [],
+});
+
+/** Wrong types and out-of-range fractions in an otherwise valid reply. */
+export const unreadableSections = ok({
+  ...okData,
+  disclaimer: "   ",
+  trend: { score: "72" },
+  risk: 5,
+  horizons: [
+    {
+      ...shown5,
+      model: { ...model5, guardrail_pass: "yes" },
+      track_record: { ...track5, resolved: "many" },
+    },
+    { days: 21, shown: true, p_up: 54, band: { q10: -0.04, q50: 0, q90: 0.04 } },
+  ],
+  model: "nope",
+  track_record: { ...track5, direction_hit_rate: 54 },
 });

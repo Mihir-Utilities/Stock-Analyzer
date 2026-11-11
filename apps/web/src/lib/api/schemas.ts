@@ -6,7 +6,12 @@ import type { ErrorEnvelope, Meta, Warning } from "@analyzer/api-types";
 
 export const metaSchema = z
   .object({
-    as_of: z.string().optional(),
+    // B14: with no data `meta.as_of` is null and `as_of_reason` says why (e.g. "no_data").
+    as_of: z
+      .string()
+      .nullish()
+      .transform((v) => v ?? undefined),
+    as_of_reason: z.string().optional(),
     source: z.string().optional(),
     stale: z.boolean().optional(),
     stale_age_hours: z.number().optional(),

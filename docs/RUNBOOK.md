@@ -572,5 +572,7 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - **What it shows:** `GET /stocks/{symbol}/prediction` (B14). Today the API answers `no_model` or `insufficient_universe`: the tab then shows the experimental banner, the disclaimer, the reason, both horizons hidden and the trend/risk gauges. That is the correct state until 20 tracked stocks have about three years of imported prices and `train_models` has run (D07). It is not a fault.
 - **Never:** a single target price. The tab shows a reference close and a price range (`price_q10` to `price_q90`); the median price field is never rendered. The test `prediction-tab.test.tsx` (ML-12) fails if it appears.
 - **A tab that looks wrong:** check the response first. An unexpected field type or enum value is shown as unknown or generic copy by design (degrade per field); fix the cause in the API or add the new enum copy in `lib/stock/prediction.ts`.
-- **Not yet shown:** the calibration plot and AUC-by-fold bars (the API serves only the aggregate card, F09-1).
+- **Unreadable sections:** a section with a wrong type (or a fraction outside 0..1) shows "could not be read" and logs `[prediction] ... could not be read` in the browser console; fix the API response.
+- **guardrail_failed shows no model card:** the API sends `model:null` for it (F09-8, owner/B14 decision).
+- **Not yet shown:** the calibration plot and AUC-by-fold bars (owner decision F09-1).
 - **Tests:** `cd apps/web && npx vitest run tests/unit/prediction-tab.test.tsx`.
