@@ -32,6 +32,8 @@ Finish the admin screen, PWA, accessibility, performance budgets, field-coverage
 2. Run manual a11y checklist and record results in RUNBOOK
 
 ## Acceptance criteria (all must be true)
+**Status: PARTIAL (F15R, 2026-11-11).** Built and tested: Admin status page, PWA shell, offline banner, field-coverage guard, bundle and Lighthouse gates (CI). Owner list of what is NOT done: `docs/OPEN_QUESTIONS.md` section "F15 review (F15R)" (F15R-1 to F15R-8). Nothing below is ticked that is not true.
+
 - [ ] Lighthouse >= 90 perf / >= 95 a11y on main routes (gate wired for /login only: 0.93 / 1.00 measured locally; other routes need a live API, F15-7)
 - [x] Zero serious axe violations (Playwright axe incl. /admin/status; tests/e2e/f15.spec.ts)
 - [x] Field coverage test passes with no unmapped fields (`/prediction` listed as not built, F15-5)

@@ -217,9 +217,8 @@ test.describe("PWA files are public and shell-only (PWA-01, PWA-02)", () => {
       }
       return out;
     });
-    expect(cached).toEqual(
-      expect.arrayContaining(["/offline.html", "/manifest.json", "/icons/icon-192.png"]),
-    );
+    expect(cached).toEqual(expect.arrayContaining(["/offline.html", "/icons/icon-192.png"]));
+    expect(cached).not.toContain("/manifest.json"); // not precached (F15R-S10)
     // Nothing that carries data: no API response and no page HTML.
     expect(cached.some((p) => p.startsWith("/api/") || p === "/login")).toBe(false);
     // Reload while offline: the navigation fails and the worker answers with the offline page.

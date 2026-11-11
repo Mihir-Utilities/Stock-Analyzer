@@ -147,7 +147,15 @@ jobs:
       - name: Lighthouse gate on /login (PERF-02)
         run: |
           npx next start -p 3200 -H 127.0.0.1 &
-          until curl -sf http://127.0.0.1:3200/login > /dev/null; do sleep 1; done
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          # Bounded wait (about 60 s): a server that never starts fails the step instead of hanging.
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:3200/login > /dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:3200/login > /dev/null
+          # Lighthouse is a pinned devDependency; the gate takes the median of 3 runs per page.
           npm run check:lighthouse -- http://127.0.0.1:3200 /login
         env:
           API_BASE_URL: http://127.0.0.1:9

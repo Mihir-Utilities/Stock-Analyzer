@@ -7,7 +7,9 @@ export function PwaRegister() {
   useEffect(() => {
     if (process.env.NODE_ENV !== "production") return;
     if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
+    // The build id in the URL gives each deploy its own worker cache (public/sw.js).
+    const build = encodeURIComponent(process.env.NEXT_PUBLIC_BUILD_ID ?? "dev");
+    navigator.serviceWorker.register(`/sw.js?v=${build}`, { scope: "/" }).catch(() => {
       /* no worker: no offline shell, nothing else changes */
     });
   }, []);

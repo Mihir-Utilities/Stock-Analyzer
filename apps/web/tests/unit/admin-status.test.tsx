@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "./dom-matchers";
@@ -18,7 +20,16 @@ vi.mock("next/link", () => ({
 }));
 
 import AdminStatusRoute from "@/app/(app)/admin/status/page";
-import { holidayWarning, recentErrors, runDurationMs } from "@/lib/admin/schemas";
+import { AdminStatus } from "@/components/admin/AdminStatus";
+import { createQueryClient } from "@/components/shell/Providers";
+import {
+  adminStatusFullSchema,
+  extraSources,
+  holidayWarning,
+  isPaused,
+  recentErrors,
+  runDurationMs,
+} from "@/lib/admin/schemas";
 import { createMockFetch, type Handler } from "../mocks/mock-fetch";
 
 const ok = (data: unknown, meta: Record<string, unknown> = { as_of: "2026-10-23T10:00:00Z" }) => ({
@@ -91,17 +102,19 @@ const full = {
   storage_policy: { db_soft_limit_mb: 380, note: "x", nested: { a: 1 } },
 };
 
-function mount(routes: Record<string, Handler>) {
+function mount(
+  routes: Record<string, Handler>,
+  ui: ReactNode = <AdminStatusRoute />,
+  client: QueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
   const mock = createMockFetch(routes);
   vi.stubGlobal("fetch", mock.impl);
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const view = render(
-    <QueryClientProvider client={client}>
-      <AdminStatusRoute />
-    </QueryClientProvider>,
-  );
+  const view = render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
   return { ...view, mock };
 }
+
+// The instant the screen treats as "now" (before the amfi pause in `full` ends).
+const NOW = Date.parse("2026-10-23T10:30:00Z");
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -113,6 +126,19 @@ describe("Admin status screen (docs/06 section 6.12)", () => {
     expect(note).toHaveTextContent("Not available yet");
     expect(note).toHaveTextContent("B14");
     expect(screen.queryByTestId("admin-db")).toBeNull();
+    expect(screen.getByTestId("admin-status-na-home")).toHaveAttribute("href", "/");
+  });
+
+  it("a 501 is asked once with the app default client (no retries) and shows at once (F15R-S2)", async () => {
+    const t0 = Date.now();
+    const { mock } = mount(
+      { "GET /admin/status": err(501, "NOT_IMPLEMENTED") },
+      undefined,
+      createQueryClient(),
+    );
+    await screen.findByTestId("admin-status-na-note");
+    expect(Date.now() - t0).toBeLessThan(900); // a retry would wait 1 s first
+    expect(mock.calls).toHaveLength(1);
   });
 
   it("another failure shows an error card with the request id and a working retry", async () => {
@@ -129,6 +155,8 @@ describe("Admin status screen (docs/06 section 6.12)", () => {
     mount({ "GET /admin/status": ok(full) });
     const mf = await screen.findByTestId("admin-source-mfapi");
     expect(mf).toHaveTextContent("850 ms");
+    // F15R-S4: the amfi pause ended on 23 Oct 2026 12:00Z; the default clock is later than that.
+    expect(screen.getByTestId("admin-source-amfi")).toHaveTextContent("Not paused");
     expect(mf).toHaveTextContent("Not paused");
     const amfi = screen.getByTestId("admin-source-amfi");
     expect(amfi).toHaveTextContent("Failing");
@@ -240,6 +268,146 @@ describe("Admin status screen (docs/06 section 6.12)", () => {
     expect(screen.queryAllByRole("button")).toHaveLength(0);
     const result = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
     expect(result.violations.map((v) => v.id)).toEqual([]);
+  });
+});
+
+describe("F15R-B1 wildcard-mapped admin fields really render their value", () => {
+  // Each `GET /admin/status` field that docs/field-map.json maps to a wildcard id (admin-source-*)
+  // must show its own value inside that card, not just own a matching test id.
+  const EXPECT: Record<string, string> = {
+    sources: "Source: amfi",
+    "sources[].source": "Source: amfi",
+    "sources[].checked_at": "As of 23 Oct 2026, 14:30 IST",
+    "sources[].ok": "Failing",
+    "sources[].latency_ms": "1 min 01 s",
+    "sources[].consecutive_failures": "3",
+    "sources[].disabled_until": "23 Oct 2026, 17:30 IST",
+    "sources[].note": "circuit open",
+  };
+
+  it("every wildcard-mapped field is covered by this table and its text appears", async () => {
+    const map = JSON.parse(
+      readFileSync(join(process.cwd(), "../../docs/field-map.json"), "utf8"),
+    ) as Record<string, Record<string, string>>;
+    const wildcard = Object.entries(map["GET /admin/status"] ?? {})
+      .filter(([, id]) => id.split("|")[0]!.includes("*"))
+      .map(([field]) => field);
+    expect(wildcard.sort()).toEqual(Object.keys(EXPECT).sort());
+    mount({ "GET /admin/status": ok(full) }, <AdminStatus now={NOW} />);
+    const card = await screen.findByTestId("admin-source-amfi");
+    for (const [field, text] of Object.entries(EXPECT)) {
+      expect(card.textContent, field).toContain(text);
+    }
+  });
+});
+
+describe("F15R-S4 Paused until only while the pause is in the future", () => {
+  it("shows the date while disabled_until is after now and Not paused once it has passed", async () => {
+    mount({ "GET /admin/status": ok(full) }, <AdminStatus now={NOW} />);
+    const amfi = await screen.findByTestId("admin-source-amfi");
+    expect(amfi).toHaveTextContent("Paused until");
+    expect(amfi).toHaveTextContent("23 Oct 2026, 17:30 IST");
+    expect(amfi).not.toHaveTextContent("Not paused");
+    cleanup();
+    mount(
+      { "GET /admin/status": ok(full) },
+      <AdminStatus now={Date.parse("2026-10-23T12:00:01Z")} />,
+    );
+    expect(await screen.findByTestId("admin-source-amfi")).toHaveTextContent("Not paused");
+  });
+
+  it("isPaused is false for null, a bad date and a past date", () => {
+    expect(isPaused(null, NOW)).toBe(false);
+    expect(isPaused("not a date", NOW)).toBe(false);
+    expect(isPaused("2026-10-23T10:30:00Z", NOW)).toBe(false);
+    expect(isPaused("2026-10-23T10:30:01Z", NOW)).toBe(true);
+  });
+});
+
+describe("F15R-S3 one unexpected value does not blank the page", () => {
+  it("an unknown warn_level, a string latency and a broken job row degrade only their own part", async () => {
+    mount({
+      "GET /admin/status": ok({
+        ...full,
+        db: { size_mb: 300, warn_level: "critical", tables: [{ name: "t", mb: "x", rows: 1 }, 7] },
+        sources: [
+          { source: "mfapi", latency_ms: "fast", ok: true },
+          { source: "broker", ok: false, note: "dormant", consecutive_failures: 2 },
+          "garbage",
+        ],
+        jobs: [{ job: "ok_job", status: "ok", rows_written: 5 }, { status: "ok" }],
+      }),
+    });
+    const db = await screen.findByTestId("admin-db-bar");
+    expect(db).toHaveAttribute("data-level", "70"); // derived from 300 / 380
+    expect(screen.getByTestId("admin-source-mfapi")).toHaveTextContent("Status");
+    expect(screen.getAllByTestId("admin-job-row")).toHaveLength(1);
+    // The broker row is kept and shown as its own card.
+    const broker = screen.getByTestId("admin-source-broker");
+    expect(broker).toHaveTextContent("Failing");
+    expect(broker).toHaveTextContent("dormant");
+    expect(screen.queryByTestId("admin-error")).toBeNull();
+  });
+
+  it("a wrong type for a whole block (coverage as a string) shows that card's empty state only", async () => {
+    mount({ "GET /admin/status": ok({ ...full, coverage: "oops", jobs: 5 }) });
+    expect(await screen.findByTestId("admin-coverage")).toHaveTextContent(
+      "did not report coverage",
+    );
+    expect(screen.getByTestId("admin-jobs")).toHaveTextContent("No job has run yet");
+    expect(screen.getByTestId("admin-db-text")).toBeTruthy();
+  });
+
+  it("the schema keeps unknown sources", () => {
+    const r = adminStatusFullSchema.parse({ sources: [{ source: "broker" }, { source: "mfapi" }] });
+    expect(extraSources(r.sources ?? []).map((x) => x.source)).toEqual(["broker"]);
+  });
+});
+
+describe("F15R nits", () => {
+  it("the server db_soft_limit_mb drives the meter; the largest tables are sorted and capped", async () => {
+    const tables = Array.from({ length: 14 }, (_, i) => ({ name: `t${i}`, mb: i, rows: i }));
+    mount({
+      "GET /admin/status": ok({
+        ...full,
+        db: { size_mb: 200, tables },
+        storage_policy: { db_soft_limit_mb: 400 },
+      }),
+    });
+    const text = await screen.findByTestId("admin-db-text");
+    expect(text).toHaveTextContent("200.0 MB of 400 MB (50.0%)");
+    const names = [...screen.getByTestId("admin-db-tables").querySelectorAll("tbody th")].map(
+      (n) => n.textContent,
+    );
+    expect(names).toHaveLength(10);
+    expect(names[0]).toBe("t13");
+    expect(names[9]).toBe("t4");
+  });
+
+  it("a long error text is cut to 500 characters", async () => {
+    const long = "x".repeat(900);
+    const jobs = [{ job: "j", status: "failed", error: long, finished_at: "2026-10-23T08:00:00Z" }];
+    mount({ "GET /admin/status": ok({ ...full, jobs }) });
+    const t = await screen.findByTestId("admin-error-text");
+    expect(t.textContent).toHaveLength(501);
+    expect(t.textContent?.endsWith("…")).toBe(true);
+  });
+
+  it("the loading and error states keep heading levels h1, h2, h3 in order", async () => {
+    mount({ "GET /admin/status": err(500, "INTERNAL") });
+    expect(screen.getByRole("heading", { level: 2, name: "Data health" })).toBeTruthy();
+    await screen.findByTestId("admin-error");
+    const levels = screen.getAllByRole("heading").map((h) => h.tagName);
+    expect(levels).toEqual(["H1", "H2", "H3"]);
+  });
+
+  it("recentErrors orders by real time, not by string, across offsets", () => {
+    const out = recentErrors([
+      { job: "early", status: "failed", error: "e", finished_at: "2026-01-01T10:00:00+05:30" },
+      { job: "late", status: "failed", error: "e", finished_at: "2026-01-01T06:00:00Z" },
+    ]);
+    // 10:00 IST is 04:30Z, so "late" (06:00Z) is newer although its string sorts lower.
+    expect(out.map((j) => j.job)).toEqual(["late", "early"]);
   });
 });
 

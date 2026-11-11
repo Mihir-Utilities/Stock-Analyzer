@@ -2,6 +2,11 @@
 // lazy. Reads a finished `next build` (.next): for each app route it sums the gzip size of the
 // distinct JS files the route loads up front (the client reference manifest of the page and the
 // root main files). Lazy `import()` chunks are not in those lists, so lazy charts do not count.
+// HONEST LIMIT: that also means a section loaded with next/dynamic is NOT counted even though it
+// mounts on first render (the portfolio page's holdings, charts and forms, the stock page's active
+// tab). The number is therefore the up-front shell of a route, not the total JS a user downloads
+// to see it; docs/06a section 10 and docs/RUNBOOK.md section 80 say so. A route that yields
+// no result, a route without a measured manifest, or a listed chunk missing on disk fails the gate.
 // Usage: node scripts/check-bundle-budget.mjs [--next-dir .next] [--budget-kb 250]
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -10,6 +15,27 @@ import { runInNewContext } from "node:vm";
 import { gzipSync } from "node:zlib";
 
 export const DEFAULT_BUDGET_KB = 250;
+
+/** Number of `page.tsx` files under an app directory (the routes that must be measured). */
+export function countPages(srcAppDir) {
+  let n = 0;
+  for (const name of readdirSync(srcAppDir)) {
+    const p = join(srcAppDir, name);
+    if (statSync(p).isDirectory()) n += countPages(p);
+    else if (/^page\.(tsx|ts|jsx|js)$/.test(name)) n += 1;
+  }
+  return n;
+}
+
+/** Throws when the measurement cannot be trusted: no routes, or fewer routes than pages. */
+export function assertComplete(results, expectedPages = 0) {
+  if (results.length === 0) throw new Error("no routes were measured; run next build first");
+  if (results.length < expectedPages) {
+    throw new Error(
+      `measured ${results.length} routes but the source has ${expectedPages} page files`,
+    );
+  }
+}
 
 function findManifests(dir) {
   const out = [];
@@ -47,7 +73,10 @@ export function measureRoutes(nextDir) {
   const gz = (file) => {
     if (!sizeCache.has(file)) {
       const p = join(nextDir, file);
-      sizeCache.set(file, existsSync(p) ? gzipSync(readFileSync(p)).length : 0);
+      // A listed chunk that is not on disk must not count as 0 bytes.
+      if (!existsSync(p))
+        throw new Error(`chunk ${file} is listed in the build but missing on disk`);
+      sizeCache.set(file, gzipSync(readFileSync(p)).length);
     }
     return sizeCache.get(file);
   };

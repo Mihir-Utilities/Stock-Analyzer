@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { preloadBeforeAll } from "./preload";
 import { PortfolioPage } from "@/components/portfolio/PortfolioPage";
 import { WatchlistPage } from "@/components/portfolio/WatchlistPage";
 import { fail } from "../mocks/imports-fixtures";
@@ -50,6 +51,8 @@ async function fillForm(
   await user.type(screen.getByTestId("txn-price"), v.price ?? "4000");
   fireEvent.change(screen.getByTestId("txn-date"), { target: { value: v.date ?? "2026-10-23" } });
 }
+
+preloadBeforeAll("portfolio");
 
 describe("PF-01/PF-09 summary, honesty and warnings", () => {
   it("shows every summary card with unit, source and as-of, signed P&L and the manual-mode note", async () => {

@@ -169,9 +169,11 @@ export function formatMb(
 /** A duration given in milliseconds: `850 ms`, `1.2 s`, `3 min 05 s`, `2 h 05 min`. */
 export function formatDuration(ms: number | null | undefined, o: NullOpts = {}): Formatted {
   if (!isKnown(ms) || ms < 0) return unknown(o.reason);
-  if (ms < 1000) return known(`${Math.round(ms)} ms`);
+  // Tiers follow the ROUNDED value: 999.6 ms is `1.0 s` (not `1000 ms`), 59.96 s is `1 min 00 s`.
+  if (ms > 0 && ms < 0.5) return known("<1 ms");
+  if (Math.round(ms) < 1000) return known(`${Math.round(ms)} ms`);
   const totalS = ms / 1000;
-  if (totalS < 60) return known(`${totalS.toFixed(1)} s`);
+  if (Number(totalS.toFixed(1)) < 60) return known(`${totalS.toFixed(1)} s`);
   const whole = Math.round(totalS);
   const h = Math.floor(whole / 3600);
   const m = Math.floor((whole % 3600) / 60);

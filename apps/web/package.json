@@ -52,6 +52,7 @@
     "eslint": "^10.12.0",
     "eslint-config-next": "^16.4.1",
     "jsdom": "^29.1.1",
+    "lighthouse": "12.8.2",
     "postcss": "^8.5.30",
     "prettier": "^3.9.9",
     "storybook": "^10.6.2",

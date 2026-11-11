@@ -425,7 +425,7 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | UI-03 | 320 px width | No horizontal scroll except sticky-column tables | E |
 | UI-04 | Dark/light parity and contrast | Pass | E |
 | UI-05 | Search 2,200 items | Opens < 100 ms; < 16 ms/keystroke | E |
-| UI-06 | Offline | Banner; cached views | E |
+| UI-06 | Offline | Banner while `navigator.onLine` is false; already loaded screens keep their data. The service worker caches the app shell only (offline page, icons, hashed static files), never an API response or a page, so there are no cached data views (see UI-06b, PWA-02) | E |
 | UI-07 | Chart with < 10 bars | Renders | E |
 | UI-08 | Long names | Truncate with tooltip | E |
 | UI-09 | Every API field visible somewhere | Field-coverage test against `06-frontend-spec.md` matrix | E |
@@ -731,3 +731,11 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ML-05 (UI) | Guardrail fails | `guardrail_failed` banner, each hidden horizon shows its reason and no numbers, the model card says "Not passed", no fan chart | U (`prediction-tab.test.tsx` ML-05) |
 | ML-06 (UI) | Every `hidden_reason` enum value | Each of the six values has its own plain-language copy and no numbers; an unconfirmed action ("near_corporate_action") tells the owner to confirm the possible split first and links to the Events tab | U (`prediction-tab.test.tsx` ML-06) |
 | ML-12 (UI) | No single target price anywhere | Only the reference close and a price RANGE are rendered (the median price is never shown); the fan chart is three range lines; "target price" appears only in the banner's negation; the prediction source files never name a target price | U (`prediction-tab.test.tsx` ML-12) |
+| F15R-01 | UI-09 guard matches whole ids (F15 review B1) | A mapped test id must equal a declared `data-testid`/`testId` string or be produced by a declared template; a prefix, a suffix or a typo fails; wildcard-mapped admin fields render their own text | U (`f15-polish.test.tsx`, `admin-status.test.tsx`) |
+| F15R-02 | 501 is not retried (F15 review S2) | `shouldRetry` is false for 501 / `NOT_IMPLEMENTED`; with the app's default query client the admin screen calls `GET /admin/status` exactly once and shows "Not available yet" at once; the e2e run sees exactly one call | U (`admin-status.test.tsx`, `api-client.test.ts`), E (`browse.spec.ts`) |
+| F15R-03 | One odd value does not blank Admin status (F15 review S3) | An unknown `warn_level`, a string where a number belongs, a broken job or table row, or a wrong-typed block degrades only that field or card; source rows beyond mfapi/amfi/telegram (broker) are kept and shown | U (`admin-status.test.tsx`) |
+| F15R-04 | Paused until (F15 review S4) | Shown only while `disabled_until` is after now (now injected in tests); a past, null or invalid value shows "Not paused" | U (`admin-status.test.tsx`) |
+| F15R-05 | Bundle gate cannot pass on nothing (F15 review S5) | Zero measured routes, fewer routes than `app/**/page.tsx` files, or a listed chunk missing on disk is an error | U (`bundle-budget.test.ts`) |
+| F15R-06 | Lighthouse gate uses the median of 3 runs (F15 review S6) | Median per category; a missing score is a failure; a pinned `lighthouse` devDependency is used (no `npx --yes`) | U (`bundle-budget.test.ts`), CI |
+| F15R-07 | Service worker cache per build (F15 review S10) | The cache name carries the build id (`/sw.js?v=`); activate deletes every other cache; the manifest is not precached; an offline navigation with no cached offline page still gets a Response; `/sw.js` is served with `default-src 'none'; connect-src 'self'` | U (`f15-polish.test.tsx`) |
+| F15R-08 | Duration rounding (F15 review nit) | 999.6 ms is `1.0 s`, 59.96 s is `1 min 00 s`, a value under 0.5 ms is `<1 ms` | U (`format.test.ts`) |

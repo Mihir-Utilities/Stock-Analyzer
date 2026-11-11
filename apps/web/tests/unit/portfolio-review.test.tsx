@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { preloadBeforeAll } from "./preload";
 import { PortfolioPage } from "@/components/portfolio/PortfolioPage";
 import { fail } from "../mocks/imports-fixtures";
 import { createMockFetch, type Handler } from "../mocks/mock-fetch";
@@ -77,6 +78,8 @@ const buy = (id: number, symbol: string, date: string) => ({
   trade_date: date,
   note: "",
 });
+
+preloadBeforeAll("portfolio");
 
 describe("F11R transactions list: filters over unloaded pages", () => {
   it("Side=Sell with no sell on page 1 still offers Load more and shows page 2", async () => {

@@ -2,8 +2,9 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { ToastProvider } from "@/components/ui/overlays";
 import { describeError, asOfText } from "@/lib/dashboard/state";
 import { usePortfolioSummaryFull } from "@/lib/portfolio/api";
@@ -11,13 +12,37 @@ import { SummaryCards, WarningBanners } from "./SummarySection";
 import { MANUAL_PRICE_NOTE, PORTFOLIO_SOURCE } from "./text";
 
 // Charts, the transaction forms and adjustments load on demand (250 kB gzip route budget, docs/06a section 10).
-const ChartsSection = dynamic(() => import("./ChartsSection").then((m) => m.ChartsSection));
-const DividendsCard = dynamic(() => import("./AdjustmentsPanel").then((m) => m.DividendsCard));
-const AdjustmentsPanel = dynamic(() =>
-  import("./AdjustmentsPanel").then((m) => m.AdjustmentsPanel),
-);
-const HoldingsSection = dynamic(() => import("./HoldingsSection").then((m) => m.HoldingsSection));
-const TxnSection = dynamic(() => import("./TxnSection").then((m) => m.TxnSection));
+// Each section shows a skeleton while its chunk loads, and the imports start when the page mounts
+// (not when the summary arrives), so the chunks load in parallel with the API call.
+const loadCharts = () => import("./ChartsSection");
+const loadAdjustments = () => import("./AdjustmentsPanel");
+const loadHoldings = () => import("./HoldingsSection");
+const loadTxn = () => import("./TxnSection");
+const sectionLoading = () => <Skeleton className="h-40 w-full" label="Loading section" />;
+const ChartsSection = dynamic(() => loadCharts().then((m) => m.ChartsSection), {
+  loading: sectionLoading,
+});
+const DividendsCard = dynamic(() => loadAdjustments().then((m) => m.DividendsCard), {
+  loading: sectionLoading,
+});
+const AdjustmentsPanel = dynamic(() => loadAdjustments().then((m) => m.AdjustmentsPanel), {
+  loading: sectionLoading,
+});
+const HoldingsSection = dynamic(() => loadHoldings().then((m) => m.HoldingsSection), {
+  loading: sectionLoading,
+});
+const TxnSection = dynamic(() => loadTxn().then((m) => m.TxnSection), {
+  loading: sectionLoading,
+});
+
+/** Starts the lazy imports; a failed preload is harmless because dynamic() asks again. */
+export function preloadSections(): Promise<unknown> {
+  return Promise.all(
+    [loadCharts, loadAdjustments, loadHoldings, loadTxn].map((load) =>
+      load().catch(() => undefined),
+    ),
+  );
+}
 
 function Body() {
   const [showExited, setShowExited] = useState(false);
@@ -71,6 +96,9 @@ function Body() {
 
 /** Portfolio screen (docs/06 section 6.7). Stocks only; manual price mode. */
 export function PortfolioPage() {
+  useEffect(() => {
+    void preloadSections();
+  }, []);
   return (
     <ToastProvider>
       <div className="flex flex-col gap-4" data-testid="portfolio-page">
