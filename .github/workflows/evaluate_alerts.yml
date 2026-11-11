@@ -1,0 +1,33 @@
+# evaluate_alerts: 19:30 IST Monday to Friday, end of day only (docs/04 3.9). GitHub cron is UTC and best-effort; the job works from data state, so a late or
+# skipped run catches up on the next one (SYS-03). Actions are pinned by commit SHA (docs/04 1.8).
+name: evaluate_alerts
+
+on:
+  schedule:
+    - cron: '0 14 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: worker-alerts
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: evaluate_alerts
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+      - name: Install worker environment
+        run: uv sync --project apps/worker --locked
+      - name: Run evaluate_alerts
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: uv run --project apps/worker python -m worker run evaluate_alerts
