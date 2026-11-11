@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -347,19 +348,11 @@ func (s *Service) CreateTxn(ctx context.Context, in TxnInput, key string) (TxnRe
 		return TxnResult{}, err
 	}
 	if v.Type == TypeRedemption {
-		ts, err := LoadSchemeTxns(ctx, tx, []int32{sch.Code})
+		w, err := s.roundedWarning(ctx, tx, sch.Code, v.Folio, id)
 		if err != nil {
 			return TxnResult{}, err
 		}
-		pos, err := Replay(onlyFolio(ts, v.Folio), Today(s.Now()))
-		if err != nil {
-			return TxnResult{}, err
-		}
-		for _, r := range pos.Rounded {
-			if r == id {
-				warns = append(warns, Warn{"UNITS_ROUNDED", "The redemption exceeded the held units by rounding dust; it was clamped to the held units"})
-			}
-		}
+		warns = append(warns, w...)
 	}
 	if err := TrackScheme(ctx, tx, sch.Code); err != nil {
 		return TxnResult{}, err
@@ -380,6 +373,43 @@ func (s *Service) CreateTxn(ctx context.Context, in TxnInput, key string) (TxnRe
 	}
 	s.refreshIfNoNAV(ctx, sch.Code)
 	return res, nil
+}
+
+// roundedWarning is UNITS_ROUNDED when the stored redemption `id` was clamped to the held units.
+func (s *Service) roundedWarning(ctx context.Context, db dbq.DBTX, code int32, folio string, id int64) ([]Warn, error) {
+	ts, err := LoadSchemeTxns(ctx, db, []int32{code})
+	if err != nil {
+		return nil, err
+	}
+	pos, err := Replay(onlyFolio(ts, folio), Today(s.Now()))
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range pos.Rounded {
+		if r == id {
+			return []Warn{{"UNITS_ROUNDED", "The redemption exceeded the held units by rounding dust; it was clamped to the held units"}}, nil
+		}
+	}
+	return nil, nil
+}
+
+// validateFolios replays only the given folios of a scheme (an edit must not be blocked by an
+// unrelated folio that was already inconsistent, B15 review N2).
+func validateFolios(ctx context.Context, db dbq.DBTX, code int32, folios []string, now time.Time) error {
+	ts, err := LoadSchemeTxns(ctx, db, []int32{code})
+	if err != nil {
+		return err
+	}
+	var scoped []Txn
+	for _, t := range ts {
+		for _, f := range folios {
+			if t.Folio == f {
+				scoped = append(scoped, t)
+				break
+			}
+		}
+	}
+	return Validate(scoped, Today(now))
 }
 
 func onlyFolio(ts []Txn, folio string) []Txn {
@@ -416,7 +446,8 @@ func (s *Service) UpdateTxn(ctx context.Context, id int64, in TxnInput) (TxnResu
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var code int32
-	err = tx.QueryRow(ctx, `SELECT scheme_code FROM mf_txn WHERE id = $1`, id).Scan(&code)
+	var oldFolio string
+	err = tx.QueryRow(ctx, `SELECT scheme_code, folio FROM mf_txn WHERE id = $1`, id).Scan(&code, &oldFolio)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TxnResult{}, &NotFoundError{What: "transaction", Details: map[string]any{"id": id}}
 	}
@@ -459,11 +490,11 @@ func (s *Service) UpdateTxn(ctx context.Context, id int64, in TxnInput) (TxnResu
 		updated_at = now() WHERE id = $1`, id, folio, typ, date, units, nav, amount, stamp, note); err != nil {
 		return TxnResult{}, err
 	}
-	if err := ValidateSchemes(ctx, tx, []int32{code}, s.Now()); err != nil {
-		return TxnResult{}, err
-	}
 	item, err := scanItem(tx.QueryRow(ctx, `SELECT `+txnCols+` FROM mf_txn t JOIN mf_scheme m ON m.code = t.scheme_code WHERE t.id = $1`, id))
 	if err != nil {
+		return TxnResult{}, err
+	}
+	if err := validateFolios(ctx, tx, code, []string{oldFolio, item.Folio}, s.Now()); err != nil {
 		return TxnResult{}, err
 	}
 	full := Values{Folio: item.Folio, Type: item.TxnType}
@@ -474,6 +505,13 @@ func (s *Service) UpdateTxn(ctx context.Context, id int64, in TxnInput) (TxnResu
 	warns, err := s.rowWarnings(ctx, tx, code, full, id, false)
 	if err != nil {
 		return TxnResult{}, err
+	}
+	if item.TxnType == TypeRedemption {
+		w, err := s.roundedWarning(ctx, tx, code, item.Folio, id)
+		if err != nil {
+			return TxnResult{}, err
+		}
+		warns = append(warns, w...)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return TxnResult{}, err
@@ -522,9 +560,10 @@ func (s *Service) ListTxns(ctx context.Context, p ListParams) (pagination.Page[T
 	var fe []FieldError
 	var code *int64
 	if p.SchemeCode != "" {
-		var n int64
-		if _, err := fmt.Sscanf(p.SchemeCode, "%d", &n); err != nil || n < 1 {
-			fe = append(fe, FieldError{"scheme_code", "must be a positive integer"})
+		// Full match, range of the int4 column: "1abc" and 99999999999 are 422, never a 500 (B15 review S7).
+		n, err := strconv.ParseInt(p.SchemeCode, 10, 64)
+		if err != nil || n < 1 || n > 1<<31-1 {
+			fe = append(fe, FieldError{"scheme_code", "must be a positive integer up to 2147483647"})
 		} else {
 			code = &n
 		}

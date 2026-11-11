@@ -18,6 +18,7 @@ import (
 func importService(cfg config.Config, pool *pgxpool.Pool, jobSvc *jobs.Service, log zerolog.Logger) *importers.Service {
 	svc := importers.New(pool, jobSvc, cfg.DBSoftLimitMB, log)
 	svc.LargePrices = strings.EqualFold(strings.TrimSpace(os.Getenv("IMPORT_PRICES_LARGE_ENABLED")), "true")
+	svc.MFXLSXEnabled = strings.EqualFold(strings.TrimSpace(os.Getenv("MF_XLSX_ENABLED")), "true")
 	svc.SetMFRefresher(mfRefresher{jobs: jobSvc})
 	return svc
 }

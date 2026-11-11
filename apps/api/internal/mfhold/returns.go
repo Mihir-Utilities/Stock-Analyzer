@@ -20,6 +20,8 @@ const (
 	ReasonShortPeriod  = "period_too_short"
 	ReasonNoNAV        = "no_nav"
 	ReasonMissingNAV   = "missing_nav"
+	// ReasonNotMeaningful: a percentage of a zero base (n/m).
+	ReasonNotMeaningful = "n/m"
 )
 
 // OneYearDays: a span below this shows the absolute return instead of XIRR (docs/05 8.5.6, MFH-3).

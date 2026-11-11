@@ -54,15 +54,15 @@ func (s *Service) mfEnv(ctx context.Context, db dbq.DBTX) (mfEnv, error) {
 	if err != nil {
 		return mfEnv{}, err
 	}
-	return mfEnv{today: s.today(), holidays: hol, mappings: maps}, nil
+	return mfEnv{today: s.today(), holidays: hol, mappings: maps, xlsx: s.MFXLSXEnabled}, nil
 }
 
 // maxCandidateNames bounds the candidate searches of one validate call.
 const maxCandidateNames = 50
 
-// buildMF scans a statement against the current mappings and fills the validate response (without
-// the upload id).
-func (s *Service) buildMF(ctx context.Context, db dbq.DBTX, content []byte) (*ValidateResult, *mfScan, error) {
+// scanStatement scans a statement against the current mappings and fills the validate response (without
+// the upload id and without the candidate searches: commit does not need them, S9).
+func (s *Service) scanStatement(ctx context.Context, db dbq.DBTX, content []byte) (*ValidateResult, *mfScan, error) {
 	env, err := s.mfEnv(ctx, db)
 	if err != nil {
 		return nil, nil, err
@@ -83,19 +83,10 @@ func (s *Service) buildMF(ctx context.Context, db dbq.DBTX, content []byte) (*Va
 	res.Warnings = append(res.Warnings, rep.Warnings.items...)
 	res.WarningCount += rep.Warnings.total
 	pv := sc.Preview
-	n := 0
 	for _, f := range pv.Funds {
-		if f.Mapped {
-			continue
+		if !f.Mapped {
+			pv.UnmappedFunds = append(pv.UnmappedFunds, MFUnmapped{FundName: f.FundName, FundNameKey: f.FundNameKey, Rows: f.Rows, Candidates: []mfhold.Candidate{}})
 		}
-		u := MFUnmapped{FundName: f.FundName, FundNameKey: f.FundNameKey, Rows: f.Rows, Candidates: []mfhold.Candidate{}}
-		if n < maxCandidateNames {
-			if u.Candidates, err = mfhold.Candidates(ctx, db, f.FundName); err != nil {
-				return nil, nil, err
-			}
-			n++
-		}
-		pv.UnmappedFunds = append(pv.UnmappedFunds, u)
 	}
 	if len(sc.Rows) > 0 {
 		keys := make([]string, 0, len(sc.Rows))
@@ -110,12 +101,50 @@ func (s *Service) buildMF(ctx context.Context, db dbq.DBTX, content []byte) (*Va
 	return res, sc, nil
 }
 
+// addCandidates runs the (bounded) candidate searches of the unmapped fund names; validate and
+// revalidate only.
+func addCandidates(ctx context.Context, db dbq.DBTX, pv *MFPreview) error {
+	for i := range pv.UnmappedFunds {
+		if i >= maxCandidateNames {
+			break
+		}
+		c, err := mfhold.Candidates(ctx, db, pv.UnmappedFunds[i].FundName)
+		if err != nil {
+			return err
+		}
+		pv.UnmappedFunds[i].Candidates = c
+	}
+	return nil
+}
+
+// buildMF is the validate-time scan: scan plus candidate searches.
+func (s *Service) buildMF(ctx context.Context, db dbq.DBTX, content []byte) (*ValidateResult, *mfScan, error) {
+	res, sc, err := s.scanStatement(ctx, db, content)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := addCandidates(ctx, db, res.MF); err != nil {
+		return nil, nil, err
+	}
+	return res, sc, nil
+}
+
+// unreadableStub is stored for a statement whose header was not found: it reproduces the header error
+// on every later read without keeping a byte of the original file.
+var unreadableStub = []byte("unreadable statement\n")
+
 func (s *Service) validateMF(ctx context.Context, content []byte, group string) (*ValidateResult, error) {
-	res, _, err := s.buildMF(ctx, s.pool, content)
+	res, sc, err := s.buildMF(ctx, s.pool, content)
 	if err != nil {
 		return nil, err
 	}
-	id, err := s.putUpload(ctx, KindMFStatement, content)
+	// B15 review B2: only the 8 logical columns are stored, never the raw upload (name, PAN, address,
+	// balances and title rows stay out of import_upload).
+	stored := sc.Canonical
+	if sc.Header != nil || stored == nil {
+		stored = unreadableStub
+	}
+	id, err := s.putUpload(ctx, KindMFStatement, stored)
 	if err != nil {
 		return nil, err
 	}
@@ -143,19 +172,41 @@ func (s *Service) RevalidateMF(ctx context.Context, uploadID string) (*ValidateR
 
 // commitMF writes a validated statement inside the commit transaction (docs/01 7.9, MFH-12, MFH-24).
 func (s *Service) commitMF(ctx context.Context, tx pgx.Tx, content []byte, excluded []int, batchID int64) (*MFCommitResult, error) {
-	res, sc, err := s.buildMF(ctx, tx, content)
+	// S6: take the per-fund-name lock of every name in the file first (the lock PutMapping takes, same
+	// order: names, then schemes), then read the mappings. A concurrent re-map either finished before
+	// this point (and is seen) or waits for this commit (and then rewrites the rows we insert).
+	_, first, err := s.scanStatement(ctx, tx, content)
 	if err != nil {
 		return nil, err
 	}
-	if res.ErrorCount > 0 {
-		return nil, &HasErrorsError{Count: res.ErrorCount}
+	keys := make([]string, 0, len(first.Preview.Funds))
+	for _, f := range first.Preview.Funds {
+		keys = append(keys, f.FundNameKey)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(7013, hashtext($1))`, k); err != nil {
+			return nil, err
+		}
+	}
+	res, sc, err := s.scanStatement(ctx, tx, content)
+	if err != nil {
+		return nil, err
 	}
 	skip := map[int]bool{}
+	skippedErrors := 0
 	for _, l := range excluded {
 		if !sc.Lines[l] {
 			return nil, validation("excluded_rows", fmt.Sprintf("line %d is not a data row of the file", l))
 		}
 		skip[l] = true
+		skippedErrors += sc.RowErrors[l] // S9: an errored row may be excluded; its errors then do not block
+	}
+	if sc.Header != nil {
+		return nil, &HasErrorsError{Count: res.ErrorCount}
+	}
+	if n := res.ErrorCount - skippedErrors; n > 0 {
+		return nil, &HasErrorsError{Count: n}
 	}
 	set := map[int32]bool{}
 	for _, r := range sc.Rows {

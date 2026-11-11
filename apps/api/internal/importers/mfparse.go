@@ -96,13 +96,20 @@ func (r MFRow) Cost() decimal.Decimal {
 	return r.Amount
 }
 
+// ErrXLSXDisabled: the .xlsx path is behind the MF_XLSX_ENABLED flag (default off) until the owner's
+// first real upload confirms the layout (spike S18, B15R-1). CSV is always accepted.
+var ErrXLSXDisabled = xlsxErr("xlsx not enabled: save the statement as CSV (UTF-8) and upload that file")
+
 // ErrMFHeader is a header problem (reported as a file-level error).
 var ErrMFHeader = errors.New("importers: statement header problem")
 
 // sniffMF splits the content into grids: xlsx by magic bytes, else CSV text.
-func sniffMF(content []byte, maxRows int) ([]sheetGrid, error) {
+func sniffMF(content []byte, maxRows int, xlsxEnabled bool) ([]sheetGrid, error) {
 	switch {
 	case bytes.HasPrefix(content, []byte("PK\x03\x04")):
+		if !xlsxEnabled {
+			return nil, ErrXLSXDisabled
+		}
 		return readXLSX(content, maxRows)
 	case bytes.HasPrefix(content, []byte{0xD0, 0xCF, 0x11, 0xE0}):
 		return nil, fmt.Errorf("%w: legacy .xls files are not supported; save the statement as .xlsx or CSV", ErrNotText)
@@ -239,6 +246,7 @@ type mfEnv struct {
 	today    time.Time
 	holidays map[time.Time]bool
 	mappings map[string]mfhold.Mapping
+	xlsx     bool // MF_XLSX_ENABLED
 }
 
 // MFFund is one distinct fund name of a file.
@@ -286,6 +294,94 @@ type mfScan struct {
 	Header  []RowIssue
 	// lines is the set of data-row lines (for excluded_rows validation).
 	Lines map[int]bool
+	// RowErrors counts the errors of each data-row line (an errored row may be excluded at commit, S9).
+	RowErrors map[int]int
+	// Canonical is the stripped re-serialisation of the 8 logical columns (B15 review B2): the only form
+	// of the statement that is stored. Data rows keep their original file line (blank lines pad the gaps),
+	// so excluded_rows lines mean the same on every later read.
+	Canonical []byte
+}
+
+// unreadableMark starts the Date cell of a canonical row whose original cell could not be read, so the
+// row stays an UNREADABLE_CELL error on every later read.
+const unreadableMark = "#UNREADABLE:"
+
+// canonicalColumns is the header of the stored form.
+var canonicalColumns = []string{colDate, colFund, colType, colFolio, colUnits, colNAV, colAmt, colStamp}
+
+// canonicalWriter writes the stripped CSV.
+type canonicalWriter struct {
+	buf  bytes.Buffer
+	w    *csv.Writer
+	next int // the file line the next record lands on
+}
+
+func newCanonicalWriter() *canonicalWriter {
+	c := &canonicalWriter{next: 1}
+	c.w = csv.NewWriter(&c.buf)
+	return c
+}
+
+// add writes rec at file line `line` (blank lines pad the gap; a line that is not ahead of the cursor
+// is written at the cursor, which can only happen for a workbook with out-of-order row numbers).
+func (c *canonicalWriter) add(line int, rec []string) {
+	c.w.Flush()
+	for c.next < line {
+		c.buf.WriteByte('\n')
+		c.next++
+	}
+	_ = c.w.Write(rec)
+	c.next++
+}
+
+func (c *canonicalWriter) bytes() []byte {
+	c.w.Flush()
+	return c.buf.Bytes()
+}
+
+// canonicalMaxRunes is the longest text a valid cell of each non-text column can have.
+var canonicalMaxRunes = map[string]int{colDate: 24, colType: 40, colUnits: 32, colNAV: 32, colAmt: 32, colStamp: 32}
+
+var reCtl = regexp.MustCompile(`[\x00-\x1f\x7f]+`)
+
+// canonicalRecord is the 8 logical cells of a row; control characters never reach the stored text.
+func canonicalRecord(gr gridRow, cols map[string]int) []string {
+	rec := make([]string, len(canonicalColumns))
+	for i, name := range canonicalColumns {
+		v := cell(gr, cols, name)
+		if name == colFolio {
+			if raw, ok := numericFolio(gr, cols); ok {
+				v = raw
+			}
+		}
+		if name == colFund || name == colFolio {
+			v = mfhold.CleanText(v)
+		} else {
+			v = strings.TrimSpace(reCtl.ReplaceAllString(v, " "))
+			// A date, type or number cell longer than any valid value is free text (a footer, a note) that
+			// can only be an error; it is replaced by a marker so no free text is kept (B2). The same
+			// error code is raised on every later read.
+			if utf8.RuneCountInString(v) > canonicalMaxRunes[name] {
+				v = "#TOO_LONG"
+			}
+		}
+		rec[i] = v
+	}
+	if len(gr.Problems) > 0 {
+		rec = make([]string, len(canonicalColumns))
+		rec[0] = unreadableMark + " " + reCtl.ReplaceAllString(gr.Problems[0], " ")
+	}
+	return rec
+}
+
+// numericFolio returns the raw <v> text of a numeric folio cell (no float round trip, S5).
+func numericFolio(gr gridRow, cols map[string]int) (string, bool) {
+	i, ok := cols[colFolio]
+	if !ok || gr.Num == nil {
+		return "", false
+	}
+	raw, ok := gr.Num[i]
+	return raw, ok
 }
 
 func (l *issueList) addCode(row int, col, code, msg string) {
@@ -303,9 +399,9 @@ func dedupeKey(r MFRow) string {
 
 // scanMF parses and validates a statement without touching the database (env carries the lookups).
 func scanMF(content []byte, env mfEnv, lim Limits) (*mfScan, error) {
-	sc := &mfScan{Report: newReport(), Lines: map[int]bool{}}
+	sc := &mfScan{Report: newReport(), Lines: map[int]bool{}, RowErrors: map[int]int{}}
 	sc.Preview = MFPreview{RowsByType: map[string]int{}, Funds: []MFFund{}, UnmappedFunds: []MFUnmapped{}, FundMappings: []mfhold.Mapping{}, DuplicateGroup: []MFDupGroup{}}
-	grids, err := sniffMF(content, lim.MaxRows)
+	grids, err := sniffMF(content, lim.MaxRows, env.xlsx)
 	if err != nil {
 		return nil, err
 	}
@@ -322,45 +418,63 @@ func scanMF(content []byte, env mfEnv, lim Limits) (*mfScan, error) {
 		return nil, ErrTooManyRows
 	}
 	rep := sc.Report
+	canon := newCanonicalWriter()
+	canon.add(grids[si].Rows[hi].Line, canonicalColumns)
 	identical := map[string][]int{} // identical tuple -> indexes into sc.Rows
 	fundRows := map[string]int{}
 	fundName := map[string]string{}
 	for _, gr := range rows {
-		// A row without any of the required cells is blank for our purposes (a footer, a note).
-		empty := true
-		for _, req := range mfRequired {
-			if cell(gr, cols, req) != "" {
-				empty = false
+		before := rep.Errors.total
+		func() {
+			// A row marked unreadable by an earlier read of the canonical form stays unreadable.
+			if len(gr.Problems) == 0 {
+				if d := cell(gr, cols, colDate); strings.HasPrefix(d, unreadableMark) {
+					gr.Problems = []string{strings.TrimSpace(strings.TrimPrefix(d, unreadableMark))}
+				}
 			}
+			// A row without any of the required cells is blank for our purposes (a footer, a note).
+			empty := true
+			for _, req := range mfRequired {
+				if cell(gr, cols, req) != "" {
+					empty = false
+				}
+			}
+			if empty && len(gr.Problems) == 0 {
+				return
+			}
+			rep.Rows++
+			line := gr.Line
+			sc.Lines[line] = true
+			canon.add(line, canonicalRecord(gr, cols))
+			if len(gr.Problems) > 0 {
+				rep.Errors.addCode(line, "", "UNREADABLE_CELL", gr.Problems[0])
+				return
+			}
+			row, ok := parseMFRow(gr, cols, env, rep)
+			if _, num := numericFolio(gr, cols); num && ok {
+				rep.Warnings.addCode(line, colFolio, "FOLIO_STORED_AS_NUMBER", "the folio cell is a number in the spreadsheet; it was read as typed in the file (leading zeros may already have been lost by the spreadsheet; format the column as text and re-export if the folio looks wrong)")
+			}
+			if !ok {
+				return
+			}
+			fundRows[row.FundKey]++
+			if _, seen := fundName[row.FundKey]; !seen {
+				fundName[row.FundKey] = row.FundName
+			}
+			if m, mapped := env.mappings[row.FundKey]; mapped {
+				row.SchemeCode = m.SchemeCode
+			} else {
+				rep.Errors.addCode(line, colFund, "UNMAPPED_FUND", fmt.Sprintf("fund %q has no scheme chosen yet; pick the scheme for this fund name", row.FundName))
+			}
+			id := strings.Join([]string{row.FundKey, row.Folio, row.Date.Format(time.DateOnly), row.Type, row.Units.String(), row.NAV.String(), row.Amount.String(), row.Stamp.String()}, "|")
+			identical[id] = append(identical[id], len(sc.Rows))
+			row.Occurrence = len(identical[id])
+			row.DedupeKey = dedupeKey(row)
+			sc.Rows = append(sc.Rows, row)
+		}()
+		if n := rep.Errors.total - before; n > 0 {
+			sc.RowErrors[gr.Line] = n
 		}
-		if empty && len(gr.Problems) == 0 {
-			continue
-		}
-		rep.Rows++
-		line := gr.Line
-		sc.Lines[line] = true
-		if len(gr.Problems) > 0 {
-			rep.Errors.addCode(line, "", "UNREADABLE_CELL", gr.Problems[0])
-			continue
-		}
-		row, ok := parseMFRow(gr, cols, env, rep)
-		if !ok {
-			continue
-		}
-		fundRows[row.FundKey]++
-		if _, seen := fundName[row.FundKey]; !seen {
-			fundName[row.FundKey] = row.FundName
-		}
-		if m, mapped := env.mappings[row.FundKey]; mapped {
-			row.SchemeCode = m.SchemeCode
-		} else {
-			rep.Errors.addCode(line, colFund, "UNMAPPED_FUND", fmt.Sprintf("fund %q has no scheme chosen yet; pick the scheme for this fund name", row.FundName))
-		}
-		id := strings.Join([]string{row.FundKey, row.Folio, row.Date.Format(time.DateOnly), row.Type, row.Units.String(), row.NAV.String(), row.Amount.String(), row.Stamp.String()}, "|")
-		identical[id] = append(identical[id], len(sc.Rows))
-		row.Occurrence = len(identical[id])
-		row.DedupeKey = dedupeKey(row)
-		sc.Rows = append(sc.Rows, row)
 	}
 	// Duplicate groups (MFH-24): informational, never excluded by default.
 	var groups []MFDupGroup
@@ -417,6 +531,7 @@ func scanMF(content []byte, env mfEnv, lim Limits) (*mfScan, error) {
 		f, t := from.Format(time.DateOnly), to.Format(time.DateOnly)
 		sc.Preview.DateFrom, sc.Preview.DateTo = &f, &t
 	}
+	sc.Canonical = canon.bytes()
 	return sc, nil
 }
 
@@ -443,7 +558,14 @@ func parseMFRow(gr gridRow, cols map[string]int, env mfEnv, rep *scanReport) (MF
 			fail(colFund, "REQUIRED", "Fund Name has no letters or digits")
 		}
 	}
-	r.Folio = mfhold.CleanText(cell(gr, cols, colFolio))
+	folio := cell(gr, cols, colFolio)
+	if raw, ok := numericFolio(gr, cols); ok {
+		folio = raw // the raw <v> text, never a float round trip (S5)
+		if strings.ContainsAny(raw, "Ee") {
+			fail(colFolio, "FOLIO_INVALID", "Folio No is a number in scientific notation in the spreadsheet; format the column as text and export again")
+		}
+	}
+	r.Folio = mfhold.CleanText(folio)
 	if n := utf8.RuneCountInString(r.Folio); n < 1 || n > mfhold.MaxFolio {
 		fail(colFolio, "FOLIO_INVALID", "Folio No must be 1-40 characters")
 	}

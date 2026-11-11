@@ -72,6 +72,8 @@ func (s *Service) Sleeve(ctx context.Context, asOf time.Time, includeExited, gro
 			nrows.Close()
 			return Result{}, err
 		}
+		// mf_nav.nav is double precision (B15-12): NewFromFloat takes the shortest decimal that round-trips
+		// the float (81.5 -> 81.5, never 81.4999999), and only then does any money math start.
 		n := NAV{Date: d, Value: decimal.NewFromFloat(v)}
 		cur := in.NAVs[code]
 		if cur.Latest == nil {

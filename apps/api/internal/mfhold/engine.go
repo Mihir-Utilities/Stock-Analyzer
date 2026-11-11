@@ -202,7 +202,10 @@ func Replay(txns []Txn, asOf time.Time) (Position, error) {
 			held := pos.Units()
 			units := t.Units
 			if units.GreaterThan(held) {
-				if units.Sub(held).GreaterThan(RoundingUnits) {
+				// Dust is clamped only against units that are actually held (B15 review S2): a redemption
+				// with nothing held is an oversell however small it is. Dust left over after a redemption
+				// stays held as a lot (B15R-3); units are never deleted silently.
+				if !held.IsPositive() || units.Sub(held).GreaterThan(RoundingUnits) {
 					return pos, &InsufficientError{TxnID: t.ID, Scheme: t.Scheme, Folio: t.Folio, Date: t.Date, Held: held, Wanted: t.Units}
 				}
 				units = held // rounding dust: clamp, no negative lot (MFH-8)
