@@ -1,11 +1,19 @@
 """D08 backup and restore drill (docs/04 3.11): SYS-08, plus the acceptance rule that a backup
-holds no broker token and no password hash."""
+holds no broker token and no password hash. Restore refuses a non-empty target and verifies every
+row (HKX-10..HKX-17)."""
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
+import shutil
+import stat
+import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import asyncpg
 import pytest
@@ -30,6 +38,7 @@ PUBLIC = "age1" + "q" * 58
 PRIVATE = "AGE-SECRET-KEY-1" + "Q" * 58
 HASH = "$argon2id$v=19$m=65536,t=3,p=4$c2FsdHNhbHQ$hashhashhashhashhashhashhashhash"
 TOKEN_ENC = b"SECRET-BROKER-TOKEN-CIPHERTEXT"
+ALL_TABLES = [t.name for t in TABLES]
 
 
 def fake_age(args: list[str], data: bytes) -> bytes:
@@ -65,15 +74,22 @@ def test_spec_never_lists_secret_columns_or_tables() -> None:
     assert "password_hash" not in app_user.columns
 
 
-def test_secret_looking_settings_are_filtered() -> None:
-    for key in ("BROKER_TOKEN_KEY", "api_secret", "ADMIN_PASSWORD", "DB_WARN_LEVEL"):
-        assert backup.is_secret_setting_key(key)
+def test_only_allow_listed_settings_are_backed_up() -> None:
+    for key in ("BROKER_TOKEN_KEY", "api_secret", "ADMIN_PASSWORD", "DB_WARN_NOTIFIED", "new_key"):
+        assert not backup.is_backed_up_setting_key(key)
     for key in ("RISK_FREE_RATE", "DB_SOFT_LIMIT_MB", "PRICES_ALREADY_ADJUSTED"):
-        assert not backup.is_secret_setting_key(key)
+        assert backup.is_backed_up_setting_key(key)
+    backup.assert_setting_allow_list_is_safe()  # no key of the list looks like a secret
+
+
+def test_allow_list_guard_fails_on_a_secret_looking_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(backup, "BACKUP_SETTING_KEYS", (*backup.BACKUP_SETTING_KEYS, "api_token"))
+    with pytest.raises(RuntimeError, match="secret-looking"):
+        backup.assert_setting_allow_list_is_safe()
 
 
 def test_parse_dump_rejects_count_mismatch_and_bad_format() -> None:
-    header = {"format": 1, "created_at": "x", "counts": {"alert": 2}, "tables": ["alert"]}
+    header = {"format": 1, "created_at": "x", "counts": {"alert": 2}, "tables": ALL_TABLES}
     row = '{"table":"alert","row":{"id":1}}'
     with pytest.raises(ValueError, match="count mismatch"):
         parse_dump(json.dumps(header) + "\n" + row + "\n")
@@ -83,16 +99,98 @@ def test_parse_dump_rejects_count_mismatch_and_bad_format() -> None:
         parse_dump("")
 
 
+def test_parse_dump_requires_every_table_in_the_header() -> None:
+    short = {"format": 1, "created_at": "x", "counts": {}, "tables": ALL_TABLES[:-1]}
+    with pytest.raises(ValueError, match="lacks table"):
+        parse_dump(json.dumps(short) + "\n")
+    extra = {"format": 1, "created_at": "x", "counts": {}, "tables": [*ALL_TABLES, "session"]}
+    with pytest.raises(ValueError, match="unknown table"):
+        parse_dump(json.dumps(extra) + "\n")
+
+
 def test_parse_dump_keeps_row_text_exact() -> None:
     header = {
         "format": 1,
         "created_at": "x",
         "counts": {"portfolio_txn": 1},
-        "tables": ["portfolio_txn"],
+        "tables": ALL_TABLES,
     }
     raw = '{"id":1,"qty":10.5000,"note":"a,\\"row\\":b"}'
     _, rows = parse_dump(json.dumps(header) + '\n{"table":"portfolio_txn","row":' + raw + "}\n")
     assert rows["portfolio_txn"] == [raw]  # numeric text (10.5000) is never re-rendered
+
+
+# --------------------------------------------------------------------------- age (stub and real)
+def _write_stub_age(directory: Path) -> None:
+    """A fake `age` executable on PATH: echoes its argv and the reversed stdin; STUB_AGE_FAIL fails."""
+    script = directory / "age_stub.py"
+    script.write_text(
+        "import os, sys\n"
+        "if os.environ.get('STUB_AGE_FAIL'):\n"
+        "    sys.stderr.write('age: error: bad thing token=123456:ABCDEFGHIJKLMNOPQRSTUVWXYZ0123\\n')\n"
+        "    sys.stderr.write('second line that is dropped\\n')\n"
+        "    sys.exit(3)\n"
+        "data = sys.stdin.buffer.read()\n"
+        "sys.stdout.buffer.write(('ARGS:' + ' '.join(sys.argv[1:]) + '|').encode() + data[::-1])\n",
+        encoding="utf-8",
+    )
+    if sys.platform == "win32":
+        (directory / "age.cmd").write_text(f'@"{sys.executable}" "{script}" %*\n', encoding="utf-8")
+    else:
+        exe = directory / "age"
+        exe.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}" "$@"\n', encoding="utf-8")
+        exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
+
+
+def test_run_age_calls_the_binary_with_a_fixed_argv_and_stdin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_stub_age(tmp_path)
+    monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
+    out = backup.run_age(["-r", PUBLIC], b"abc")
+    assert out == f"ARGS:-r {PUBLIC}|".encode() + b"cba"
+
+
+def test_run_age_failure_keeps_a_scrubbed_first_line_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_stub_age(tmp_path)
+    monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
+    monkeypatch.setenv("STUB_AGE_FAIL", "1")
+    with pytest.raises(RuntimeError) as err:
+        backup.run_age(["-r", PUBLIC], b"abc")
+    msg = str(err.value)
+    assert "exit code 3" in msg and "bad thing" in msg
+    assert "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123" not in msg  # scrubbed
+    assert "second line" not in msg
+
+
+def test_run_age_without_the_binary_says_so(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    with pytest.raises(RuntimeError, match="not installed"):
+        backup.run_age(["-r", PUBLIC], b"x")
+
+
+@pytest.mark.skipif(
+    shutil.which("age") is None or shutil.which("age-keygen") is None,
+    reason="the age binary is not installed (apt install age)",
+)
+def test_real_age_round_trip(tmp_path: Path) -> None:
+    key = tmp_path / "key.txt"
+    subprocess.run(  # noqa: S603
+        [shutil.which("age-keygen") or "", "-o", str(key)], capture_output=True, check=True
+    )
+    public = next(
+        ln.split(":", 1)[1].strip()
+        for ln in key.read_text().splitlines()
+        if ln.lower().startswith("# public key:")
+    )
+    assert valid_age_recipient(public)
+    blob = encrypt(Dump("hello owner data\n", {}), public)
+    assert b"hello owner data" not in blob and blob.startswith(b"age-encryption.org")
+    assert decrypt(blob, str(key)) == "hello owner data\n"
+    with pytest.raises(RuntimeError, match="age failed"):
+        decrypt(b"not an age file", str(key))
 
 
 async def test_backup_needs_a_key_and_dry_run_does_not(
@@ -115,7 +213,7 @@ async def _seed_owner_data(pool: asyncpg.Pool) -> dict[str, int]:
     await pool.execute(
         "INSERT INTO app_setting (key, value) VALUES ('RISK_FREE_RATE','0.071'), "
         "('PRICES_ALREADY_ADJUSTED','true'), ('BROKER_TOKEN_KEY','\"leak\"'), "
-        "('DB_WARN_LEVEL','\"85\"')"
+        "('DB_WARN_NOTIFIED','\"85\"'), ('unlisted_key','\"x\"')"
     )
     await pool.execute(
         "INSERT INTO broker_session (broker, token_enc, expires_at) "
@@ -131,10 +229,13 @@ async def _seed_owner_data(pool: asyncpg.Pool) -> dict[str, int]:
             "VALUES ('corporate_actions','ca.csv',1,'per filing') RETURNING id"
         )
     )
-    await pool.fetchval(
-        "INSERT INTO import_batch (kind, filename, row_count) VALUES ('prices','p.csv',5000) RETURNING id"
+    prices_batch = int(
+        await pool.fetchval(
+            "INSERT INTO import_batch (kind, filename, row_count) "
+            "VALUES ('prices','p.csv',5000) RETURNING id"
+        )
     )
-    ids: dict[str, int] = {}
+    ids: dict[str, int] = {"batch": batch, "prices_batch": prices_batch}
     for sym in ("AAA", "BBB", "CCC"):
         ids[sym] = int(
             await pool.fetchval(
@@ -216,6 +317,8 @@ async def test_backup_has_no_broker_token_or_password_hash(pg_full: asyncpg.Pool
         "SECRETKEY",
         "leak",
         "password_hash",
+        "DB_WARN_NOTIFIED",
+        "unlisted_key",
     ):
         assert needle not in text
     assert "token_enc" not in text and "broker_key" not in text and "failed_logins" not in text
@@ -226,6 +329,53 @@ async def test_backup_has_no_broker_token_or_password_hash(pg_full: asyncpg.Pool
     assert dump.counts["fundamental_value"] == 1  # derived rows are recomputed
     assert dump.counts["instrument"] == 2  # AAA and CCC; BBB is only in a detected row
     assert dump.counts["mf_scheme"] == 1  # only the referenced scheme
+
+
+@pytest.mark.integration
+async def test_hkx10_settings_sql_path_exports_only_the_allow_list(pg_full: asyncpg.Pool) -> None:
+    """Every key of the allow-list is exported; secret-looking and unknown keys never are."""
+    for key in backup.BACKUP_SETTING_KEYS:
+        await pg_full.execute("INSERT INTO app_setting (key, value) VALUES ($1, '1')", key)
+    for key in ("MY_API_TOKEN", "hmac_key", "DB_WARN_NOTIFIED", "DB_WARN_LEVEL", "brand_new"):
+        await pg_full.execute("INSERT INTO app_setting (key, value) VALUES ($1, '\"s3\"')", key)
+    dump = await build_dump(pg_full)
+    exported = {
+        json.loads(ln)["row"]["key"]
+        for ln in dump.text.splitlines()[1:]
+        if json.loads(ln)["table"] == "app_setting"
+    }
+    assert exported == set(backup.BACKUP_SETTING_KEYS)
+    assert "s3" not in dump.text
+
+
+@pytest.mark.integration
+async def test_hkx11_corporate_action_batch_of_an_excluded_prices_batch_is_nulled(
+    pg_full: asyncpg.Pool,
+) -> None:
+    ids = await _seed_owner_data(pg_full)
+    await pg_full.execute(
+        "INSERT INTO corporate_action (instrument_id, ex_date, action_type, status, ratio_num, "
+        "ratio_den, source, import_batch_id) VALUES ($1,'2026-05-01','bonus','confirmed',1,1,"
+        "'manual',$2)",
+        ids["AAA"],
+        ids["prices_batch"],
+    )
+    dump = await build_dump(pg_full)
+    rows = [
+        json.loads(ln)["row"]
+        for ln in dump.text.splitlines()[1:]
+        if json.loads(ln)["table"] == "corporate_action"
+    ]
+    by_type = {r["action_type"]: r["import_batch_id"] for r in rows}
+    assert by_type == {
+        "split": ids["batch"],
+        "bonus": None,
+    }  # kept batch stays, prices batch nulled
+    # and the dump restores into a clean database without a dangling reference
+    await pg_full.execute(_WIPE)
+    report = await restore_dump(pg_full, dump.text)
+    assert report.ok, report.problems
+    assert await pg_full.fetchval("SELECT count(*) FROM corporate_action") == 2
 
 
 @pytest.mark.integration
@@ -254,6 +404,32 @@ async def test_backup_dry_run_writes_nothing(pg_full: asyncpg.Pool, tmp_path: Pa
     out = await run_backup(pg_full, ctx, recipient="", out_dir=tmp_path / "x", runner=fake_age)
     assert out is None and not (tmp_path / "x").exists()
     assert ctx.extra["counts"]["portfolio_txn"] == 2
+
+
+@pytest.mark.integration
+async def test_backup_job_dry_run_needs_no_key_and_writes_nothing(
+    pg_full: asyncpg.Pool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real job function in dry-run mode: no AGE_PUBLIC_KEY, no file, counts reported."""
+    await _seed_owner_data(pg_full)
+    monkeypatch.delenv("AGE_PUBLIC_KEY", raising=False)
+    monkeypatch.setenv("BACKUP_OUT_DIR", str(tmp_path / "out"))
+
+    class _Keep:
+        async def close(self) -> None:
+            return None
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(pg_full, name)
+
+    async def fake_pool(dsn: str | None = None) -> Any:
+        return _Keep()
+
+    monkeypatch.setattr(backup, "create_pool", fake_pool)
+    ctx = JobContext(job="backup_user_data", dry_run=True)
+    await backup.backup_user_data_job(ctx)
+    assert not (tmp_path / "out").exists()
+    assert ctx.extra["counts"]["portfolio_txn"] == 2 and ctx.rows_written == 0
 
 
 _WIPE = (
@@ -293,7 +469,9 @@ async def test_sys08_restore_drill_encrypted_dump_counts_and_values(
     report = await restore_dump(pg_full, text)
     assert report.ok, report.problems
     for name, n in report.counts_in_file.items():
-        assert report.present_after[name] >= n, name
+        spec = next(t for t in TABLES if t.name == name)
+        if not spec.seeded:
+            assert report.inserted[name] == report.present_after[name] == n, name
     after = {t.name: int(await pg_full.fetchval(f"SELECT count(*) FROM {t.name}")) for t in TABLES}  # noqa: S608
     for name in after:
         if name == "app_user":
@@ -349,9 +527,99 @@ async def test_sys08_restore_drill_encrypted_dump_counts_and_values(
         ids["AAA"],
     )
     assert nid > 2
-    # restoring twice is harmless
-    again = await restore_dump(pg_full, text)
-    assert again.ok and sum(again.inserted.values()) == 0 or again.ok
+
+
+@pytest.mark.integration
+async def test_hkx12_second_restore_is_refused_and_changes_nothing(pg_full: asyncpg.Pool) -> None:
+    """Restoring twice is NOT harmless any more: the second run finds owner data and refuses."""
+    await _seed_owner_data(pg_full)
+    dump = await build_dump(pg_full)
+    await pg_full.execute(_WIPE)
+    first = await restore_dump(pg_full, dump.text)
+    assert first.ok, first.problems
+    snapshot = {t.name: await pg_full.fetch(f"SELECT * FROM {t.name}") for t in TABLES}  # noqa: S608
+    again = await restore_dump(pg_full, dump.text)
+    assert not again.ok
+    assert any("refused" in p and "instrument" in p for p in again.problems)
+    for t in TABLES:
+        assert await pg_full.fetch(f"SELECT * FROM {t.name}") == snapshot[t.name], t.name  # noqa: S608
+    dry = await restore_dump(pg_full, dump.text, dry_run=True)
+    assert not dry.ok and "owner data" in dry.problems[0]  # the dry run says so before the real run
+
+
+@pytest.mark.integration
+async def test_hkx13_id_collision_instrument_1_aaa_vs_existing_1_xyz_fails_and_rolls_back(
+    pg_full: asyncpg.Pool,
+) -> None:
+    """The old ON CONFLICT DO NOTHING let owner rows attach to the wrong instrument."""
+    await _seed_owner_data(pg_full)
+    dump = await build_dump(pg_full)
+    await pg_full.execute(_WIPE)
+    await pg_full.execute("INSERT INTO app_user (password_hash) VALUES ('SEED')")
+    await pg_full.execute(
+        "INSERT INTO instrument (id, symbol, name) OVERRIDING SYSTEM VALUE VALUES (1,'XYZ','Other')"
+    )
+    assert (
+        (await pg_full.fetchval("SELECT id FROM instrument WHERE symbol = 'XYZ'") == 1)
+        and '"symbol":"AAA"' in dump.text.replace(" ", "")
+        and '"id":1,' in dump.text.replace(" ", "")
+    )
+    # 1. default: refused up front, nothing touched
+    report = await restore_dump(pg_full, dump.text)
+    assert not report.ok and "refused" in report.problems[0]
+    assert await pg_full.fetchval("SELECT count(*) FROM portfolio_txn") == 0
+    assert await pg_full.fetchval("SELECT symbol FROM instrument") == "XYZ"
+    # 2. even when the emptiness check is bypassed: the collision aborts and rolls back
+    with pytest.raises(asyncpg.UniqueViolationError):
+        await restore_dump(pg_full, dump.text, require_empty=False)
+    assert await pg_full.fetchval("SELECT count(*) FROM import_batch") == 0  # earlier tables undone
+    assert await pg_full.fetchval("SELECT count(*) FROM instrument") == 1
+
+
+@pytest.mark.integration
+async def test_hkx14_verification_catches_a_silently_swallowed_conflict(
+    pg_full: asyncpg.Pool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Defence in depth: even if an insert skipped a row (DO NOTHING), the per-row check fails
+    and the restore rolls back. The old lower-bound count check passed here."""
+    await _seed_owner_data(pg_full)
+    dump = await build_dump(pg_full)
+    await pg_full.execute(_WIPE)
+    await pg_full.execute("INSERT INTO app_user (password_hash) VALUES ('SEED')")
+    await pg_full.execute(
+        "INSERT INTO instrument (id, symbol, name) OVERRIDING SYSTEM VALUE VALUES (1,'XYZ','Other')"
+    )
+    original = backup._insert_sql
+
+    def lenient(spec: backup.TableSpec) -> str:
+        sql = original(spec)
+        return sql if "ON CONFLICT" in sql else sql + " ON CONFLICT DO NOTHING"
+
+    monkeypatch.setattr(backup, "_insert_sql", lenient)
+    report = await restore_dump(pg_full, dump.text, require_empty=False)
+    assert not report.ok
+    assert any(p.startswith("instrument:") for p in report.problems)
+    # rolled back: only the pre-existing XYZ row remains, no owner rows
+    assert await pg_full.fetchval("SELECT count(*) FROM instrument") == 1
+    assert await pg_full.fetchval("SELECT count(*) FROM watchlist_item") == 0
+    assert await pg_full.fetchval("SELECT symbol FROM instrument WHERE id = 1") == "XYZ"
+
+
+@pytest.mark.integration
+async def test_hkx15_sequence_is_never_lowered_below_its_current_value(
+    pg_full: asyncpg.Pool,
+) -> None:
+    await _seed_owner_data(pg_full)
+    dump = await build_dump(pg_full)
+    await pg_full.execute(_WIPE)
+    await pg_full.execute("SELECT setval(pg_get_serial_sequence('portfolio_txn','id'), 1000)")
+    report = await restore_dump(pg_full, dump.text)
+    assert report.ok, report.problems
+    nid = await pg_full.fetchval(
+        "INSERT INTO portfolio_txn (instrument_id, side, qty, price, trade_date) "
+        "SELECT id,'buy',1,1,'2026-06-01' FROM instrument LIMIT 1 RETURNING id"
+    )
+    assert nid > 1000
 
 
 @pytest.mark.integration
@@ -374,6 +642,50 @@ async def test_restore_is_atomic_when_a_row_cannot_be_inserted(pg_full: asyncpg.
     with pytest.raises(asyncpg.PostgresError):
         await restore_dump(pg_full, broken)
     assert await pg_full.fetchval("SELECT count(*) FROM instrument") == 0  # rolled back
+
+
+# --------------------------------------------------------------------------- restore CLI
+def _cli_args(file: Path, *, identity: str | None = None, dry_run: bool = True) -> Any:
+    return argparse.Namespace(file=str(file), identity=identity, dry_run=dry_run)
+
+
+async def test_hkx16_cli_refuses_an_age_file_without_identity(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    blob = tmp_path / "user_data-20261108.jsonl.age"
+    blob.write_bytes(b"AGE-FAKE:xx")
+    assert await backup._restore_cli(_cli_args(blob)) == 2
+    assert "--identity" in capsys.readouterr().err
+
+
+@pytest.mark.integration
+async def test_hkx17_cli_warns_loudly_on_a_plaintext_restore(
+    pg_full: asyncpg.Pool,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_owner_data(pg_full)
+    dump = await build_dump(pg_full)
+    await pg_full.execute(_WIPE)
+    plain = tmp_path / "user_data.jsonl"
+    plain.write_text(dump.text, encoding="utf-8")
+
+    class _Keep:
+        async def close(self) -> None:
+            return None
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(pg_full, name)
+
+    async def fake_pool(dsn: str | None = None) -> Any:
+        return _Keep()
+
+    monkeypatch.setattr(backup, "create_pool", fake_pool)
+    assert await backup._restore_cli(_cli_args(plain)) == 0
+    captured = capsys.readouterr()
+    assert "PLAINTEXT" in captured.err
+    assert json.loads(captured.out)["ok"] is True
 
 
 @pytest.mark.integration

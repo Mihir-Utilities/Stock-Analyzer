@@ -3,10 +3,13 @@ predictions never pass."""
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 import numpy as np
 import pytest
 
 from worker.ml.guardrail import (
+    LIVE_MIN_DATES,
     FoldEval,
     GuardrailParams,
     LiveRecord,
@@ -97,18 +100,83 @@ def test_each_condition_alone_blocks_the_guardrail(kw: dict[str, object], failed
     assert failed in [c.name for c in res.checks if not c.ok]
 
 
-def test_bootstrap_lower_bound_blocks_a_marginal_mean_auc() -> None:
-    # mean AUC just above 0.53 but noisy by month: the lower bound must stay above 0.50
-    rng = np.random.default_rng(11)
-    weak = []
-    for i in range(N_FOLDS):
-        f = make_fold(i, rng, signal=True)
-        f.p = np.clip(0.5 + (f.p - 0.5) * 0.12 + rng.normal(0, 0.12, ROWS), 0.01, 0.99)
-        weak.append(f)
-    res = evaluate_guardrail(weak, FAST)
+def make_near_half_fold(index: int, rng: np.random.Generator, half_width: float) -> FoldEval:
+    """A *calibrated* model whose probabilities hug 0.5 (``0.5 +/- half_width``) and whose outcomes
+    follow them (so predictions and outcomes are weakly correlated: AUC about
+    ``0.5 + 2 * half_width / 3``). Calibration, coverage and the B2 baseline look fine, so only the
+    AUC checks (and the Brier margin) can stop it."""
+    p = 0.5 + rng.uniform(-half_width, half_width, ROWS)
+    y = (rng.uniform(size=ROWS) < p).astype(float)
+    base = float(y.mean())
+    return FoldEval(
+        index=index,
+        y=y,
+        p=p,
+        p_b1=np.full(ROWS, base),
+        p_b2=np.full(ROWS, base) + rng.normal(0, 1e-3, ROWS),
+        p_b3=np.where(rng.uniform(size=ROWS) < 0.5, 0.55, 0.45),
+        in_band=rng.uniform(size=ROWS) < 0.8,
+        in_band_baseline=rng.uniform(size=ROWS) < 0.8,
+        month=(index * 3 + np.arange(ROWS) % 3).astype(np.int64),
+    )
+
+
+def test_calibrated_near_half_model_with_weak_correlation_never_passes() -> None:
+    """The AUC checks are actually exercised: calibration, coverage and B2 pass, the mean AUC
+    (about 0.52) is below 0.53 and that check is what blocks it."""
+    caught = 0
+    aucs: list[float] = []
+    for seed in range(60):
+        rng = np.random.default_rng(1000 + seed)
+        res = evaluate_guardrail([make_near_half_fold(i, rng, 0.02) for i in range(N_FOLDS)], FAST)
+        by = {c.name: c for c in res.checks}
+        assert not res.passed
+        assert by["ece_pooled"].ok and by["band_coverage"].ok and by["auc_vs_b2"].ok
+        assert by["auc_bootstrap_lower"].value is not None  # the bootstrap ran and was finite
+        assert by["auc_mean"].value is not None
+        aucs.append(by["auc_mean"].value)
+        caught += int(not by["auc_mean"].ok or not by["auc_bootstrap_lower"].ok)
+    assert 0.50 < float(np.mean(aucs)) < 0.53  # weakly but positively correlated on average
+    assert caught == 60  # the AUC checks (not luck elsewhere) block every one of them
+
+
+def make_uneven_fold(index: int, rng: np.random.Generator) -> FoldEval:
+    """One large informative calibrated month plus two tiny months (8 rows each) per fold in which
+    ``p`` points the wrong way. The fold AUC (pooled, dominated by the large month) is about
+    0.63, calibration is unaffected (16 of 1500 rows), but the unweighted per-month AUCs are
+    noisy and average below 0.5, so the bootstrap lower bound is far below 0.50."""
+    big, tiny = ROWS - 16, 8
+    q = rng.uniform(0.3, 0.7, ROWS)
+    y = np.empty(ROWS)
+    y[:big] = rng.uniform(size=big) < q[:big]  # calibrated and informative
+    y[big:] = rng.uniform(size=16) < (1.0 - q[big:])  # tiny months: p points the wrong way
+    month = np.concatenate(
+        [np.full(big, index * 3), np.full(tiny, index * 3 + 1), np.full(tiny, index * 3 + 2)]
+    ).astype(np.int64)
+    base = float(y.mean())
+    return FoldEval(
+        index=index,
+        y=y,
+        p=q,
+        p_b1=np.full(ROWS, base),
+        p_b2=np.full(ROWS, base) + rng.normal(0, 1e-3, ROWS),
+        p_b3=np.where(rng.uniform(size=ROWS) < 0.5, 0.55, 0.45),
+        in_band=rng.uniform(size=ROWS) < 0.8,
+        in_band_baseline=rng.uniform(size=ROWS) < 0.8,
+        month=month,
+    )
+
+
+def test_bootstrap_lower_bound_alone_blocks_a_good_mean_auc() -> None:
+    rng = np.random.default_rng(3)
+    res = evaluate_guardrail([make_uneven_fold(i, rng) for i in range(N_FOLDS)], FAST)
     by = {c.name: c for c in res.checks}
-    assert not res.passed
-    assert not (by["auc_mean"].ok and by["auc_bootstrap_lower"].ok)
+    assert by["auc_mean"].ok and by["auc_mean"].value is not None and by["auc_mean"].value > 0.55
+    lower = by["auc_bootstrap_lower"].value
+    assert lower is not None and lower <= 0.50
+    # the bootstrap is the ONLY failing check
+    assert [c.name for c in res.checks if not c.ok] == ["auc_bootstrap_lower"]
+    assert not res.passed and res.reason == "auc_bootstrap_lower"
 
 
 def test_fewer_than_12_folds_cannot_pass() -> None:
@@ -137,11 +205,16 @@ def rec(p: float, realized: float, in_band: bool) -> LiveRecord:
     return LiveRecord(p, realized, in_band)
 
 
-def good_records(n: int) -> list[LiveRecord]:
+D0 = date(2024, 1, 1)
+
+
+def good_records(n: int, *, dates: int | None = None) -> list[LiveRecord]:
+    """``n`` resolved predictions with live AUC 1 and coverage 0.8 spread over ``dates`` days."""
     out = []
     for i in range(n):
         up = i % 2 == 0
-        out.append(rec(0.6 if up else 0.4, 0.01 if up else -0.01, i % 5 != 0))  # coverage 0.8
+        day = D0 + timedelta(days=i % (dates or n))
+        out.append(LiveRecord(0.6 if up else 0.4, 0.01 if up else -0.01, i % 5 != 0, day))
     return out
 
 
@@ -171,3 +244,33 @@ def test_ml07_live_coverage_outside_70_90_trips(hits: int, tripped: bool) -> Non
     assert g.tripped is tripped
     if tripped:
         assert g.reason == "live_coverage"
+
+
+# D07-17: 100 resolved rows are not enough when they come from a handful of dates
+def test_ml07_live_gate_needs_20_distinct_dates_too() -> None:
+    bad = [
+        LiveRecord(0.6, -0.01 if i % 2 else 0.01, False, D0 + timedelta(days=i % 5))
+        for i in range(200)
+    ]  # 200 rows, coverage 0, AUC 0.5 -> would trip with enough dates
+    g = live_gate(bad)
+    assert not g.tripped and g.insufficient and g.distinct_dates == 5 and g.resolved == 200
+    assert LIVE_MIN_DATES == 20
+    spread = [
+        LiveRecord(0.6, 0.01 if i % 2 else -0.01, False, D0 + timedelta(days=i % 20))
+        for i in range(100)
+    ]
+    assert live_gate(spread).tripped  # 20 distinct dates: the same bad record now trips
+    nineteen = [
+        LiveRecord(0.6, 0.01 if i % 2 else -0.01, False, D0 + timedelta(days=i % 19))
+        for i in range(100)
+    ]
+    assert not live_gate(nineteen).tripped
+    assert not live_gate(good_records(100, dates=20)).tripped
+
+
+def test_ml07_live_gate_with_one_class_is_insufficient_not_a_pass() -> None:
+    one_class = [LiveRecord(0.6, 0.01, False, D0 + timedelta(days=i)) for i in range(120)]
+    g = live_gate(one_class)  # AUC undefined (all rows are "up"), coverage 0 is out of range
+    assert g.live_auc is None and g.insufficient and not g.tripped
+    # a recovery window must not complete on such evidence
+    assert live_gate(one_class, min_resolved=100).insufficient

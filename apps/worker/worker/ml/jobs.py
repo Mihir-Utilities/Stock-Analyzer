@@ -59,7 +59,8 @@ async def run_train(
         ctx.extra["status"] = "dry_run"
         return
     market = await store.load_market(pool)
-    panel = build_panel(loaded.universe, market)
+    holidays = await store.load_holidays(pool)
+    panel = build_panel(loaded.universe, market, holidays=holidays)
     try:
         out = await asyncio.to_thread(train_all, panel, tp=tp, gp=gp, should_stop=ctx.past_deadline)
     except TrainingAborted:
@@ -68,7 +69,7 @@ async def run_train(
         return
     ctx.extra["status"] = out.status
     ctx.extra["models"] = await store.save_training(pool, out, panel)
-    ctx.add_rows(len(out.horizons) * 2)
+    ctx.add_rows(sum(2 for ht in out.horizons if ht.model is not None))
 
 
 async def predict_job(ctx: JobContext) -> None:
@@ -85,12 +86,26 @@ async def has_models(pool: asyncpg.Pool) -> bool:
     )
 
 
+async def has_new_bar(pool: asyncpg.Pool) -> bool:
+    """True when a tracked stock has a bar newer than the latest stored prediction's ``as_of``
+    (``predict`` has nothing new to write otherwise)."""
+    row = await pool.fetchrow(
+        "SELECT (SELECT max(p.trade_date) FROM price_daily p JOIN instrument i "
+        "ON i.id = p.instrument_id WHERE i.is_tracked AND NOT p.suspect) AS bar, "
+        "(SELECT max(as_of) FROM prediction) AS pred"
+    )
+    if row is None or row["bar"] is None:
+        return False
+    return row["pred"] is None or bool(row["bar"] > row["pred"])
+
+
 async def run_predict(pool: asyncpg.Pool, ctx: JobContext, *, today: Any = None) -> None:
     """Resolve finished horizons, apply the live gate, then store today's predictions."""
     if ctx.dry_run:
         ctx.extra["status"] = "dry_run"
         return
-    ctx.extra["outcomes_resolved"] = await store.resolve_outcomes(pool)
+    holidays = await store.load_holidays(pool)
+    ctx.extra["outcomes_resolved"] = await store.resolve_outcomes(pool, holidays)
     runs = await store.load_runs(pool, HORIZONS)
     gates: dict[str, Any] = {}
     for h, run in runs.items():
@@ -103,6 +118,14 @@ async def run_predict(pool: asyncpg.Pool, ctx: JobContext, *, today: Any = None)
         ctx.extra["status"] = "no_model"
         return
     loaded = await store.load_stocks(pool)
+    eligible = len(loaded.universe)
+    ctx.extra["eligible"] = eligible
+    if eligible < MIN_UNIVERSE:
+        # the cross-sectional ranks are meaningless below 20 stocks (docs/05 10.1): write nothing,
+        # the API reports `no_model` (D07-9)
+        ctx.extra["status"] = "insufficient_universe"
+        log.info("predict skipped: insufficient_universe (%d eligible)", eligible)
+        return
     market = await store.load_market(pool)
     models: dict[int, ScoringModel | None] = {}
     for h, run in runs.items():
@@ -112,14 +135,14 @@ async def run_predict(pool: asyncpg.Pool, ctx: JobContext, *, today: Any = None)
             if usable and run.dir_blob is not None and run.range_blob is not None
             else None
         )
-    panel = build_panel(loaded.universe, market)
+    panel = build_panel(loaded.universe, market, holidays=holidays)
     rows = build_predictions(
         panel,
         loaded.infos,
         models,
         {h: r.state for h, r in runs.items()},
         today=today or marketdate.ist_today(),
-        holidays=await store.load_holidays(pool),
+        holidays=holidays,
     )
     written = await store.insert_predictions(pool, rows, runs)
     ctx.add_rows(written)

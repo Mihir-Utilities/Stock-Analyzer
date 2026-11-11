@@ -330,6 +330,7 @@ CREATE TABLE prediction (
   hidden_reason text,
   UNIQUE (instrument_id, as_of, horizon_days, model_run_id)
 );
+CREATE INDEX prediction_model_run_idx ON prediction (model_run_id) WHERE p_up IS NOT NULL;  -- live track record per run (B14 review)
 
 CREATE TABLE prediction_outcome (
   prediction_id bigint PRIMARY KEY REFERENCES prediction(id) ON DELETE CASCADE,
@@ -502,7 +503,7 @@ ALTER TABLE shareholding      ADD CONSTRAINT shareholding_batch_fk      FOREIGN 
 ALTER TABLE corporate_action  ADD CONSTRAINT corporate_action_batch_fk  FOREIGN KEY (import_batch_id) REFERENCES import_batch(id) ON DELETE SET NULL;
 
 -- ---------------------------------------------------------------------------
--- PROPOSED migration 0013_mf_txn (mutual fund holdings, decision D-MF, questions MFH-*). DESCRIPTION ONLY:
+-- PROPOSED migration 0014_mf_txn (mutual fund holdings, decision D-MF, questions MFH-*). DESCRIPTION ONLY:
 -- not DDL, not applied, not checked by the T02 table test. B15 turns this into the forward-only migration and
 -- moves the final DDL into this file in the same change (like D-U / flag_dismissals).
 --

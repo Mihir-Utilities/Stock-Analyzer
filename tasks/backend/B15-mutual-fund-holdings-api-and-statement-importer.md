@@ -11,7 +11,7 @@
 - docs/03-api-spec.md sections 1, 12, 12a, 14
 - docs/05-analytics-spec.md sections 1, 8.3, 8.5, 9.1, 9.5
 - docs/01-data-sources.md section 7.9
-- docs/02-database.sql (proposed migration 0013 block at the end)
+- docs/02-database.sql (proposed migration 0014 block at the end)
 - docs/07-edge-cases-tests.md rows MFH-V, MFH-I, MFH-F, PF-*
 - `CLAUDE.md` (rules), `docs/00-legal-and-safety.md` (Safe Edition guards), `docs/OPEN_QUESTIONS.md` decision D-MF and questions MFH-1..MFH-22
 
@@ -19,7 +19,7 @@
 Add mutual fund holdings to the portfolio: a `mf_txn` ledger, `GET/POST/PATCH/DELETE /portfolio/mf/txns`, `GET /portfolio/mf/holdings`, `GET /portfolio/summary?view=all|equity|mf`, and the `mf_statement` importer, exactly as specified (D-MF). Money invested, current value, profit/loss and XIRR per view.
 
 ## In scope
-- Migration `0013_mf_txn` (forward-only, from the proposed block in `docs/02`; move the final DDL into `docs/02-database.sql` in the same change): `mf_txn`, indexes, ISIN indexes on `mf_scheme`, `import_batch.kind` gains `mf_statement`.
+- Migration `0014_mf_txn` (forward-only, from the proposed block in `docs/02`; move the final DDL into `docs/02-database.sql` in the same change): `mf_txn`, indexes, ISIN indexes on `mf_scheme`, `import_batch.kind` gains `mf_statement`.
 - Logical ledger with `asset_class`; MF lot engine (FIFO per scheme+folio), value, invested, unrealised/realised/IDCW buckets, pooled XIRR per view, the one-year rule (`docs/05` 8.5, decimals only, `shopspring/decimal`), amend PF-07 and the equity `xirr_reason` per MFH-3 once the owner confirms.
 - Transactions API with idempotency, CSRF, validation, sequence re-validation, tracking side effect; holdings API; summary `view` parameter (default `equity`, MFH-14).
 - Importer `mf_statement` (validate, commit, undo, template): CSV template first; `.xlsx` reader only after S18 GO and MFH-15; size/type limits, read-only parsing, personal columns discarded, CSV-injection safety, dedupe key.

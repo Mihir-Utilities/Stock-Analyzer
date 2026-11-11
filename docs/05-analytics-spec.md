@@ -254,7 +254,7 @@ For each horizon compute per fold: AUC, Brier, log loss, accuracy, ECE (10 bins)
 3. ECE <= 0.03 on the pooled out-of-fold predictions.
 4. Band coverage between 0.76 and 0.84 on the last 4 folds.
 5. Not worse than B2 in AUC by more than 0.005 (a trivial logistic model should not beat it).
-Live gate: after >= 100 resolved live predictions for a horizon, if live AUC < 0.50 or live band coverage outside [0.70, 0.90], set `guardrail_pass = false` for that horizon until a newer model run passes again and live metrics recover.
+Live gate: after >= 100 resolved live predictions for a horizon, if live AUC < 0.50 or live band coverage outside [0.70, 0.90], set `guardrail_pass = false` for that horizon until a newer model run passes again and live metrics recover. Implementation defaults (owner may change, D07-17/D07-18): the gate also needs >= 20 distinct `as_of` dates; "recover" = the newer run's own >= 100 resolved live predictions on >= 20 dates without a trip. Horizons and outcomes are exactly h trading days (D07-19).
 
 ### 10.6 Per-stock display rules
 Show a prediction only if: bars >= 504; `adv_value_60 >= 0.5` (INR crore); no corporate action ex-date within the next 5 or last 5 trading days; data fresh (last bar within 3 trading days); guardrail passes for that horizon. Otherwise `shown=false` with `hidden_reason` from the API enum. Probability bucket thresholds are in the API spec.

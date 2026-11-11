@@ -51,6 +51,43 @@ func (c Calendar) ExpectedLastTradingDate(now time.Time) time.Time {
 	return d
 }
 
+// AddTradingDays moves d (a date at 00:00 UTC) by n trading days (negative n goes back).
+func (c Calendar) AddTradingDays(d time.Time, n int) time.Time {
+	d = time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
+	step := 1
+	if n < 0 {
+		step, n = -1, -n
+	}
+	for moved := 0; moved < n; {
+		d = d.AddDate(0, 0, step)
+		if c.isTradingDay(d) {
+			moved++
+		}
+	}
+	return d
+}
+
+// TradingDaysBetween counts trading days in the half-open interval (a, b]; 0 when b is not after a.
+func (c Calendar) TradingDaysBetween(a, b time.Time) int {
+	a = time.Date(a.Year(), a.Month(), a.Day(), 0, 0, 0, 0, time.UTC)
+	n := 0
+	for d := a.AddDate(0, 0, 1); !d.After(b) && n < 10000; d = d.AddDate(0, 0, 1) {
+		if c.isTradingDay(d) {
+			n++
+		}
+	}
+	return n
+}
+
+// PreviousTradingDate is the trading date strictly before d (d is a date at 00:00 UTC).
+func (c Calendar) PreviousTradingDate(d time.Time) time.Time {
+	d = time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, -1)
+	for i := 0; i < 366 && !c.isTradingDay(d); i++ {
+		d = d.AddDate(0, 0, -1)
+	}
+	return d
+}
+
 // Staleness is the result of the SYS-13 rule.
 type Staleness struct {
 	Stale          bool

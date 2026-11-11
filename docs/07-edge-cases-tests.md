@@ -340,7 +340,7 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ID | Scenario | Required behavior | Test |
 |---|---|---|---|
 | ML-01 | Lookahead | Changing prices after `t` leaves features at `t` unchanged | U |
-| ML-02 | Label alignment with holidays | Correct `t+h` rows | U |
+| ML-02 | Label alignment with holidays | A label is exactly h trading days ahead (holidays skipped); a window whose target day has no bar, or a bar on a non-trading day, has a NaN label (D07-19) | U |
 | ML-03 | Embargo/purge | No overlap | U |
 | ML-04 | Fewer than 20 eligible stocks | `insufficient_universe`; forecasts hidden | I |
 | ML-05 | Guardrail fails | `shown=false`, reason; UI explanation | I/E |
@@ -352,14 +352,22 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ML-11 | Determinism | Same data/seed -> same metrics | U |
 | ML-12 | No single target price anywhere in UI | Component test | E |
 | ML-13 | Cross-sectional rank at `t` uses only stocks on date `t`; a date with one stock drops the row | Per-date ranks unchanged when other dates change | U |
-| ML-14 | Random-noise data (guardrail function over 150 seeds and three full LightGBM runs) | Never passes the guardrail | U |
-| ML-15 | Each guardrail condition alone; fewer than 12 folds; only the last 8 folds count; deterministic verdict | Fails with the named check / `insufficient_folds` | U |
+| ML-14 | Random-noise data (guardrail function over 150 seeds, a calibrated near-0.5 weakly correlated model over 60 seeds, and full LightGBM runs on both horizons 5 and 21) | Never passes the guardrail; the `auc_mean` check is what blocks the LightGBM noise runs | U |
+| ML-15 | Each guardrail condition alone; fewer than 12 folds; only the last 8 folds count; deterministic verdict | The bootstrap lower bound alone blocks a good fold-mean AUC; fails with the named check / `insufficient_folds` | U |
 | ML-16 | Conformal band calibration | Coverage 80% on fresh data, small-sample coverage at least 80%, median stays inside the band | U |
 | ML-17 | Outcome resolution | `realized`, `direction_correct`, `in_band` per docs/05 10.7; flat return is not "up"; unknown inputs give null | U |
 | ML-18 | `predict` twice for the same `as_of`; gated model | Stored rows are never rewritten; gated values stored with `shown=false` | I |
 | ML-19 | Activation rule | Passing horizon -> active and previous retired; failing -> candidate without artifact, older active kept; newer passing run replaces a gated one | I |
 | ML-20 | Universe selection | Stock with < 750 bars or an unconfirmed action is excluded with a reason; a model trained on other features is not used | I/U |
 | ML-21 | Market series gaps | Filled forward by at most one row, longer gaps drop the row | U |
+| ML-22 | Calibration purge (ML-03 for the calibration set) | Isotonic and conformal fits of fold k never use an earlier out-of-fold row whose label window reaches fold k; the final calibrator uses all; isotonic output stays inside [0.001, 0.999] | U |
+| ML-23 | Live gate evidence | 100 resolved rows on fewer than 20 distinct dates never trip; a live AUC that cannot be computed (one class) is insufficient, not a pass (D07-17) | U/I |
+| ML-24 | `predict` with fewer than 20 eligible stocks | Writes nothing, status `insufficient_universe` even when an active model exists | I |
+| ML-25 | Newer failing run | Stored as `candidate` without artifact and sets `guardrail_pass=false` on the older active pair (hidden, tracked); a later passing run replaces it and is shown at once | I |
+| ML-26 | Recovery after a live trip | A newer passing run starts gated (`live_recovery`); shown only after >= 100 resolved on >= 20 dates without a trip; 99 rows, a trip, or an intervening passing run do not shortcut it (D07-18) | I |
+| ML-28 | Horizon with no model (`insufficient_folds`) | No `model_run` rows, no hidden prediction rows, `no_model`; `rows_written` counts only horizons with a model | I |
+| ML-29 | Outcome horizon | Resolved on exactly the h-th trading day (holidays skipped); a missing bar on that day leaves the prediction pending, a later bar does not stand in for it | I |
+| ML-30 | `predict` after `process_queued_jobs` | Result under `details.predict`; skipped (`no_model`, `no_new_bar`); a failure is logged with a traceback and never fails the queue; `CancelledError` propagates | U/I |
 
 ## SEC/API: security and API
 | ID | Scenario | Required behavior | Test |
@@ -712,14 +720,33 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | HK-01 | Thresholds at exactly 70/85/95/100 % of `DB_SOFT_LIMIT_MB` (SYS-02) | Levels `70`, `85`, `95`, `limit`; just below stays in the lower band; a non-positive limit is `ok` | `test_housekeeping.py` `test_sys02_warn_level_thresholds` |
 | HK-02 | Re-crossing and repeated runs (SYS-02) | One notice per upward crossing; none while the band is unchanged; after a drop the next crossing notifies again; a jump to the limit announces 95 once; an undelivered notice is retried | `test_housekeeping.py` `test_sys02_*`, `test_undelivered_notice_is_retried_next_run` |
 | HK-03 | Over the limit with imported prices (SYS-02) | Level `limit` is stored, price rows and tracked imported stocks are untouched | `test_sys02_prices_are_never_deleted_even_over_the_limit` |
-| HK-04 | LRU cap (docs/04 3.10) | Only stocks tracked as `opened` with no prices, no watchlist and no portfolio are un-tracked, least recently opened first; owner data stays | `test_sys02_lru_untracks_only_opened_without_prices...`, `test_owner_entered_data_is_never_evicted` |
-| HK-05 | Late or skipped cron (SYS-03) | One run deletes everything past its age (sessions, codes, states, jobs, runs, alert events, uploads); active/queued/running rows stay; a second run changes nothing; dry run counts and writes nothing | `test_sys03_catch_up_deletes_everything_past_its_age_in_one_run`, `test_dry_run_counts_and_changes_nothing` |
-| HK-06 | MF NAV trim | NAVs older than 12 months are deleted only for schemes that are not tracked, not on the watchlist and not an alert target | `test_mf_navs_older_than_12_months_only_for_unopened_schemes` |
+| HK-04 | LRU cap (docs/04 3.10) | Only stocks tracked as `opened` with no prices, no watchlist, no portfolio and no owner-entered data are un-tracked, least recently opened first, in one atomic UPDATE | `test_sys02_lru_untracks_only_opened_without_prices...`, `test_hkx04_*`, `test_hkx05_*` |
+| HK-05 | Late or skipped cron (SYS-03) | One run deletes everything past its age (sessions, codes, states, jobs, runs, alert events, uploads); active/queued/running rows stay; a second run changes nothing; dry run counts and writes nothing | `test_sys03_catch_up_deletes_everything_past_its_age_in_one_run`, `test_dry_run_through_the_runner_prints_counts_only_and_changes_nothing`, `test_cli_dry_run_prints_scrubbed_details` |
+| HK-06 | MF NAV trim | NAVs older than 12 months are deleted only for schemes that are not opened (`last_opened_at`), not tracked, not on the watchlist and not an alert target; a scheme's newest NAV is never deleted | `test_hkx01_*`, `test_hkx02_*`, `test_hkx03_*` |
 | HK-07 | Overlapping runs (SYS-05) | A second `housekeeping` while one runs records `skipped` and does not run | `test_sys05_overlapping_housekeeping_second_run_is_skipped` |
 | HK-08 | Backup content | No `password_hash`, broker token, session, `broker_key`, secret-looking setting or prices; derived and detected-only rows excluded; every column of an exported table is exported or listed as excluded | `test_backup.py` `test_backup_has_no_broker_token_or_password_hash`, `test_every_column_is_exported_or_deliberately_excluded` |
 | HK-09 | Encryption | Only a public `age1...` recipient is accepted (a private key is refused before `age` runs); the file written is ciphertext only, with no plaintext sibling; no key means no backup (dry run needs none) | `test_encrypt_refuses_private_key...`, `test_backup_file_is_ciphertext_only`, `test_backup_needs_a_key_and_dry_run_does_not` |
-| HK-10 | Restore drill (SYS-08) | Encrypted dump decrypts and restores into a wiped database in one transaction; counts equal the file header; numeric text, JSON params, ids and FKs survive; sequences continue; the seeded password stays; a locked placeholder is used without an owner row; a failing row rolls everything back; a second restore inserts nothing | `test_sys08_restore_drill_encrypted_dump_counts_and_values`, `test_restore_*`, `test_parse_dump_*` |
-| HK-11 | Workflows (SYS-04, SYS-05, SYS-06, BRK-14) | One workflow per schedule row with the cron and timeout of docs/04 section 2, dispatch, no-cancel concurrency, SHA-pinned actions, no broker variables or removed-job workflows (BRK-14 not applicable), keepalive monthly to `heartbeat`, backup uploads only `*.age` for 30 days; runbook has the disabled-schedule checklist, restore drill, home-machine fallback and Render plan B | `test_workflows.py` |
+| HK-10 | Restore drill (SYS-08) | Encrypted dump decrypts and restores into a wiped database in one transaction; counts equal the file header; numeric text, JSON params, ids and FKs survive; sequences continue; the seeded password stays; a locked placeholder is used without an owner row; a failing row rolls everything back; a second restore is refused (HKX-12) | `test_sys08_restore_drill_encrypted_dump_counts_and_values`, `test_restore_*`, `test_parse_dump_*` |
+| HK-11 | Workflows (SYS-04, SYS-05, SYS-06, BRK-14) | One workflow per schedule row with the cron and timeout of docs/04 section 2, dispatch, no-cancel concurrency, SHA-pinned actions, no broker variables or removed-job workflows (BRK-14 not applicable), keepalive monthly to `heartbeat`, backup uploads only `*.age` for 14 days (D08-9); runbook has the disabled-schedule checklist, restore drill, home-machine fallback and Render plan B | `test_workflows.py` (the YAML is parsed: cron, timeout, permissions, triggers, upload step, secrets per workflow) |
+| HKX-01 | Opened but untracked scheme with a 13-month-old NAV (review B1) | Kept; tracked, watched and alerted schemes keep theirs; an unopened plain scheme loses only the old NAV | `test_hkx01_*`, `test_hkx02_*` |
+| HKX-02 | Scheme whose newest NAV is older than 12 months | Its newest NAV is never deleted; older ones go; a second run deletes nothing | `test_hkx03_*` |
+| HKX-03 | Stock holding an alert, action, adjustment, fundamentals or shareholding beyond the LRU cap (S6) | Stays tracked; only a stock without owner data is un-tracked | `test_hkx04_*` |
+| HKX-04 | LRU un-track atomicity (S6) | One UPDATE statement that re-checks the exemptions and returns the symbols | `test_hkx05_*` |
+| HKX-05 | Partial `refresh_job` with remaining symbols older than 90 days | Kept; partial without remaining work and finished rows go | `test_hkx06_*` |
+| HKX-06 | Full run before/after counts for every owner table (S4), also over the limit | watchlist_item, portfolio_txn, portfolio_adjustment, alert, corporate_action, price_daily, fundamental_value, shareholding and instrument counts unchanged | `test_hkx07_*` |
+| HKX-07 | One source for the soft limit (S3) | `DB_SOFT_LIMIT_MB` from the environment only (empty or invalid = 380, an `app_setting` row is ignored); `DB_WARN_LEVEL` is never written, `DB_WARN_NOTIFIED` is | `test_soft_limit_comes_from_the_environment_only`, `test_an_app_setting_row_does_not_override_the_environment_limit`, `test_sys02_prices_are_never_deleted_even_over_the_limit` |
+| HKX-08 | Telegram notice text | HTML-escaped as a whole | `test_notice_text_is_html_escaped` |
+| HKX-09 | `--dry-run` output (S2) | Prints scrubbed counts-only details (no symbols, secrets redacted); a real run does not print details; the database is unchanged | `test_dry_run_through_the_runner_*`, `test_cli_dry_run_prints_scrubbed_details` |
+| HKX-10 | `app_setting` export (S7) | Exactly the allow-list is exported through the SQL path; secret-looking, unknown and `DB_WARN_*` keys never are; the allow-list is guarded against secret-looking names | `test_hkx10_*`, `test_only_allow_listed_settings_are_backed_up`, `test_allow_list_guard_*` |
+| HKX-11 | Corporate action whose batch is an excluded prices batch (S5) | `import_batch_id` exported as NULL, the kept batch reference stays, and the dump restores with no dangling FK | `test_hkx11_*` |
+| HKX-12 | Second restore into a filled target (B2) | Refused before anything is written, tables identical, the dry run reports the same | `test_hkx12_*` |
+| HKX-13 | Instrument id 1 AAA in the file vs existing id 1 XYZ (B2) | Refused by default; with the check bypassed the insert collides and everything rolls back | `test_hkx13_*` |
+| HKX-14 | A conflict swallowed by an insert (B2 defence in depth) | The per-row verification fails and the transaction rolls back (the old lower-bound count passed) | `test_hkx14_*` |
+| HKX-15 | Sequence re-sync | Never lowered below its current value or the max id | `test_hkx15_*` |
+| HKX-16 | `.age` file restored without `--identity` | Refused with a clear message (exit 2) | `test_hkx16_*` |
+| HKX-17 | Plaintext restore | Allowed only with a loud stderr warning | `test_hkx17_*` |
+| HKX-18 | `age` wrapper (S4) | Stub executable on PATH: fixed argv and stdin; failure keeps a scrubbed first stderr line; missing binary named; real `age` round trip runs when installed (CI installs it) | `test_run_age_*`, `test_real_age_round_trip` |
+| HKX-19 | Header validation | A header missing a known table, or naming an unknown one, is refused | `test_parse_dump_requires_every_table_in_the_header` |
 ## PRED: prediction tab (F09)
 | ID | Scenario | Required behavior | Test |
 |---|---|---|---|
@@ -804,3 +831,17 @@ Test IDs carry a letter so they cannot be confused with the question numbers MFH
 | MFH-U76 | Import wizard for `mf_statement` | Preview shows counts by type, matched schemes and date range, first 20 normalised rows only (no personal columns); errors by row/column; commit disabled while errors exist; Undo shown in batches; 409 `UNDO_BREAKS_HOLDINGS` message shown | U/E (F16) |
 | MFH-U77 | Attribution and source lines | 'NAV data: AMFI, via mfapi.in' on MF value cards; units and amounts say 'your statement' or 'your entries'; stock figures say price return, MF figures total return; SAF-03 footer present | U (F16) |
 | MFH-U78 | No new network from the browser | The portfolio views call only the app API (no third-party host, no iframe); deny-list passes | E (F16) |
+| MKTX-01 | B14 review 1: overview meta | `meta.as_of` is the newest index or mover date (never the clock); `meta.stale`/`stale_age_hours` from the holiday-aware calendar; no data gives a null `as_of` with `as_of_reason: no_data` and `stale=false` | I (`TestReviewOverviewMeta`, `TestReviewOverviewStale`) |
+| MKTX-02 | B14 review 2: movers date alignment | Previous bar must be the trading day just before the newest date (holiday aware): a partial import ranks only stocks with both bars; a multi-day gap gives `movers_reason: no_common_dates`; flat or illiquid data gives `no_qualifying_movers`, never `no_prices_imported` | I (`TestReviewMoversDateAlignment`) |
+| MKTX-03 | B14 review 3: liquidity filter is the 60-day average traded value | A one-day volume spike does not qualify a stock whose 60-day average is below 0.5 crore; fewer than 60 bars never qualifies (owner to confirm the number, B14-4a) | I (`TestReviewMoversUse60DayADV`, `TestMarketOverviewData`) |
+| MKTX-04 | B14 review nits: index whitelist and units | Only `NIFTY50` and `INDIAVIX` show; the VIX unit is not `index points` | I (`TestReviewIndexWhitelist`) |
+| MKTX-05 | Trading-day arithmetic | `PreviousTradingDate`, `AddTradingDays` (both directions, holidays, weekends), `TradingDaysBetween` | U (`TestCalendarTradingDayArithmetic`) |
+| PRDX-01 | B14 review 4: no stored row | Active model and no row: `awaiting_predictions`; untracked, delisted or non-equity stock: `not_tracked` (also when an old row exists); never `insufficient_history` | I (`TestReviewPredictionNoRowReasons`) |
+| PRDX-02 | B14 review 5: track-record query plan | The by-run aggregation reads `prediction` through `prediction_model_run_idx` (no Seq Scan on `prediction`); both horizons answer from one aggregation | I (`TestReviewTrackRecordUsesIndex`) |
+| PRDX-03 | B14 review 6: model state from train runs | Skipped and failed runs are ignored; `aborted_timeout` is `training_aborted`; `dry_run` is `no_model` with dry-run wording | I (`TestReviewTrainStateFilters`) |
+| PRDX-04 | B14 review 7: corporate action at read time | `detected` of any date, or a non-rejected ex-date within 5 trading days of the prediction date or today, hides a stored shown row as `near_corporate_action`; far or rejected actions do not | I (`TestReviewPredictionActionAtReadTime`) |
+| PRDX-05 | B14 review nits: numbers and meta | Unordered quantiles hide the horizon as `stale_data`; prediction `meta.as_of` is the data date, null with a reason without a row; old rows are `meta.stale` | I (`TestReviewPredictionNumbersAndMeta`) |
+| PRDX-06 | Cross-language contract for `valid_metrics` | The static fixture `fixtures/ml/guardrail_valid_metrics.json` (worker `GuardrailResult.to_json` output as `store.py` nests it) produces the model card numbers and the `insufficient_folds` and failed-guardrail reasons | I (`TestReviewValidMetricsContractFixture`) |
+| ADMX-01 | B14 review 6: skipped run does not mask | `jobs[]` shows the last non-skipped run; a newer skipped run is `last_skipped_at` | I (`TestReviewAdminSkippedRunDoesNotMask`) |
+| ADMX-02 | B14 review 8 and nits: db block | `tables[].rows` null for a never-analyzed table (no negative numbers); `used_pct` null without a limit; the handler returns the non-ok `warn_level` (`limit`) | I (`TestReviewAdminDBBlock`) |
+| ADMX-03 | Read-time scrub | Secrets in `source_health.note` and `ingestion_run.error` never reach the response | I (`TestReviewAdminScrubsFreeText`) |

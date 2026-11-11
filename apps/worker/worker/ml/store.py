@@ -19,8 +19,14 @@ from worker.analytics import returns as rt
 from worker.analytics.actions import WARN_UNCONFIRMED
 from worker.analytics.snapshot import Bars
 from worker.ml import display as dp
-from worker.ml.features import MarketInput, Panel, StockInput
-from worker.ml.guardrail import LiveGate, LiveRecord, live_gate
+from worker.ml.features import MarketInput, Panel, StockInput, trading_days
+from worker.ml.guardrail import (
+    LIVE_MIN_DATES,
+    LIVE_RECOVERY_MIN_RESOLVED,
+    LiveGate,
+    LiveRecord,
+    live_gate,
+)
 from worker.ml.predict import UNIVERSE_MIN_BARS, PredRow, StockInfo
 from worker.ml.train import HorizonTrain, TrainOutput
 
@@ -139,14 +145,21 @@ async def save_training(pool: asyncpg.Pool, out: TrainOutput, panel: Panel) -> d
 
     Activation rule: a horizon whose guardrail passes gets ``active`` direction and range runs and
     the previous active pair is retired (artifacts cleared). A failing run is kept as a
-    ``candidate`` without artifact; an older active run stays active until a newer run passes or
-    the live gate switches it off.
+    ``candidate`` without artifact and switches the older active pair's ``guardrail_pass`` off
+    (its forecasts are hidden, tracking continues) until a newer run passes. When the older pair
+    was switched off by the live gate, the new passing pair starts in a recovery window: its
+    ``guardrail_pass`` stays false until ``LIVE_RECOVERY_MIN_RESOLVED`` resolved live predictions
+    on enough dates have not tripped the gate (``apply_live_gate``).
+    A horizon with no model (too few folds) writes nothing: ``no_model`` (D07-7).
     """
     summary: dict[str, Any] = {}
     if out.status == "insufficient_universe":
         return {"status": out.status}
     async with pool.acquire() as conn, conn.transaction():
         for ht in out.horizons:
+            if ht.model is None:
+                summary[f"{ht.horizon}d"] = {"status": "no_model", "reason": ht.guardrail.reason}
+                continue
             summary[f"{ht.horizon}d"] = await _save_horizon(conn, ht, panel, out.meta)
     return summary
 
@@ -156,17 +169,20 @@ async def _save_horizon(
 ) -> dict[str, Any]:
     h = ht.horizon
     activate = ht.guardrail.passed and ht.model is not None
+    recovery = await _needs_recovery(conn, h) if activate else None
     status = "active" if activate else "candidate"
     start = panel.calendar[ht.train_start_idx]
     end = panel.calendar[ht.train_end_idx]
     folds = ht.fold_metrics
-    valid_metrics = jsonable(
-        {
-            "guardrail": ht.guardrail.to_json(),
-            "folds": folds,
-            "meta": {**meta, "horizon": h, "folds_run": len(folds)},
-        }
-    )
+    valid_metrics_d: dict[str, Any] = {
+        "guardrail": ht.guardrail.to_json(),
+        "folds": folds,
+        "meta": {**meta, "horizon": h, "folds_run": len(folds)},
+    }
+    if recovery is not None:
+        valid_metrics_d["live_recovery"] = recovery
+    valid_metrics = jsonable(valid_metrics_d)
+    show = bool(ht.guardrail.passed) and recovery is None
     baseline = jsonable(
         {
             "b1_brier_mean": ht.guardrail.summary.get("baseline_brier_b1_mean"),
@@ -198,16 +214,54 @@ async def _save_horizon(
                 ht.n_rows,
                 json.dumps(valid_metrics),
                 json.dumps(baseline),
-                bool(ht.guardrail.passed),
+                show,
                 artifact,
                 status,
             )
         )
+        if not activate:
+            await conn.execute(
+                "UPDATE model_run SET guardrail_pass = false, valid_metrics = "
+                "jsonb_set(valid_metrics, '{superseded_by_failing_run}', to_jsonb($2::bigint)) "
+                "WHERE model_name = $1 AND status = 'active' AND guardrail_pass",
+                name,
+                ids[name],
+            )
+    # traceability: a prediction references the direction run, its band came from the range run
+    for mine, other in (("dir", "range"), ("range", "dir")):
+        await conn.execute(
+            "UPDATE model_run SET valid_metrics = "
+            "jsonb_set(valid_metrics, '{meta,paired_run_id}', to_jsonb($2::bigint)) WHERE id = $1",
+            ids[f"{mine}_{h}d"],
+            ids[f"{other}_{h}d"],
+        )
     return {
         "status": status,
         "guardrail_pass": bool(ht.guardrail.passed),
+        "live_recovery": recovery is not None,
         "reason": ht.guardrail.reason,
         "model_run_ids": ids,
+    }
+
+
+async def _needs_recovery(conn: asyncpg.Connection, h: int) -> dict[str, Any] | None:
+    """Recovery window for a new passing pair when the pair it replaces was switched off by the
+    live gate (or is itself still in its recovery window)."""
+    prev = await conn.fetchrow(
+        "SELECT id, guardrail_pass, valid_metrics FROM model_run "
+        "WHERE model_name = $1 AND status = 'active'",
+        f"dir_{h}d",
+    )
+    if prev is None:
+        return None
+    vm = json.loads(prev["valid_metrics"]) if prev["valid_metrics"] else {}
+    tripped = (not prev["guardrail_pass"]) and bool((vm.get("live_gate") or {}).get("tripped"))
+    if not tripped and "live_recovery" not in vm:
+        return None
+    return {
+        "required_resolved": LIVE_RECOVERY_MIN_RESOLVED,
+        "required_dates": LIVE_MIN_DATES,
+        "after_run": int(prev["id"]),
     }
 
 
@@ -231,6 +285,7 @@ class RunRef:
     dir_blob: bytes | None
     range_blob: bytes | None
     state: str  # active_pass | gated | failed
+    recovering: bool = False  # gated and waiting for its live recovery window
 
 
 async def load_runs(pool: asyncpg.Pool, horizons: Sequence[int]) -> dict[int, RunRef]:
@@ -241,7 +296,8 @@ async def load_runs(pool: asyncpg.Pool, horizons: Sequence[int]) -> dict[int, Ru
         rows: dict[str, asyncpg.Record] = {}
         for kind in ("dir", "range"):
             row = await pool.fetchrow(
-                "SELECT id, artifact, guardrail_pass, status FROM model_run "
+                "SELECT id, artifact, guardrail_pass, status, "
+                "valid_metrics ? 'live_recovery' AS recovering FROM model_run "
                 "WHERE model_name = $1 AND status IN ('active', 'candidate') "
                 "ORDER BY (status = 'active') DESC, id DESC LIMIT 1",
                 f"{kind}_{h}d",
@@ -264,6 +320,7 @@ async def load_runs(pool: asyncpg.Pool, horizons: Sequence[int]) -> dict[int, Ru
             bytes(d["artifact"]) if d["artifact"] is not None else None,
             bytes(r["artifact"]) if r["artifact"] is not None else None,
             state,
+            bool(d["recovering"]),
         )
     return out
 
@@ -299,10 +356,13 @@ async def insert_predictions(
     return n
 
 
-async def resolve_outcomes(pool: asyncpg.Pool) -> int:
-    """Create ``prediction_outcome`` rows whose horizon bars now exist (docs/05 10.7). The return
-    is recomputed from today's ``adj_close`` of both bars so a later confirmed split does not
-    distort it. A prediction whose as_of bar no longer exists stays pending."""
+async def resolve_outcomes(pool: asyncpg.Pool, holidays: frozenset[date] | None = None) -> int:
+    """Create ``prediction_outcome`` rows whose horizon bars now exist (docs/05 10.7). The horizon
+    is exactly ``h`` trading days (weekdays minus ``holidays``, D07-19): when the stock has no bar
+    on that day, or the ``as_of`` bar no longer exists or is not a trading day, the prediction
+    stays pending. The return is recomputed from today's ``adj_close`` of both bars so a later
+    confirmed split does not distort it."""
+    hol = holidays if holidays is not None else await load_holidays(pool)
     pending = await pool.fetch(
         "SELECT p.id, p.instrument_id, p.as_of, p.horizon_days, p.p_up, p.ret_q10, p.ret_q90 "
         "FROM prediction p LEFT JOIN prediction_outcome o ON o.prediction_id = p.id "
@@ -319,16 +379,22 @@ async def resolve_outcomes(pool: asyncpg.Pool) -> int:
             iid,
             min(p["as_of"] for p in preds),
         )
-        dates = [b["trade_date"] for b in bars]
-        pos = {d: i for i, d in enumerate(dates)}
+        if not bars:
+            continue
+        close = {b["trade_date"]: float(b["adj_close"]) for b in bars}
+        tdays = trading_days(min(p["as_of"] for p in preds), bars[-1]["trade_date"], hol)
+        tpos = {d: i for i, d in enumerate(tdays)}
         for p in preds:
-            i = pos.get(p["as_of"])
+            i = tpos.get(p["as_of"])
             h = int(p["horizon_days"])
-            if i is None or i + h >= len(bars):
+            if i is None or p["as_of"] not in close or i + h >= len(tdays):
+                continue
+            end = tdays[i + h]
+            if end not in close:
                 continue
             out = dp.resolve_outcome(
-                ref_close=float(bars[i]["adj_close"]),
-                later_close=float(bars[i + h]["adj_close"]),
+                ref_close=close[p["as_of"]],
+                later_close=close[end],
                 p_up=None if p["p_up"] is None else float(p["p_up"]),
                 q10=None if p["ret_q10"] is None else float(p["ret_q10"]),
                 q90=None if p["ret_q90"] is None else float(p["ret_q90"]),
@@ -338,7 +404,7 @@ async def resolve_outcomes(pool: asyncpg.Pool) -> int:
                 "direction_correct, in_band) VALUES ($1, $2, $3, $4, $5) "
                 "ON CONFLICT (prediction_id) DO NOTHING",
                 int(p["id"]),
-                dates[i + h],
+                end,
                 out.realized_return,
                 out.direction_correct,
                 out.in_band,
@@ -349,7 +415,7 @@ async def resolve_outcomes(pool: asyncpg.Pool) -> int:
 
 async def live_records(pool: asyncpg.Pool, model_run_id: int, horizon: int) -> list[LiveRecord]:
     rows = await pool.fetch(
-        "SELECT p.p_up, o.realized_return, o.in_band FROM prediction p "
+        "SELECT p.p_up, p.as_of, o.realized_return, o.in_band FROM prediction p "
         "JOIN prediction_outcome o ON o.prediction_id = p.id "
         "WHERE p.model_run_id = $1 AND p.horizon_days = $2 "
         "AND p.p_up IS NOT NULL AND o.in_band IS NOT NULL",
@@ -357,22 +423,51 @@ async def live_records(pool: asyncpg.Pool, model_run_id: int, horizon: int) -> l
         horizon,
     )
     return [
-        LiveRecord(float(r["p_up"]), float(r["realized_return"]), bool(r["in_band"])) for r in rows
+        LiveRecord(float(r["p_up"]), float(r["realized_return"]), bool(r["in_band"]), r["as_of"])
+        for r in rows
     ]
 
 
 async def apply_live_gate(pool: asyncpg.Pool, horizon: int, run: RunRef) -> LiveGate | None:
-    """docs/05 10.5 live gate for an active, currently passing horizon. A trip sets
-    ``guardrail_pass = false`` on both runs; it stays off until a newer run passes (activation
-    creates a fresh pair with its own live record)."""
-    if run.state != "active_pass":
-        return None
-    gate = live_gate(await live_records(pool, run.dir_id, horizon))
-    if gate.tripped:
-        await pool.execute(
-            "UPDATE model_run SET guardrail_pass = false, "
-            "valid_metrics = jsonb_set(valid_metrics, '{live_gate}', $2::jsonb) WHERE id = ANY($1)",
-            [run.dir_id, run.range_id],
-            json.dumps(jsonable(gate.__dict__)),
+    """docs/05 10.5 live gate.
+
+    * An active, passing horizon: a trip sets ``guardrail_pass = false`` on both runs and stores
+      the numbers in ``valid_metrics.live_gate``.
+    * A run in its recovery window (a passing run that followed a live trip, ``gated`` with
+      ``valid_metrics.live_recovery``): once ``LIVE_RECOVERY_MIN_RESOLVED`` resolved predictions on
+      enough dates exist and the gate does not trip, ``guardrail_pass`` is set back to true. A
+      trip during recovery keeps it off. A newer passing run alone never re-shows a tripped
+      horizon (D07-7, D07-18).
+    """
+    if run.state == "active_pass":
+        gate = live_gate(await live_records(pool, run.dir_id, horizon))
+        if gate.tripped:
+            await _store_gate(pool, run, gate, passing=False)
+        return gate
+    if run.state == "gated" and run.recovering:
+        gate = live_gate(
+            await live_records(pool, run.dir_id, horizon),
+            min_resolved=LIVE_RECOVERY_MIN_RESOLVED,
         )
-    return gate
+        if gate.tripped:
+            await _store_gate(pool, run, gate, passing=False)
+        elif not gate.insufficient:
+            await pool.execute(
+                "UPDATE model_run SET guardrail_pass = true, "
+                "valid_metrics = jsonb_set(valid_metrics - 'live_recovery', "
+                "'{live_recovered}', $2::jsonb) WHERE id = ANY($1)",
+                [run.dir_id, run.range_id],
+                json.dumps(jsonable(gate.__dict__)),
+            )
+        return gate
+    return None
+
+
+async def _store_gate(pool: asyncpg.Pool, run: RunRef, gate: LiveGate, *, passing: bool) -> None:
+    await pool.execute(
+        "UPDATE model_run SET guardrail_pass = $3, "
+        "valid_metrics = jsonb_set(valid_metrics, '{live_gate}', $2::jsonb) WHERE id = ANY($1)",
+        [run.dir_id, run.range_id],
+        json.dumps(jsonable(gate.__dict__)),
+        passing,
+    )
