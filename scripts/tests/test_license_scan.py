@@ -151,7 +151,14 @@ source = { registry = "https://pypi.org/simple" }
 
 def test_reviewed_override_applies_only_when_the_probe_found_nothing() -> None:
     (entry,) = ls.python_entries_from([("scipy", "1.17.1")], {}, {})
-    assert entry.license == "BSD-3-Clause" and not ls.violations([entry])
+    assert entry.license.startswith("BSD-3-Clause") and not ls.violations([entry])
+    assert entry.status == "review"  # reviewed by hand, never plain ok
+    assert "| Review |" in ls.render_notices([entry])
+    # keyed by exact (name, version): an unreviewed version is UNKNOWN and fails the scan
+    (new,) = ls.python_entries_from([("scipy", "9.9.9")], {}, {})
+    assert new.license == "UNKNOWN" and [e.name for e in ls.violations([new])] == ["scipy"]
+    (other,) = ls.python_entries_from([("somepkg", "1.0")], {}, {})
+    assert other.license == "UNKNOWN"
     (probed,) = ls.python_entries_from(
         [("scipy", "1.17.1")], {("scipy", "1.17.1"): "GPL-3.0-only"}, {}
     )

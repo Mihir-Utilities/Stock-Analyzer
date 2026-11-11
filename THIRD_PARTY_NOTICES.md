@@ -831,7 +831,7 @@ Packages: 832
 | python | pytest | 9.1.1 | MIT | runtime/dev | ok |
 | python | python-dateutil | 2.9.0.post0 | BSD License OR Apache Software License | runtime/dev | ok |
 | python | ruff | 0.17.0 | MIT | runtime/dev | ok |
-| python | scipy | 1.17.1 | BSD-3-Clause | runtime/dev | ok |
+| python | scipy | 1.17.1 | BSD-3-Clause (reviewed override) | runtime/dev | Review |
 | python | scipy | 1.18.1 | BSD License | runtime/dev | ok |
 | python | six | 1.17.0 | MIT License | runtime/dev | ok |
 | python | starlette | 1.8.0 | BSD-3-Clause | runtime/dev | ok |

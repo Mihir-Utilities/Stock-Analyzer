@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 import numpy as np
@@ -208,9 +209,11 @@ def evaluate_guardrail(
 # ----------------------------------------------------------------------------- live gate
 
 LIVE_MIN_RESOLVED = 100
+LIVE_MIN_DATES = 20  # D07-17: 100 rows from a few dates are one market episode, not evidence
 LIVE_MIN_AUC = 0.50
 LIVE_COVERAGE_LO = 0.70
 LIVE_COVERAGE_HI = 0.90
+LIVE_RECOVERY_MIN_RESOLVED = 100  # D07-18: a run that follows a live trip must prove itself first
 
 
 @dataclass(frozen=True)
@@ -218,6 +221,7 @@ class LiveRecord:
     p_up: float
     realized_return: float  # simple return C_{t+h}/C_t - 1
     in_band: bool
+    as_of: date | None = None  # the prediction date; ``None`` counts as one unknown date each
 
 
 @dataclass(frozen=True)
@@ -227,23 +231,27 @@ class LiveGate:
     live_coverage: float | None
     tripped: bool
     reason: str | None  # live_auc | live_coverage
+    distinct_dates: int = 0
+    insufficient: bool = True  # fewer rows or dates than the gate needs, or one class only
 
 
-def live_gate(records: Sequence[LiveRecord]) -> LiveGate:
-    """After >= 100 resolved live predictions of a horizon: AUC < 0.50 or band coverage outside
-    [0.70, 0.90] trips the gate. Fewer than 100 never trips it."""
+def live_gate(records: Sequence[LiveRecord], *, min_resolved: int = LIVE_MIN_RESOLVED) -> LiveGate:
+    """Live gate: needs >= ``min_resolved`` (100) resolved predictions on >= 20 distinct ``as_of``
+    dates; then AUC < 0.50 or band coverage outside [0.70, 0.90] trips it. Fewer rows or dates, or
+    an AUC that cannot be computed (one class only), is *insufficient evidence*: it never trips
+    and never counts as passing a recovery (``insufficient`` is true)."""
     n = len(records)
     if n == 0:
         return LiveGate(0, None, None, False, None)
     y = np.array([1.0 if r.realized_return > 0 else 0.0 for r in records])
     p = np.array([r.p_up for r in records])
-    a = mt.auc(y, p)
+    auc_v = _finite(mt.auc(y, p))
     cov = float(np.mean([r.in_band for r in records]))
-    auc_v = _finite(a)
-    if n < LIVE_MIN_RESOLVED:
-        return LiveGate(n, auc_v, cov, False, None)
-    if auc_v is not None and auc_v < LIVE_MIN_AUC:
-        return LiveGate(n, auc_v, cov, True, "live_auc")
+    dates = len({r.as_of if r.as_of is not None else i for i, r in enumerate(records)})
+    if n < min_resolved or dates < LIVE_MIN_DATES or auc_v is None:
+        return LiveGate(n, auc_v, cov, False, None, dates, True)
+    if auc_v < LIVE_MIN_AUC:
+        return LiveGate(n, auc_v, cov, True, "live_auc", dates, False)
     if not (LIVE_COVERAGE_LO <= cov <= LIVE_COVERAGE_HI):
-        return LiveGate(n, auc_v, cov, True, "live_coverage")
-    return LiveGate(n, auc_v, cov, False, None)
+        return LiveGate(n, auc_v, cov, True, "live_coverage", dates, False)
+    return LiveGate(n, auc_v, cov, False, None, dates, False)

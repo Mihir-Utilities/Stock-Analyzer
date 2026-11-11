@@ -340,7 +340,7 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ID | Scenario | Required behavior | Test |
 |---|---|---|---|
 | ML-01 | Lookahead | Changing prices after `t` leaves features at `t` unchanged | U |
-| ML-02 | Label alignment with holidays | Correct `t+h` rows | U |
+| ML-02 | Label alignment with holidays | A label is exactly h trading days ahead (holidays skipped); a window whose target day has no bar, or a bar on a non-trading day, has a NaN label (D07-19) | U |
 | ML-03 | Embargo/purge | No overlap | U |
 | ML-04 | Fewer than 20 eligible stocks | `insufficient_universe`; forecasts hidden | I |
 | ML-05 | Guardrail fails | `shown=false`, reason; UI explanation | I/E |
@@ -352,14 +352,22 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ML-11 | Determinism | Same data/seed -> same metrics | U |
 | ML-12 | No single target price anywhere in UI | Component test | E |
 | ML-13 | Cross-sectional rank at `t` uses only stocks on date `t`; a date with one stock drops the row | Per-date ranks unchanged when other dates change | U |
-| ML-14 | Random-noise data (guardrail function over 150 seeds and three full LightGBM runs) | Never passes the guardrail | U |
-| ML-15 | Each guardrail condition alone; fewer than 12 folds; only the last 8 folds count; deterministic verdict | Fails with the named check / `insufficient_folds` | U |
+| ML-14 | Random-noise data (guardrail function over 150 seeds, a calibrated near-0.5 weakly correlated model over 60 seeds, and full LightGBM runs on both horizons 5 and 21) | Never passes the guardrail; the `auc_mean` check is what blocks the LightGBM noise runs | U |
+| ML-15 | Each guardrail condition alone; fewer than 12 folds; only the last 8 folds count; deterministic verdict | The bootstrap lower bound alone blocks a good fold-mean AUC; fails with the named check / `insufficient_folds` | U |
 | ML-16 | Conformal band calibration | Coverage 80% on fresh data, small-sample coverage at least 80%, median stays inside the band | U |
 | ML-17 | Outcome resolution | `realized`, `direction_correct`, `in_band` per docs/05 10.7; flat return is not "up"; unknown inputs give null | U |
 | ML-18 | `predict` twice for the same `as_of`; gated model | Stored rows are never rewritten; gated values stored with `shown=false` | I |
 | ML-19 | Activation rule | Passing horizon -> active and previous retired; failing -> candidate without artifact, older active kept; newer passing run replaces a gated one | I |
 | ML-20 | Universe selection | Stock with < 750 bars or an unconfirmed action is excluded with a reason; a model trained on other features is not used | I/U |
 | ML-21 | Market series gaps | Filled forward by at most one row, longer gaps drop the row | U |
+| ML-22 | Calibration purge (ML-03 for the calibration set) | Isotonic and conformal fits of fold k never use an earlier out-of-fold row whose label window reaches fold k; the final calibrator uses all; isotonic output stays inside [0.001, 0.999] | U |
+| ML-23 | Live gate evidence | 100 resolved rows on fewer than 20 distinct dates never trip; a live AUC that cannot be computed (one class) is insufficient, not a pass (D07-17) | U/I |
+| ML-24 | `predict` with fewer than 20 eligible stocks | Writes nothing, status `insufficient_universe` even when an active model exists | I |
+| ML-25 | Newer failing run | Stored as `candidate` without artifact and sets `guardrail_pass=false` on the older active pair (hidden, tracked); a later passing run replaces it and is shown at once | I |
+| ML-26 | Recovery after a live trip | A newer passing run starts gated (`live_recovery`); shown only after >= 100 resolved on >= 20 dates without a trip; 99 rows, a trip, or an intervening passing run do not shortcut it (D07-18) | I |
+| ML-28 | Horizon with no model (`insufficient_folds`) | No `model_run` rows, no hidden prediction rows, `no_model`; `rows_written` counts only horizons with a model | I |
+| ML-29 | Outcome horizon | Resolved on exactly the h-th trading day (holidays skipped); a missing bar on that day leaves the prediction pending, a later bar does not stand in for it | I |
+| ML-30 | `predict` after `process_queued_jobs` | Result under `details.predict`; skipped (`no_model`, `no_new_bar`); a failure is logged with a traceback and never fails the queue; `CancelledError` propagates | U/I |
 
 ## SEC/API: security and API
 | ID | Scenario | Required behavior | Test |

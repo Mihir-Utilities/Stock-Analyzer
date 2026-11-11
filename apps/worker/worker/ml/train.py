@@ -18,7 +18,13 @@ from numpy.typing import NDArray
 
 from worker.ml import baselines as bl
 from worker.ml import features as ft
-from worker.ml.calibration import apply_band, conformal_adjustment, fit_isotonic, order_quantiles
+from worker.ml.calibration import (
+    apply_band,
+    clip_prob,
+    conformal_adjustment,
+    fit_isotonic,
+    order_quantiles,
+)
 from worker.ml.guardrail import FoldEval, GuardrailParams, GuardrailResult, evaluate_guardrail
 from worker.ml.models import QUANTILES, HorizonModel, TrainParams, fit_booster, predict_booster
 from worker.ml.walkforward import Fold, make_folds, month_key, train_mask, valid_mask
@@ -121,6 +127,7 @@ def _train_horizon(
     prev_y: list[F64] = []
     prev_q: list[F64] = []
     prev_z: list[F64] = []
+    prev_end: list[NDArray[np.int64]] = []  # label_end of each earlier fold's validation rows
     used: list[Fold] = []
     for fold in folds:
         vm = valid_mask(lab, panel.date_idx, fold)
@@ -135,10 +142,12 @@ def _train_horizon(
         yv, zv = y[vm], z[vm]
         calibrated = bool(prev_p)
         if calibrated:
-            iso = fit_isotonic(np.concatenate(prev_p), np.concatenate(prev_y))
-            p_cal = np.clip(iso.predict(p_raw), 0.0, 1.0)
-            pq = np.concatenate(prev_q)
-            adj = conformal_adjustment(pq[:, 0], pq[:, 2], np.concatenate(prev_z))
+            # purge: an earlier fold's row whose label window reaches this fold is not known yet
+            ok = np.concatenate(prev_end) < fold.start
+            iso = fit_isotonic(np.concatenate(prev_p)[ok], np.concatenate(prev_y)[ok])
+            p_cal = clip_prob(iso.predict(p_raw))
+            pq = np.concatenate(prev_q)[ok]
+            adj = conformal_adjustment(pq[:, 0], pq[:, 2], np.concatenate(prev_z)[ok])
         else:
             p_cal, adj = p_raw, 0.0
         band = apply_band(q_raw, adj)
@@ -163,6 +172,7 @@ def _train_horizon(
         prev_y.append(yv)
         prev_q.append(q_raw)
         prev_z.append(zv)
+        prev_end.append(panel.label_end[h][vm])
 
     guard = evaluate_guardrail(evals, gp)
     metrics = [e.metrics() for e in evals]

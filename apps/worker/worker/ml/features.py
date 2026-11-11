@@ -1,7 +1,9 @@
 """Feature builder with leakage guards (docs/05 10.2, 10.3).
 
 Everything here is causal: the value at row ``t`` depends only on bars up to and including ``t``
-(test ML-01). Labels use the stock's own row ``t + h`` (holidays and gaps never shift it, ML-02).
+(test ML-01). A label horizon is exactly ``h`` trading days (weekdays minus the ``trading``
+holidays): the label of row ``t`` is the stock's bar ``h`` trading days later, and NaN when the
+stock has no bar on that day or ``t`` itself is not a trading day (ML-02, decision D07-19).
 Missing feature values drop the row (no imputation) except market-series gaps, which are filled
 forward by at most one calendar row. A market group (Nifty, VIX) that has no series at all is
 omitted for every row (ML-08).
@@ -11,9 +13,9 @@ from __future__ import annotations
 
 import hashlib
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
@@ -231,13 +233,25 @@ def build_market(calendar: Sequence[date], market: MarketInput) -> MarketFrame:
     return MarketFrame(nifty_frame, vix_frame)
 
 
+def trading_days(start: date, end: date, holidays: Collection[date] = frozenset()) -> list[date]:
+    """Weekdays in ``[start, end]`` that are not in ``holidays`` (the expected trading dates)."""
+    out: list[date] = []
+    d = start
+    while d <= end:
+        if d.weekday() < 5 and d not in holidays:
+            out.append(d)
+        d += timedelta(days=1)
+    return out
+
+
 def stock_frame(
     stock: StockInput,
     calendar_index: Mapping[date, int],
     mkt: MarketFrame,
     horizons: Sequence[int] = HORIZONS,
+    holidays: Collection[date] = frozenset(),
 ) -> StockFrame:
-    """All causal features of one stock plus its labels."""
+    """All causal features of one stock plus its labels (exactly ``h`` trading days ahead)."""
     b = stock.bars
     n = len(b.dates)
     c = b.adj_close
@@ -287,12 +301,21 @@ def stock_frame(
         vals["vix_chg_5"] = mkt.vix.chg_5[cal_idx]
     vals["dow"] = np.array([float(d.weekday()) for d in b.dates], dtype=np.float64)
     frame = StockFrame(stock.symbol, list(b.dates), cal_idx, vals, ewma_sigma(lr1), c.copy())
+    tdays = trading_days(b.dates[0], b.dates[-1], holidays) if n else []
+    tpos_of = {d: i for i, d in enumerate(tdays)}
+    tpos = np.array([tpos_of.get(d, -1) for d in b.dates], dtype=np.int64)
+    row_at = np.full(len(tdays), -1, dtype=np.int64)  # trading-day index -> the stock's row
+    row_at[tpos[tpos >= 0]] = np.flatnonzero(tpos >= 0)
     for h in horizons:
         end = np.full(n, -1, dtype=np.int64)
         yr = _nan(n)
-        if n > h:
-            end[: n - h] = cal_idx[h:]
-            yr[: n - h] = np.log(c[h:] / c[:-h])
+        target = tpos + h
+        ok = (tpos >= 0) & (target < len(tdays))
+        j = np.full(n, -1, dtype=np.int64)
+        j[ok] = row_at[target[ok]]
+        ok = j >= 0
+        end[ok] = cal_idx[j[ok]]
+        yr[ok] = np.log(c[j[ok]] / c[ok])
         frame.label_end[h] = end
         frame.y_ret[h] = yr
     return frame
@@ -351,13 +374,15 @@ def build_panel(
     stocks: Sequence[StockInput],
     market: MarketInput,
     horizons: Sequence[int] = HORIZONS,
+    holidays: Collection[date] = frozenset(),
 ) -> Panel:
-    """Features and labels for every stock-date with complete features (no imputation)."""
+    """Features and labels for every stock-date with complete features (no imputation).
+    ``holidays`` are the ``market_holiday`` trading-segment dates that define the label horizon."""
     calendar = sorted({d for s in stocks for d in s.bars.dates})
     cal_index = {d: i for i, d in enumerate(calendar)}
     mkt = build_market(calendar, market)
     names = feature_names(nifty=mkt.nifty is not None, vix=mkt.vix is not None)
-    frames = [stock_frame(s, cal_index, mkt, horizons) for s in stocks]
+    frames = [stock_frame(s, cal_index, mkt, horizons, holidays) for s in stocks]
     cols = [n for n in names if n not in RANK_FEATURES]
 
     def cat_f(xs: Sequence[F64]) -> F64:
