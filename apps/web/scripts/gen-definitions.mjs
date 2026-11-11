@@ -52,6 +52,9 @@ export const ENTRIES = [
   ["avg_cost", "Average cost", "8.1", "Average-cost basis for open holdings"],
   ["xirr", "XIRR", "8.3", "Cash flows: buy"],
   ["day_change", "Day change", "8.4", "Day change ="],
+  ["mf_total_return", "Mutual fund total return", "1", "**Mutual fund holdings are the one place"],
+  ["xirr_pooled", "XIRR across stocks and mutual funds", "8.5.4", "**8.5.4 Cash flows for XIRR"],
+  ["absolute_return", "Absolute return (under one year)", "8.5.6", "**8.5.6 Under one year"],
 ];
 
 function strip(md) {

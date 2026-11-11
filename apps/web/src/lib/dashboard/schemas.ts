@@ -58,6 +58,12 @@ const share = z.object({ key: z.string(), weight_pct: z.number() });
 
 export const portfolioSummarySchema = z.object({
   as_of: str,
+  /** D-MF additions (docs/03 12a): which view the numbers are for and which classes have data. */
+  view: str,
+  asset_classes_present: z.array(z.string()).nullish().catch(null),
+  mf_holdings: z.array(z.unknown()).nullish().catch(null),
+  allocation_by_asset_class: z.array(share).nullish().catch(null),
+  allocation_by_category: z.array(share).nullish().catch(null),
   holdings: z.array(z.object({ symbol: z.string() })),
   totals: z.object({
     invested: str,

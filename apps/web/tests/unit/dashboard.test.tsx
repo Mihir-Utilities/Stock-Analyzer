@@ -159,7 +159,7 @@ describe("dashboard states (docs/06 section 5, 6.2)", () => {
     expect(card.textContent).toContain("₹1,23,456.50");
     expect(card.textContent).toContain("needs two imported bars");
     expect(card.textContent).toContain("less than a year of cash flows");
-    expect(card.textContent).toContain("Source: Your imported transactions and prices");
+    expect(card.textContent).toContain("Source: Your transactions");
     expect(within(card).getByTestId("dash-allocation")).toBeTruthy();
   });
 

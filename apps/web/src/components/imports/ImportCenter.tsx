@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/overlays";
 import { BatchesTab } from "./BatchesTab";
@@ -8,7 +9,7 @@ import { ImportWizard, templateUrl } from "./ImportWizard";
 import { ManualForms } from "./ManualForms";
 import { StorageMeter } from "./StorageMeter";
 import { TrimHistory } from "./TrimHistory";
-import { IMPORT_KINDS } from "@/lib/imports/schemas";
+import { IMPORT_KINDS, type ImportKind } from "@/lib/imports/schemas";
 
 /** Persistent rights notice (docs/06 section 6.10), shown above every tab. */
 export const RIGHTS_NOTICE =
@@ -26,6 +27,8 @@ const TEMPLATE_TEXT: Record<(typeof IMPORT_KINDS)[number], string> = {
   shareholding: "Shareholding pattern per quarter, in percent.",
   corporate_actions: "Splits, bonuses, dividends and other actions with their ex-dates.",
   instrument_meta: "Sector, industry, company type and index tags per stock.",
+  mf_statement:
+    "Your broker's mutual fund statement: Date, Fund Name, Transaction Type, Folio No, Units Traded, NAV, Amount, Stamp Duty (CSV or .xlsx).",
 };
 
 function TemplatesTab() {
@@ -50,7 +53,20 @@ function TemplatesTab() {
   );
 }
 
+/** `/imports?kind=mf_statement` opens the upload tab on that file type (docs/06 6.7a). */
+function useInitialKind(): ImportKind | undefined {
+  const sp = useSearchParams();
+  const raw =
+    sp !== null
+      ? sp.get("kind")
+      : typeof window === "undefined"
+        ? null
+        : new URLSearchParams(window.location.search).get("kind");
+  return (IMPORT_KINDS as readonly string[]).includes(raw ?? "") ? (raw as ImportKind) : undefined;
+}
+
 export function ImportCenter() {
+  const initialKind = useInitialKind();
   return (
     <div className="flex flex-col gap-4" data-testid="import-center">
       <h1 className="text-page font-semibold text-text-1">Import center</h1>
@@ -63,7 +79,11 @@ export function ImportCenter() {
       <Tabs
         label="Import center sections"
         tabs={[
-          { id: "upload", label: "Upload", content: <ImportWizard /> },
+          {
+            id: "upload",
+            label: "Upload",
+            content: <ImportWizard {...(initialKind ? { initialKind } : {})} />,
+          },
           { id: "templates", label: "Templates", content: <TemplatesTab /> },
           { id: "forms", label: "Manual forms", content: <ManualForms /> },
           { id: "batches", label: "Batches", content: <BatchesTab /> },

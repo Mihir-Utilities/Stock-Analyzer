@@ -48,7 +48,11 @@ const val = (id: string) => (screen.getByTestId(id) as HTMLInputElement).value;
 const posts = <T extends { method: string }>(m: { calls: T[] }) =>
   m.calls.filter((c) => c.method === "POST");
 
-beforeEach(() => vi.unstubAllGlobals());
+// These tests cover the stocks screen; the UI default is All (MFH-14), so they open the Equity view.
+beforeEach(() => {
+  vi.unstubAllGlobals();
+  window.history.replaceState(null, "", "/portfolio?view=equity");
+});
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();

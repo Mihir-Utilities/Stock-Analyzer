@@ -1,9 +1,11 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
+import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { Banner } from "@/components/ui/banners";
 import { ConfirmDialog } from "@/components/ui/overlays";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { FormField, inputClass } from "@/components/ui/FormField";
 import { Wizard, type WizardStep } from "@/components/ui/Wizard";
 import { ApiError } from "@/lib/api/client";
@@ -44,7 +46,15 @@ const KIND_LABEL: Record<ImportKind, string> = {
   shareholding: "Shareholding (shareholding.csv)",
   corporate_actions: "Corporate actions (corporate_actions.csv)",
   instrument_meta: "Sector, industry and index tags (instrument_meta.csv)",
+  mf_statement: "Mutual fund statement (broker's MF statement, .csv or .xlsx)",
 };
+
+// The statement flow (fund-name mapping, per-row preview) is its own component and loads on demand
+// (route budget, docs/06a section 10).
+const MfStatementImport = dynamic(
+  () => import("./MfStatementImport").then((m) => m.MfStatementImport),
+  { loading: () => <Skeleton className="h-40 w-full" label="Loading the statement import" /> },
+);
 
 /** What a commit does and whether it can be undone, per kind (docs/01 section 7, B06b-4). */
 function commitEffect(kind: ImportKind): string {
@@ -88,6 +98,27 @@ function symbolsOf(preview: Array<Record<string, unknown>>): string[] {
     if (typeof s === "string" && s) set.add(s);
   }
   return [...set];
+}
+
+function KindPicker({ kind, onChange }: { kind: ImportKind; onChange: (k: ImportKind) => void }) {
+  return (
+    <fieldset className="flex flex-col gap-2">
+      <legend className="text-caption font-medium text-text-1">File type</legend>
+      {IMPORT_KINDS.map((k) => (
+        <label key={k} className="touch-target flex items-center gap-2 text-body-sm text-text-1">
+          <input
+            type="radio"
+            name="import-kind"
+            value={k}
+            data-testid={`import-kind-${k}`}
+            checked={kind === k}
+            onChange={() => onChange(k)}
+          />
+          {KIND_LABEL[k]}
+        </label>
+      ))}
+    </fieldset>
+  );
 }
 
 export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportKind }) {
@@ -172,29 +203,14 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
     const uploadStep = (
       <div className="flex flex-col gap-3">
         <h2 className="text-lead font-semibold text-text-1">Choose a file</h2>
-        <fieldset className="flex flex-col gap-2">
-          <legend className="text-caption font-medium text-text-1">File type</legend>
-          {IMPORT_KINDS.map((k) => (
-            <label
-              key={k}
-              className="touch-target flex items-center gap-2 text-body-sm text-text-1"
-            >
-              <input
-                type="radio"
-                name="import-kind"
-                value={k}
-                data-testid={`import-kind-${k}`}
-                checked={kind === k}
-                onChange={() => {
-                  setKind(k);
-                  setValidation(null);
-                  validate.reset();
-                }}
-              />
-              {KIND_LABEL[k]}
-            </label>
-          ))}
-        </fieldset>
+        <KindPicker
+          kind={kind}
+          onChange={(k) => {
+            setKind(k);
+            setValidation(null);
+            validate.reset();
+          }}
+        />
         <p className="text-body-sm text-text-2">
           Need the column layout?{" "}
           <a
@@ -375,6 +391,21 @@ export function ImportWizard({ initialKind = "prices" }: { initialKind?: ImportK
       {result ? `Import saved, batch ${result.batch_id}.` : ""}
     </div>
   );
+  if (kind === "mf_statement") {
+    return (
+      <div className="flex flex-col gap-3" data-testid="import-wizard">
+        <KindPicker
+          kind={kind}
+          onChange={(k) => {
+            setKind(k);
+            setValidation(null);
+            validate.reset();
+          }}
+        />
+        <MfStatementImport />
+      </div>
+    );
+  }
   if (result) {
     return (
       <>

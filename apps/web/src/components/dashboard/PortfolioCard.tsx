@@ -1,51 +1,117 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { ChartFrame } from "@/components/charts/ChartFrame";
 import type { ChartDataset } from "@/components/charts/chart-data";
 import { Card } from "@/components/ui/Card";
 import { DefinitionTip } from "@/components/ui/DefinitionTip";
 import { Stat } from "@/components/ui/Stat";
+import {
+  ALL_VIEW_SOURCE,
+  BASIS_LINE,
+  MF_VIEW_SOURCE,
+  NO_MF_TXNS_COPY,
+  reasonText,
+  UNDER_ONE_YEAR_COPY,
+  valueUnavailable,
+} from "@/components/portfolio/text";
+import { ViewSwitcher } from "@/components/portfolio/ViewSwitcher";
 import { usePortfolioSummary } from "@/lib/dashboard/queries";
 import type { PortfolioSummary } from "@/lib/dashboard/schemas";
 import { asOfText, describeError, parseMoney } from "@/lib/dashboard/state";
 import { formatInr, formatPercent } from "@/lib/format";
+import type { PortfolioView } from "@/lib/portfolio/view";
 
 export const PORTFOLIO_SOURCE = "Your imported transactions and prices";
 
-function allocationDataset(p: PortfolioSummary, asOf: string | null): ChartDataset {
+const SOURCE_BY_VIEW: Record<PortfolioView, string> = {
+  all: ALL_VIEW_SOURCE,
+  equity: PORTFOLIO_SOURCE,
+  mf: MF_VIEW_SOURCE,
+};
+
+const CLASS_NAME: Record<string, string> = { equity: "Stocks", mf: "Mutual funds" };
+
+interface Alloc {
+  title: string;
+  xName: string;
+  rows: Array<{ key: string; weight_pct: number }>;
+  empty: string;
+}
+
+/** Allocation of the view: asset class (All, when served), sector (Equity, All fallback) or category (MF). */
+function allocationOf(p: PortfolioSummary, view: PortfolioView): Alloc {
+  if (view === "all" && (p.allocation_by_asset_class ?? []).length > 0) {
+    return {
+      title: "Allocation by asset class",
+      xName: "Asset class",
+      rows: (p.allocation_by_asset_class ?? []).map((r) => ({
+        ...r,
+        key: CLASS_NAME[r.key] ?? r.key,
+      })),
+      empty: "No allocation yet.",
+    };
+  }
+  if (view === "mf") {
+    return {
+      title: "Allocation by category",
+      xName: "Category",
+      rows: p.allocation_by_category ?? [],
+      empty: "No category allocation: funds have no category or no NAV.",
+    };
+  }
   return {
+    title: view === "all" ? "Allocation by sector (stocks only)" : "Allocation by sector",
     xName: "Sector",
-    x: p.allocation_by_sector.map((s) => s.key),
+    rows: p.allocation_by_sector,
+    empty: "No sector allocation: holdings have no sector or no price.",
+  };
+}
+
+function allocationDataset(a: Alloc, asOf: string | null, source: string): ChartDataset {
+  return {
+    xName: a.xName,
+    x: a.rows.map((s) => s.key),
     series: [
       {
         id: "weight",
         name: "Portfolio weight",
         unit: "%",
         kind: "bar",
-        values: p.allocation_by_sector.map((s) => s.weight_pct),
+        values: a.rows.map((s) => s.weight_pct),
         format: (v) => formatPercent(v).text,
       },
     ],
-    source: PORTFOLIO_SOURCE,
+    source,
     asOf,
   };
 }
 
-/** Value, day change, XIRR and the allocation by sector (docs/06 section 6.2). */
+/** Value, day change, XIRR (or absolute return under a year) and allocation, per view (docs/06 6.2). */
 export function PortfolioCard() {
-  const q = usePortfolioSummary();
+  const [view, setView] = useState<PortfolioView>("all");
+  const q = usePortfolioSummary(view);
   const title = "Portfolio snapshot";
+  const switcher = (
+    <ViewSwitcher
+      value={view}
+      onChange={setView}
+      groupTestId="dash-portfolio-view-switcher"
+      segmentPrefix="dash-portfolio-view"
+    />
+  );
   const importAction = (
     <Link
-      href="/imports"
+      href={view === "mf" ? "/imports?kind=mf_statement" : "/imports"}
       data-testid="portfolio-import-link"
       className="inline-flex h-9 touch-target items-center rounded-control border border-border px-3 text-body-sm text-text-1 hover:bg-surface-3"
     >
-      Import transactions
+      {view === "mf" ? "Import MF statement" : "Import transactions"}
     </Link>
   );
-  if (q.isPending) return <Card title={title} state="loading" testId="dash-portfolio" />;
+  if (q.isPending)
+    return <Card title={title} state="loading" actions={switcher} testId="dash-portfolio" />;
   if (q.isError) {
     const u = describeError(q.error, "The portfolio");
     return (
@@ -54,21 +120,38 @@ export function PortfolioCard() {
         state={u.state}
         message={u.message}
         onRetry={() => void q.refetch()}
-        source={PORTFOLIO_SOURCE}
+        source={SOURCE_BY_VIEW[view]}
+        actions={switcher}
         testId="dash-portfolio"
       />
     );
   }
   const p = q.data.data;
   const asOf = asOfText(q.data.meta?.as_of ?? p.as_of);
-  if (p.holdings.length === 0) {
+  const shown: PortfolioView =
+    p.view === "all" || p.view === "equity" || p.view === "mf" ? p.view : view;
+  const present = p.asset_classes_present ?? null;
+  const hasAny =
+    present !== null
+      ? present.length > 0
+      : p.holdings.length > 0 || (p.mf_holdings ?? []).length > 0;
+  if (!hasAny || (shown === "mf" && present !== null && !present.includes("mf"))) {
     return (
       <Card
         title={title}
         state="empty"
-        message="No holdings yet. Import your transactions to see value, day change and XIRR."
-        source={PORTFOLIO_SOURCE}
-        actions={importAction}
+        message={
+          shown === "mf"
+            ? NO_MF_TXNS_COPY
+            : "No holdings yet. Import your transactions to see value, day change and XIRR."
+        }
+        source={SOURCE_BY_VIEW[shown]}
+        actions={
+          <>
+            {switcher}
+            {importAction}
+          </>
+        }
         testId="dash-portfolio"
       />
     );
@@ -82,7 +165,11 @@ export function PortfolioCard() {
   const partial = value === null || p.allocation_excludes_unpriced === true || warnings.length > 0;
   const stale = q.data.meta?.stale === true;
   const partialMessage = [
-    value === null ? (p.totals.market_value_reason ?? "Some holdings have no price.") : null,
+    value === null
+      ? p.totals.market_value_reason
+        ? valueUnavailable(p.totals.market_value_reason)
+        : "Some holdings have no price."
+      : null,
     p.allocation_excludes_unpriced === true
       ? "Allocation leaves out holdings without a price."
       : null,
@@ -90,22 +177,30 @@ export function PortfolioCard() {
   ]
     .filter(Boolean)
     .join(" ");
+  const source = SOURCE_BY_VIEW[shown];
+  const under = p.returns.xirr_reason === "under_one_year";
+  const alloc = allocationOf(p, shown);
   return (
     <Card
       title={title}
       state={partial ? "partial" : "ready"}
       stale={stale}
       message={partialMessage}
-      source={PORTFOLIO_SOURCE}
+      source={source}
       asOf={asOf}
+      actions={switcher}
       testId="dash-portfolio"
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Stat
           label="Value"
           value={value === null ? null : formatInr(value).text}
-          nullReason={p.totals.market_value_reason ?? "no price for some holdings"}
-          source={PORTFOLIO_SOURCE}
+          nullReason={
+            p.totals.market_value_reason
+              ? valueUnavailable(p.totals.market_value_reason)
+              : "no price for some holdings"
+          }
+          source={source}
           asOf={asOf}
         />
         <Stat
@@ -113,29 +208,49 @@ export function PortfolioCard() {
           value={day === null ? null : dayText}
           delta={day === null ? undefined : { value: day, text: dayText }}
           definition={<DefinitionTip term="day_change" />}
-          nullReason={p.totals.day_change_reason ?? "needs two imported bars"}
-          source={PORTFOLIO_SOURCE}
+          nullReason={reasonText(p.totals.day_change_reason) ?? "needs two imported bars"}
+          source={source}
           asOf={asOf}
         />
-        <Stat
-          label="XIRR"
-          value={
-            p.returns.xirr_pct === null || p.returns.xirr_pct === undefined
-              ? null
-              : formatPercent(p.returns.xirr_pct).text
-          }
-          definition={<DefinitionTip term="xirr" />}
-          nullReason={p.returns.xirr_reason ?? "not enough cash flows"}
-          source={PORTFOLIO_SOURCE}
-          asOf={asOf}
-        />
+        {under ? (
+          <Stat
+            label="Absolute return"
+            value={
+              p.returns.absolute_return_pct === null || p.returns.absolute_return_pct === undefined
+                ? null
+                : formatPercent(p.returns.absolute_return_pct, { signed: true }).text
+            }
+            nullReason={UNDER_ONE_YEAR_COPY}
+            definition={UNDER_ONE_YEAR_COPY}
+            source={source}
+            asOf={asOf}
+          />
+        ) : (
+          <Stat
+            label="XIRR"
+            value={
+              p.returns.xirr_pct === null || p.returns.xirr_pct === undefined
+                ? null
+                : formatPercent(p.returns.xirr_pct).text
+            }
+            definition={<DefinitionTip term="xirr" />}
+            nullReason={reasonText(p.returns.xirr_reason) ?? "not enough cash flows"}
+            source={source}
+            asOf={asOf}
+          />
+        )}
       </div>
+      {shown === "all" ? (
+        <p className="mt-2 text-caption text-text-2" data-testid="dash-basis-line">
+          {BASIS_LINE}
+        </p>
+      ) : null}
       <div className="mt-4">
         <ChartFrame
-          title="Allocation by sector"
-          dataset={allocationDataset(p, asOf)}
-          state={p.allocation_by_sector.length === 0 ? "empty" : "ready"}
-          message="No sector allocation: holdings have no sector or no price."
+          title={alloc.title}
+          dataset={allocationDataset(alloc, asOf, source)}
+          state={alloc.rows.length === 0 ? "empty" : "ready"}
+          message={alloc.empty}
           height={240}
           filename="portfolio-allocation"
           testId="dash-allocation"

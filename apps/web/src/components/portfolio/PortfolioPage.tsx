@@ -2,24 +2,42 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { ToastProvider } from "@/components/ui/overlays";
+import { Tabs, ToastProvider } from "@/components/ui/overlays";
 import { describeError, asOfText } from "@/lib/dashboard/state";
-import { usePortfolioSummaryFull } from "@/lib/portfolio/api";
-import { SummaryCards, WarningBanners } from "./SummarySection";
-import { MANUAL_PRICE_NOTE, PORTFOLIO_SOURCE } from "./text";
+import { usePortfolioView } from "@/lib/portfolio/mf-api";
+import { readView, type ReadView, type ViewSummary } from "@/lib/portfolio/mf-schemas";
+import { useViewParam, type PortfolioView } from "@/lib/portfolio/view";
+import { WarningBanners } from "./SummarySection";
+import { ViewCards } from "./ViewCards";
+import { ViewSwitcher } from "./ViewSwitcher";
+import {
+  ALL_VIEW_SOURCE,
+  inr,
+  MANUAL_PRICE_NOTE,
+  MF_VIEW_SOURCE,
+  NO_MF_TXNS_COPY,
+  PORTFOLIO_SOURCE,
+} from "./text";
 
-// Charts, the transaction forms and adjustments load on demand (250 kB gzip route budget, docs/06a section 10).
-// Each section shows a skeleton while its chunk loads, and the imports start when the page mounts
-// (not when the summary arrives), so the chunks load in parallel with the API call.
+// Charts, the transaction forms, MF holdings and adjustments load on demand (250 kB gzip route
+// budget, docs/06a section 10). Each section shows a skeleton while its chunk loads, and the imports
+// start when the page mounts (not when the summary arrives), so the chunks load in parallel with the
+// API call.
 const loadCharts = () => import("./ChartsSection");
+const loadMfCharts = () => import("./MfChartsSection");
 const loadAdjustments = () => import("./AdjustmentsPanel");
 const loadHoldings = () => import("./HoldingsSection");
+const loadMfHoldings = () => import("./MfHoldingsSection");
 const loadTxn = () => import("./TxnSection");
+const loadMfTxn = () => import("./MfTxnSection");
 const sectionLoading = () => <Skeleton className="h-40 w-full" label="Loading section" />;
 const ChartsSection = dynamic(() => loadCharts().then((m) => m.ChartsSection), {
+  loading: sectionLoading,
+});
+const MfChartsSection = dynamic(() => loadMfCharts().then((m) => m.MfChartsSection), {
   loading: sectionLoading,
 });
 const DividendsCard = dynamic(() => loadAdjustments().then((m) => m.DividendsCard), {
@@ -31,7 +49,13 @@ const AdjustmentsPanel = dynamic(() => loadAdjustments().then((m) => m.Adjustmen
 const HoldingsSection = dynamic(() => loadHoldings().then((m) => m.HoldingsSection), {
   loading: sectionLoading,
 });
+const MfHoldingsSection = dynamic(() => loadMfHoldings().then((m) => m.MfHoldingsSection), {
+  loading: sectionLoading,
+});
 const TxnSection = dynamic(() => loadTxn().then((m) => m.TxnSection), {
+  loading: sectionLoading,
+});
+const MfTxnSection = dynamic(() => loadMfTxn().then((m) => m.MfTxnSection), {
   loading: sectionLoading,
 });
 
@@ -44,12 +68,198 @@ export function preloadSections(): Promise<unknown> {
   );
 }
 
-function Body() {
+/** Hint card for the asset class that has no transactions yet (docs/06 6.7a empty states). */
+function HintCard({ missing }: { missing: "equity" | "mf" }) {
+  return (
+    <Card
+      title={missing === "mf" ? "Mutual funds" : "Stocks"}
+      state="empty"
+      message={
+        missing === "mf"
+          ? NO_MF_TXNS_COPY
+          : "No stock transactions yet. Add a transaction below, or import your transactions."
+      }
+      testId="pf-empty-hints"
+      actions={
+        missing === "mf" ? (
+          <Link
+            href="/imports?kind=mf_statement"
+            data-testid="pf-hint-import-mf"
+            className="touch-target inline-flex items-center text-body-sm text-accent underline"
+          >
+            Import statement
+          </Link>
+        ) : (
+          <Link
+            href="/imports"
+            data-testid="pf-hint-import-equity"
+            className="touch-target inline-flex items-center text-body-sm text-accent underline"
+          >
+            Import transactions
+          </Link>
+        )
+      }
+    />
+  );
+}
+
+function EmptyMf() {
+  return (
+    <Card
+      title="Mutual funds"
+      state="empty"
+      message={NO_MF_TXNS_COPY}
+      testId="pf-empty-mf"
+      source={MF_VIEW_SOURCE}
+      actions={
+        <>
+          <Link
+            href="/imports?kind=mf_statement"
+            data-testid="pf-empty-import-mf"
+            className="touch-target inline-flex h-9 items-center rounded-control border border-accent px-3 text-body-sm"
+          >
+            Import statement
+          </Link>
+          <a
+            href="#pf-mf-txn-card"
+            data-testid="pf-empty-add-mf"
+            className="touch-target inline-flex h-9 items-center rounded-control border border-border px-3 text-body-sm"
+          >
+            Add a transaction
+          </a>
+        </>
+      }
+    />
+  );
+}
+
+function Totals({ label, row }: { label: string; row: ReadView["breakdown"][number] | undefined }) {
+  if (!row) return null;
+  return (
+    <p className="text-caption text-text-2" data-testid={`pf-${label}-totals`}>
+      Total: invested {inr(row.invested).text}, value{" "}
+      {row.market_value ? inr(row.market_value).text : "unavailable"}, unrealized{" "}
+      {inr(row.unrealized_pnl, { signed: true }).text}, realized{" "}
+      {inr(row.realized_pnl, { signed: true }).text}.
+    </p>
+  );
+}
+
+function ViewBody({
+  s,
+  view,
+  asOf,
+  stale,
+  warnings,
+  showExited,
+  onShowExited,
+}: {
+  s: ViewSummary;
+  view: PortfolioView;
+  asOf: string | null;
+  stale: boolean;
+  warnings: ReadonlyArray<{ code: string; message: string }>;
+  showExited: boolean;
+  onShowExited: (v: boolean) => void;
+}) {
+  const read = useMemo(() => readView(s), [s]);
+  const present = s.asset_classes_present ?? null;
+  const hasEq = present === null ? read.legacy.holdings.length > 0 : present.includes("equity");
+  const hasMf = present === null ? read.mfHoldings.length > 0 : present.includes("mf");
+  const staleNavDate =
+    read.mfHoldings
+      .filter((h) => h.nav_stale === true && h.nav_date)
+      .map((h) => h.nav_date as string)
+      .sort()[0] ?? null;
+
+  const mfRow = read.breakdown.find((r) => r.asset_class === "mf");
+  const eqRow = read.breakdown.find((r) => r.asset_class === "equity");
+  const mfTotals =
+    view === "mf"
+      ? {
+          invested: s.totals.invested,
+          market_value: s.totals.market_value,
+          market_value_reason: s.totals.market_value_reason,
+          unrealized_pnl: s.totals.unrealized_pnl,
+          realized_pnl: s.totals.realized_pnl,
+          idcw_income: s.totals.idcw_income,
+        }
+      : {
+          invested: mfRow?.invested,
+          market_value: mfRow?.market_value,
+          market_value_reason: mfRow?.market_value_reason,
+          unrealized_pnl: mfRow?.unrealized_pnl,
+          realized_pnl: mfRow?.realized_pnl,
+          idcw_income: mfRow?.idcw_income,
+        };
+
+  // Nothing at all in this view: the card still shows its dashes; the empty copy comes from the sections.
+  const nothingMf = view === "mf" && !hasMf && read.mfHoldings.length === 0;
+  const showStocks = view !== "mf";
+  const showMf = view !== "equity";
+  // With nothing at all in All, the stock table shows the existing empty copy.
+  const showStockSections = showStocks && (view === "equity" || hasEq || !hasMf);
+
+  return (
+    <>
+      <WarningBanners warnings={warnings} />
+      {nothingMf ? (
+        <EmptyMf />
+      ) : (
+        <ViewCards
+          s={s}
+          read={read}
+          view={view}
+          asOf={asOf}
+          stale={stale}
+          staleNavDate={staleNavDate}
+        />
+      )}
+      {view === "all" && !hasMf ? <HintCard missing="mf" /> : null}
+      {view === "all" && !hasEq && hasMf ? <HintCard missing="equity" /> : null}
+      {showStockSections ? (
+        <>
+          <HoldingsSection
+            s={read.legacy}
+            asOf={asOf}
+            stale={stale}
+            showExited={showExited}
+            onShowExited={onShowExited}
+          />
+          {view === "all" ? <Totals label="stocks" row={eqRow} /> : null}
+        </>
+      ) : null}
+      {showMf && hasMf ? (
+        <MfHoldingsSection
+          rows={read.mfHoldings}
+          totals={mfTotals}
+          asOf={asOf}
+          includeExited={showExited}
+          onIncludeExited={onShowExited}
+          badRows={read.badRows}
+        />
+      ) : null}
+      {showStockSections ? <ChartsSection s={read.legacy} asOf={asOf} /> : null}
+      {showMf && hasMf ? (
+        <MfChartsSection
+          view={view}
+          byClass={read.allocClass}
+          byScheme={read.allocScheme}
+          byCategory={read.allocCategory}
+          partial={s.allocation_excludes_unpriced === true}
+          asOf={asOf}
+        />
+      ) : null}
+      {showStockSections ? <DividendsCard s={read.legacy} asOf={asOf} /> : null}
+    </>
+  );
+}
+
+function Body({ view }: { view: PortfolioView }) {
   const [showExited, setShowExited] = useState(false);
-  const q = usePortfolioSummaryFull(showExited);
+  const q = usePortfolioView(view, showExited);
 
   let top;
-  let symbols: string[] = [];
   if (q.isPending) {
     top = <Card title="Summary" state="loading" testId="pf-summary" />;
   } else if (q.isError) {
@@ -60,62 +270,89 @@ function Body() {
         state={u.state}
         message={u.message}
         onRetry={() => void q.refetch()}
-        source={PORTFOLIO_SOURCE}
+        source={
+          view === "mf" ? MF_VIEW_SOURCE : view === "all" ? ALL_VIEW_SOURCE : PORTFOLIO_SOURCE
+        }
         testId="pf-summary"
       />
     );
   } else {
-    const s = q.data.data;
-    const asOf = asOfText(q.data.meta?.as_of ?? s.as_of);
-    const stale = q.data.meta?.stale === true;
-    symbols = s.holdings.map((h) => h.symbol);
+    const env = q.data;
+    const s = env.data;
+    const asOf = asOfText(env.meta?.as_of ?? s.as_of);
+    // While the next view loads, the previous view's data stays (no blank flash); say so.
+    const shownView = (s.view ?? view) as PortfolioView;
     top = (
-      <>
-        <WarningBanners warnings={q.data.warnings} />
-        <SummaryCards s={s} asOf={asOf} stale={stale} />
-        <HoldingsSection
+      <div
+        className="flex flex-col gap-4"
+        data-testid="pf-view-body"
+        data-view={shownView}
+        aria-busy={q.isPlaceholderData}
+      >
+        <ViewBody
           s={s}
+          view={q.isPlaceholderData ? shownView : view}
           asOf={asOf}
-          stale={stale}
+          stale={env.meta?.stale === true}
+          warnings={env.warnings}
           showExited={showExited}
           onShowExited={setShowExited}
         />
-        <ChartsSection s={s} asOf={asOf} />
-        <DividendsCard s={s} asOf={asOf} />
-      </>
+      </div>
     );
   }
+  const read = useMemo(() => (q.data ? readView(q.data.data) : null), [q.data]);
+  const symbols = read ? read.legacy.holdings.map((h) => h.symbol) : [];
+  const mfSchemas = read ? read.mfHoldings : [];
+  const stockTxns = <TxnSection symbols={symbols} />;
+  const mfTxns = <MfTxnSection schemes={mfSchemas} />;
   return (
     <>
       {top}
-      <TxnSection symbols={symbols} />
-      <AdjustmentsPanel />
+      {view === "all" ? (
+        <Tabs
+          label="Transactions"
+          tabs={[
+            { id: "txns-stock", label: "Stock transactions", content: stockTxns },
+            { id: "txns-mf", label: "MF transactions", content: mfTxns },
+          ]}
+        />
+      ) : view === "equity" ? (
+        stockTxns
+      ) : (
+        mfTxns
+      )}
+      {view !== "mf" ? <AdjustmentsPanel /> : null}
     </>
   );
 }
 
-/** Portfolio screen (docs/06 section 6.7). Stocks only; manual price mode. */
+/** Portfolio screen (docs/06 sections 6.7 and 6.7a): All, Equity and Mutual funds views. */
 export function PortfolioPage() {
+  const [view, setView] = useViewParam();
   useEffect(() => {
     void preloadSections();
   }, []);
   return (
     <ToastProvider>
       <div className="flex flex-col gap-4" data-testid="portfolio-page">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-page font-semibold text-text-1">Portfolio</h1>
-          <Link
-            href="/imports"
-            data-testid="portfolio-import-link"
-            className="touch-target inline-flex items-center text-body-sm text-accent underline"
-          >
-            Import transactions
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <ViewSwitcher value={view} onChange={setView} />
+            <Link
+              href={view === "mf" ? "/imports?kind=mf_statement" : "/imports"}
+              data-testid="portfolio-import-link"
+              className="touch-target inline-flex items-center text-body-sm text-accent underline"
+            >
+              {view === "mf" ? "Import MF statement" : "Import transactions"}
+            </Link>
+          </div>
         </div>
         <p className="text-body-sm text-text-2" data-testid="pf-manual-note">
           {MANUAL_PRICE_NOTE} Values are estimates from your own records, not advice.
         </p>
-        <Body />
+        <Body view={view} />
       </div>
     </ToastProvider>
   );

@@ -8,6 +8,7 @@ export const UNDOABLE_KINDS: readonly string[] = [
   "fundamentals_long",
   "shareholding",
   "corporate_actions",
+  "mf_statement",
 ];
 
 export const UNDO_WINDOW_DAYS = 30;
@@ -24,6 +25,7 @@ export const KIND_NAMES: Record<string, string> = {
   shareholding: "Shareholding",
   corporate_actions: "Corporate actions",
   instrument_meta: "Sector and index tags",
+  mf_statement: "Mutual fund statement",
   manual_form: "Manual entry",
   screener_xlsx: "Screener file",
 };

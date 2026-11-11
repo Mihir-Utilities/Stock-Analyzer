@@ -1,6 +1,7 @@
 "use client";
 
-import { useQuery, useQueries } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueries } from "@tanstack/react-query";
+import type { PortfolioView } from "@/lib/portfolio/view";
 import { apiRequest } from "@/lib/api/client";
 import {
   adminStatusSchema,
@@ -42,12 +43,14 @@ export function useMarketOverview() {
   });
 }
 
-export function usePortfolioSummary() {
+/** The snapshot of one view; the UI sends `view` explicitly (MFH-14). The previous view stays on screen while the next loads. */
+export function usePortfolioSummary(view: PortfolioView = "all") {
   return useQuery({
-    queryKey: dashboardKeys.portfolio,
+    queryKey: [...dashboardKeys.portfolio, view],
     queryFn: ({ signal }) =>
-      apiRequest("/portfolio/summary", { schema: portfolioSummarySchema, signal }),
+      apiRequest("/portfolio/summary", { schema: portfolioSummarySchema, query: { view }, signal }),
     staleTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
   });
 }
 
