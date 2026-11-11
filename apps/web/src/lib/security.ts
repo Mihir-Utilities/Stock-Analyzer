@@ -5,6 +5,20 @@ import { loginUrlFor } from "./safe-next";
 
 export const SESSION_COOKIE = "session";
 
+/**
+ * PWA shell files (F15): the browser fetches these before sign-in (install check, worker script),
+ * and none carries owner data. Keep in sync with the middleware matcher and public/sw.js.
+ */
+export function isPwaShellPath(pathname: string): boolean {
+  return (
+    pathname === "/manifest.json" ||
+    pathname === "/manifest.webmanifest" ||
+    pathname === "/sw.js" ||
+    pathname === "/offline.html" ||
+    pathname.startsWith("/icons/")
+  );
+}
+
 /** Paths that never need the session cookie. `/login` is public; `/api` answers 401 itself. */
 export function isPublicPath(pathname: string): boolean {
   return (
@@ -13,8 +27,8 @@ export function isPublicPath(pathname: string): boolean {
     pathname === "/api" ||
     pathname.startsWith("/api/") ||
     pathname === "/theme-init.js" ||
-    pathname === "/manifest.webmanifest" ||
-    pathname === "/favicon.ico"
+    pathname === "/favicon.ico" ||
+    isPwaShellPath(pathname)
   );
 }
 

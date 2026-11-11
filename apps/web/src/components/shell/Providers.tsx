@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
 import { retryDelay, setUnauthorizedHandler, shouldRetry } from "@/lib/api/client";
 import { loginUrlFor } from "@/lib/safe-next";
+import { PwaRegister } from "./PwaRegister";
 
 // Stale times per data type (docs/06 section 1), in ms. Screens pick the one they need.
 export const STALE_TIME = {
@@ -45,5 +46,10 @@ export function Providers({ children }: { children: ReactNode }) {
     return () => setUnauthorizedHandler(null);
   }, [client]);
 
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <PwaRegister />
+      {children}
+    </QueryClientProvider>
+  );
 }

@@ -383,5 +383,64 @@
   },
   "DELETE /screener/saved/{name}": {
     "ok": "screener-saved-status"
+  },
+  "GET /admin/status": {
+    "sources": "admin-source-*",
+    "sources[].source": "admin-source-*",
+    "sources[].checked_at": "admin-source-*",
+    "sources[].ok": "admin-source-*",
+    "sources[].latency_ms": "admin-source-*",
+    "sources[].consecutive_failures": "admin-source-*",
+    "sources[].disabled_until": "admin-source-*",
+    "sources[].note": "admin-source-*",
+    "jobs": "admin-jobs-table",
+    "jobs[].job": "admin-job-row",
+    "jobs[].status": "admin-job-row",
+    "jobs[].started_at": "admin-job-row|shown as the run duration together with finished_at",
+    "jobs[].finished_at": "admin-job-row",
+    "jobs[].rows_written": "admin-job-row",
+    "jobs[].items_total": "not-rendered|the Last runs table shows rows written and items failed; the total is not a v1 column (F15-1)",
+    "jobs[].items_failed": "admin-job-row",
+    "jobs[].error": "admin-error-text",
+    "coverage": "admin-coverage",
+    "db.size_mb": "admin-db-text",
+    "db.tables": "admin-db-tables",
+    "db.warn_level": "admin-db-bar",
+    "holiday_list_missing_years": "admin-holiday-warning",
+    "version": "admin-version",
+    "storage_policy": "admin-policy"
+  },
+  "GET /market/overview": {
+    "indices": "dash-indices",
+    "vix": "dash-indices",
+    "market_status": "dash-market-status",
+    "movers": "not-rendered|movers on the Dashboard come from the watchlist (movers-table); the server does not send them in v1 (F04)"
+  },
+  "GET /watchlist": {
+    "stocks": "watch-tiles",
+    "funds": "watch-tiles",
+    "stocks[].ltp": "watch-tile",
+    "stocks[].change_pct": "watch-tile",
+    "stocks[].change_reason": "watch-tile",
+    "funds[].nav": "watch-tile",
+    "funds[].change_pct": "watch-tile"
+  },
+  "GET /portfolio/summary": {
+    "totals": "dash-portfolio",
+    "returns": "dash-portfolio",
+    "allocation_by_sector": "dash-allocation",
+    "allocation_by_stock": "dash-allocation",
+    "holdings": "dash-portfolio"
+  },
+  "GET /alerts/events": {
+    "items": "alert-event",
+    "next_cursor": "not-rendered|the Dashboard shows the latest 5 only; the Alerts page pages through events"
+  },
+  "GET /broker/status": {
+    "enabled": "health-broker",
+    "mode": "health-broker",
+    "connected": "health-broker",
+    "minutes_left": "health-broker",
+    "needs_reconnect": "broker-reconnect"
   }
 }

@@ -32,9 +32,9 @@ Finish the admin screen, PWA, accessibility, performance budgets, field-coverage
 2. Run manual a11y checklist and record results in RUNBOOK
 
 ## Acceptance criteria (all must be true)
-- [ ] Lighthouse >= 90 perf / >= 95 a11y on main routes
-- [ ] Zero serious axe violations
-- [ ] Field coverage test passes with no unmapped fields
+- [ ] Lighthouse >= 90 perf / >= 95 a11y on main routes (gate wired for /login only: 0.93 / 1.00 measured locally; other routes need a live API, F15-7)
+- [x] Zero serious axe violations (Playwright axe incl. /admin/status; tests/e2e/f15.spec.ts)
+- [x] Field coverage test passes with no unmapped fields (`/prediction` listed as not built, F15-5)
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `UI-03` (see `docs/07-edge-cases-tests.md`)

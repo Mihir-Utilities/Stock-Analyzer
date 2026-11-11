@@ -12,6 +12,7 @@ import {
   formatFraction,
   formatFreshness,
   formatInr,
+  formatDuration,
   formatMb,
   formatMultiple,
   formatNumber,
@@ -259,6 +260,16 @@ describe("UI-24: review fixes (crore tier, grouping preference, F13a helpers, IS
       expect(formatPercent(1234567.891, { grouping: "indian" }).text).toBe("12,34,567.89%");
     } finally {
       setGroupingPreference("indian");
+    }
+  });
+  it("formatDuration: ms, s, min and h tiers; unknown or negative has a reason", () => {
+    expect(formatDuration(850).text).toBe("850 ms");
+    expect(formatDuration(1234).text).toBe("1.2 s");
+    expect(formatDuration(125_000).text).toBe("2 min 05 s");
+    expect(formatDuration(7_500_000).text).toBe("2 h 05 min");
+    for (const v of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY, -1]) {
+      const f = formatDuration(v);
+      expect([f.text, f.reason === null]).toEqual([DASH, false]);
     }
   });
   it("formatMb: unit, grouping, small values keep two decimals, unknown has a reason", () => {

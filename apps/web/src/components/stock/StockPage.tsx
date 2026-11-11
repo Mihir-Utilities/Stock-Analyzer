@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useEffect } from "react";
 import { Banner } from "@/components/ui/banners";
 import { Card } from "@/components/ui/Card";
@@ -33,13 +34,29 @@ import {
 import { mergeWarnings, StockBanners } from "./StockBanners";
 import { StockHeader } from "./StockHeader";
 import { OverviewTab } from "./OverviewTab";
-import { AnalysisTab } from "./chart/AnalysisTab";
 import { ChartTab } from "./chart/ChartTab";
-import { FundamentalsTab } from "./fundamentals/FundamentalsTab";
-import { DataTab } from "./data/DataTab";
-import { EventsTab } from "./events/EventsTab";
-import { OwnershipTab } from "./ownership/OwnershipTab";
-import { PeersTab } from "./peers/PeersTab";
+
+// Heavier tabs load on demand so the route stays within the 250 kB gzip budget (docs/06a section 10).
+const tabLoading = () => <Skeleton className="h-40 w-full" label="Loading tab" />;
+const AnalysisTab = dynamic(() => import("./chart/AnalysisTab").then((m) => m.AnalysisTab), {
+  loading: tabLoading,
+});
+const FundamentalsTab = dynamic(
+  () => import("./fundamentals/FundamentalsTab").then((m) => m.FundamentalsTab),
+  { loading: tabLoading },
+);
+const DataTab = dynamic(() => import("./data/DataTab").then((m) => m.DataTab), {
+  loading: tabLoading,
+});
+const EventsTab = dynamic(() => import("./events/EventsTab").then((m) => m.EventsTab), {
+  loading: tabLoading,
+});
+const OwnershipTab = dynamic(() => import("./ownership/OwnershipTab").then((m) => m.OwnershipTab), {
+  loading: tabLoading,
+});
+const PeersTab = dynamic(() => import("./peers/PeersTab").then((m) => m.PeersTab), {
+  loading: tabLoading,
+});
 
 export const TAB_IDS = [
   "overview",

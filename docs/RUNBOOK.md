@@ -511,3 +511,20 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - **Saved screen note lists a dropped sort or column** as well as filters when the whitelist no longer has the metric.
 - **Peers:** at most 10 peers can be removed and 10 added per view (server limit); Reset peers clears both.
 - **Tests:** `cd apps/web && npx vitest run tests/unit/f10-review.test.tsx`. Open points: F10R-1..F10R-5 in `docs/OPEN_QUESTIONS.md`.
+
+## 80. F15 admin status, PWA, accessibility and performance gates (web)
+
+- **Admin status (`/admin/status`):** read only; reads `GET /admin/status` (docs/03 section 15). While the endpoint answers 501 the page says "Not available yet" (B14). Holiday warnings stay until `holidays.csv` for that year is imported (Import center). The database meter uses the server's `db.warn_level`; it falls back to a client calculation against 380 MB only when the server omits it.
+- **PWA:** `public/manifest.json`, `public/sw.js`, `public/offline.html`, `public/icons/*.png` (regenerate with `npm run gen:icons`). The service worker caches only the offline page, the manifest, the icons and Next's hashed `/_next/static/*` files. It never caches `/api/*` or HTML pages, so signed-out data cannot be read from the cache. To drop the cache after a worker change, bump `VERSION` in `public/sw.js`. In a browser: DevTools > Application > Service Workers > Unregister. The files are public paths in `middleware.ts` (`isPwaShellPath` in `lib/security.ts`); keep both in sync.
+- **Offline:** the shell shows "You are offline..." while `navigator.onLine` is false; loaded screens keep their data.
+- **Bundle budget:** `cd apps/web && npm run build && npm run check:bundle` prints the gzip kB of JS per route and fails above 250 kB. If a route goes over, load the heavy part with `next/dynamic` (see `StockPage.tsx`, `PortfolioPage.tsx`); do not raise the budget.
+- **Lighthouse:** CI runs `npm run check:lighthouse -- http://127.0.0.1:3200 /login` against the e2e build (needs Chrome; locally set `CHROME_PATH`). Only `/login` can be audited without the API (F15-7).
+- **Visual baselines:** `VISUAL=1 npx playwright test tests/e2e/f15.spec.ts tests/e2e/stories.spec.ts` compares screenshots; baselines are per OS (`-win32`, `-linux`). Create the Linux ones in CI with `--update-snapshots` (F15-6).
+- **Manual accessibility checklist (run before release, record date and result here):**
+  1. Keyboard only: Tab reaches the skip link first; every control is reachable and shows a visible focus ring; Escape closes the search, account menu, More menu and dialogs; chart "Show data" tables can be opened and read with the keyboard.
+  2. Screen reader (NVDA or VoiceOver) on Home, a stock page, Portfolio and Admin status: headings in order, cards named, numbers read with units, status messages (refresh, import, offline) announced once.
+  3. Zoom to 200 % and 400 % (320 px wide): no horizontal scroll except sticky-column tables; text not clipped.
+  4. Reduced motion on: no animation. High contrast / forced colours: icons and gauges still readable.
+  5. Both themes at 320 / 375 / 768 / 1024 / 1440 px: nothing overlaps; touch targets >= 44 px.
+  Last run: not yet run (F15-8).
+- **Tests:** `cd apps/web && npx vitest run tests/unit/admin-status.test.tsx tests/unit/f15-polish.test.tsx tests/unit/bundle-budget.test.ts` and, after `npm run build:e2e && npm run build-storybook`, `PW_PORT=3515 PW_STORY_PORT=6515 npx playwright test tests/e2e/f15.spec.ts --workers=2`.

@@ -7,6 +7,7 @@ import { Footer } from "./Footer";
 import { icons, NavIcon } from "./icons";
 import { SearchPalette } from "@/components/search/SearchPalette";
 import { MarketStatusPill } from "./MarketStatusPill";
+import { OfflineBanner } from "./OfflineBanner";
 import { SessionMenu, SignOutPanel, useDismiss } from "./SessionMenu";
 import { isActive, moreNav, primaryNav, type NavItem } from "./nav";
 import { ThemeToggle } from "./ThemeToggle";
@@ -203,6 +204,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <SessionMenu />
           </div>
         </header>
+        <OfflineBanner />
         <WakingBanner />
         <main
           id="main"

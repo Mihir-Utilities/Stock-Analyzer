@@ -155,7 +155,9 @@ export function TrimHistory() {
                         onChange={() => toggle(symbol)}
                       />
                       <span className="font-medium">{symbol}</span>
-                      <span className="truncate text-text-2">{name}</span>
+                      <span className="truncate text-text-2" title={name}>
+                        {name}
+                      </span>
                     </label>
                   </li>
                 ))}
