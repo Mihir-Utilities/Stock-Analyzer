@@ -20,7 +20,7 @@ var mfLimits = Limits{MaxBytes: mfMaxBytes, MaxRows: mfMaxRows}
 
 func testEnv(maps ...string) mfEnv {
 	e := mfEnv{today: time.Date(2026, 11, 11, 0, 0, 0, 0, time.UTC), holidays: map[time.Time]bool{
-		time.Date(2026, 1, 26, 0, 0, 0, 0, time.UTC): true}, mappings: map[string]mfhold.Mapping{}}
+		time.Date(2026, 1, 26, 0, 0, 0, 0, time.UTC): true}, mappings: map[string]mfhold.Mapping{}, xlsx: true}
 	for i, name := range maps {
 		k := mfhold.NormalizeFundName(name)
 		e.mappings[k] = mfhold.Mapping{FundName: name, FundNameKey: k, SchemeCode: int32(100 + i), SchemeName: "Scheme " + name, Plan: "direct", Option: "growth"}

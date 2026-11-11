@@ -33,13 +33,15 @@ type ViewTotals struct {
 	MarketValueReason *string  `json:"market_value_reason"`
 	Unrealized        *string  `json:"unrealized_pnl"`
 	UnrealizedPct     *float64 `json:"unrealized_pct"`
-	Realized          string   `json:"realized_pnl"`
-	DayChange         *string  `json:"day_change"`
-	DayChangeReason   *string  `json:"day_change_reason"`
-	IDCWIncome        *string  `json:"idcw_income"`
-	TotalPnL          *string  `json:"total_pnl"`
-	TotalPnLReason    *string  `json:"total_pnl_reason"`
-	PurchaseCash      string   `json:"purchase_cash"`
+	// UnrealizedPctReason is "n/m" for a zero invested base (mutual fund views; null otherwise).
+	UnrealizedPctReason *string `json:"unrealized_pct_reason"`
+	Realized            string  `json:"realized_pnl"`
+	DayChange           *string `json:"day_change"`
+	DayChangeReason     *string `json:"day_change_reason"`
+	IDCWIncome          *string `json:"idcw_income"`
+	TotalPnL            *string `json:"total_pnl"`
+	TotalPnLReason      *string `json:"total_pnl_reason"`
+	PurchaseCash        string  `json:"purchase_cash"`
 }
 
 // ViewReturns are the returns of a view (docs/05 8.5.6).
@@ -70,10 +72,15 @@ type Breakdown struct {
 }
 
 // NoBenchmark is the benchmark of the All and Mutual funds views (MFH-9).
+//
+// It has the same keys as the equity Benchmark (code, xirr_pct, reason, level_as_of, note) so one client
+// schema reads every view: code, xirr_pct, level_as_of and note are null here (B15 review N1).
 type NoBenchmark struct {
-	Code    *string  `json:"code"`
-	XIRRPct *float64 `json:"xirr_pct"`
-	Reason  string   `json:"reason"`
+	Code      *string  `json:"code"`
+	XIRRPct   *float64 `json:"xirr_pct"`
+	Reason    string   `json:"reason"`
+	LevelAsOf *string  `json:"level_as_of"`
+	Note      *string  `json:"note"`
 }
 
 // ViewSummary is the data of GET /portfolio/summary?view=. It embeds the legacy Summary (same field
@@ -243,7 +250,7 @@ func mfReturns(r mfhold.Returns) ViewReturns {
 
 func mfTotals(t mfhold.Totals) ViewTotals {
 	return ViewTotals{Invested: t.Invested, MarketValue: t.MarketValue, MarketValueReason: t.MarketValueReason, Unrealized: t.Unrealized,
-		UnrealizedPct: t.UnrealizedPct, Realized: t.Realized, DayChange: t.DayChange, DayChangeReason: t.DayChangeReason,
+		UnrealizedPct: t.UnrealizedPct, UnrealizedPctReason: t.UnrealizedPctReason, Realized: t.Realized, DayChange: t.DayChange, DayChangeReason: t.DayChangeReason,
 		IDCWIncome: strp(t.IDCWIncome), TotalPnL: t.TotalPnL, TotalPnLReason: t.TotalPnLReason, PurchaseCash: t.PurchaseCash}
 }
 
@@ -290,6 +297,8 @@ func (vs *ViewSummary) combine(asOf time.Time, asOfS string, eq Summary, mf mfho
 		t.Unrealized = moneyP(mv.Sub(invested))
 		if invested.IsPositive() {
 			t.UnrealizedPct = pct(mv.Sub(invested).Div(invested).Mul(hundred))
+		} else {
+			t.UnrealizedPctReason = strp(mfhold.ReasonNotMeaningful)
 		}
 		t.TotalPnL = moneyP(mv.Sub(invested).Add(realized).Add(idcw))
 	default:
