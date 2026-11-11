@@ -32,10 +32,11 @@ func TestXIRRTestVectorThroughSummary(t *testing.T) {
 	}
 }
 
-// PF-07: a span under 30 days gives no XIRR (reason) but still the absolute return; no sign change -> null.
+// PF-07 (amended by MFH-3, the one-year rule): a span under 365 days gives no XIRR (reason under_one_year) but still
+// the absolute return; no sign change -> null.
 func TestXIRRShortSpanAndUndefined(t *testing.T) {
 	s := BuildSummary(oneStock("2024-01-20", []Txn{buy(1, "2024-01-02", "10", "100", "0")}, px("2024-01-19", "110")))
-	if s.Returns.XIRRPct != nil || s.Returns.XIRRReason == nil || *s.Returns.XIRRReason != ReasonShortPeriod {
+	if s.Returns.XIRRPct != nil || s.Returns.XIRRReason == nil || *s.Returns.XIRRReason != "under_one_year" {
 		t.Fatalf("short span: %+v", s.Returns)
 	}
 	if s.Returns.AbsolutePct == nil || *s.Returns.AbsolutePct != 10 {
@@ -245,17 +246,21 @@ func TestBenchmarkOutperformingSell(t *testing.T) {
 	}
 }
 
-// docs/05 8.3: the 30-day rule uses the total span; for a closed position that is first flow to
+// docs/05 8.5.6 (MFH-3): the one-year rule uses the total span; for a closed position that is first flow to
 // last flow, not to the as-of date.
 func TestXIRRClosedShortRoundTrip(t *testing.T) {
 	txns := []Txn{buy(1, "2024-01-02", "10", "100", "0"), sell(2, "2024-01-06", "10", "110", "0")}
 	s := BuildSummary(oneStock("2025-01-06", txns, nil))
-	if s.Returns.XIRRPct != nil || s.Returns.XIRRReason == nil || *s.Returns.XIRRReason != ReasonShortPeriod {
+	if s.Returns.XIRRPct != nil || s.Returns.XIRRReason == nil || *s.Returns.XIRRReason != "under_one_year" {
 		t.Fatalf("4-day closed round trip must not be annualised: %+v", s.Returns)
 	}
-	long := []Txn{buy(1, "2024-01-02", "10", "100", "0"), sell(2, "2024-03-02", "10", "110", "0")}
+	short := []Txn{buy(1, "2024-01-02", "10", "100", "0"), sell(2, "2024-03-02", "10", "110", "0")}
+	if s = BuildSummary(oneStock("2025-01-06", short, nil)); s.Returns.XIRRPct != nil || s.Returns.AbsolutePct == nil {
+		t.Fatalf("60-day closed round trip shows the absolute return only: %+v", s.Returns)
+	}
+	long := []Txn{buy(1, "2023-01-02", "10", "100", "0"), sell(2, "2024-03-02", "10", "110", "0")}
 	s = BuildSummary(oneStock("2025-01-06", long, nil))
 	if s.Returns.XIRRPct == nil {
-		t.Fatalf("60-day closed round trip must compute: %+v", s.Returns)
+		t.Fatalf("14-month closed round trip must compute: %+v", s.Returns)
 	}
 }

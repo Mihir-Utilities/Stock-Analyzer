@@ -568,5 +568,51 @@
   "DELETE /portfolio/mf/txns/{id}": {
     "deleted": "conditional:pf-mf-txn-list|built by F16 after B15 (D-MF); the UI-09 guard requires a real test id once built",
     "warnings": "conditional:pf-mf-txn-list|built by F16 after B15 (D-MF); the UI-09 guard requires a real test id once built"
+  },
+  "GET /portfolio/mf/fund-mappings": {
+    "items[].fund_name": "conditional:pf-mf-mapping-list|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "items[].fund_name_key": "conditional:pf-mf-mapping-list|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "items[].scheme_code": "conditional:pf-mf-mapping-list|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "items[].scheme_name": "conditional:pf-mf-mapping-list|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "items[].plan": "conditional:pf-mf-mapping-list|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "items[].option": "conditional:pf-mf-mapping-list|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "items[].isin": "conditional:pf-mf-mapping-list|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "items[].rows": "conditional:pf-mf-mapping-list|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "items[].audit_note": "conditional:pf-mf-mapping-list|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "items[].created_at": "conditional:pf-mf-mapping-list|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "items[].updated_at": "conditional:pf-mf-mapping-list|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built"
+  },
+  "PUT /portfolio/mf/fund-mappings": {
+    "fund_name": "conditional:pf-mf-mapping-form|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "fund_name_key": "conditional:pf-mf-mapping-form|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "scheme_code": "conditional:pf-mf-mapping-form|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "scheme_name": "conditional:pf-mf-mapping-form|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "plan": "conditional:pf-mf-mapping-form|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "option": "conditional:pf-mf-mapping-form|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "isin": "conditional:pf-mf-mapping-form|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "rows": "conditional:pf-mf-mapping-form|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "audit_note": "conditional:pf-mf-mapping-form|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built"
+  },
+  "POST /imports/mf_statement/revalidate": {
+    "mf.date_from": "conditional:mf-import-preview|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "mf.date_to": "conditional:mf-import-preview|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "mf.rows_by_type": "conditional:mf-import-preview|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "mf.funds": "conditional:mf-import-preview|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "mf.unmapped_funds": "conditional:mf-import-preview|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "mf.unmapped_funds[].candidates": "conditional:mf-import-preview|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "mf.fund_mappings": "conditional:mf-import-preview|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "mf.duplicate_groups": "conditional:mf-import-preview|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "mf.duplicates_in_db": "conditional:mf-import-preview|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built"
+  },
+  "POST /imports/{kind}/validate": {
+    "mf.date_from": "conditional:mf-import-preview|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "mf.date_to": "conditional:mf-import-preview|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "mf.rows_by_type": "conditional:mf-import-preview|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "mf.funds": "conditional:mf-import-preview|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "mf.unmapped_funds": "conditional:mf-import-preview|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "mf.unmapped_funds[].candidates": "conditional:mf-import-preview|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "mf.fund_mappings": "conditional:mf-import-preview|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "mf.duplicate_groups": "conditional:mf-import-preview|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built",
+    "mf.duplicates_in_db": "conditional:mf-import-preview|built by F16 after B15 (D-MF, MFH-23); the UI-09 guard requires a real test id once built"
   }
 }

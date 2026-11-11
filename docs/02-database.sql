@@ -96,7 +96,7 @@ CREATE INDEX import_upload_expires_idx ON import_upload (expires_at);
 
 CREATE TABLE import_batch (
   id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  kind          text NOT NULL CHECK (kind IN ('prices','results_quarterly','results_annual','balance_cashflow','fundamentals_long','shareholding','corporate_actions','instrument_meta','instruments','holidays','screener_xlsx','manual_form')),
+  kind          text NOT NULL CHECK (kind IN ('prices','results_quarterly','results_annual','balance_cashflow','fundamentals_long','shareholding','corporate_actions','instrument_meta','instruments','holidays','screener_xlsx','manual_form','mf_statement')),
   upload_group  uuid,                             -- logical batch when a large prices file is split in the browser (S9 fallback); one transaction at commit
   filename      text,
   sha256        bytea,
@@ -490,7 +490,7 @@ CREATE TABLE flag_dismissals (
 -- row; the stored response is replayed for 24 h (older rows are ignored and purged on the next claim).
 CREATE TABLE idempotency_key (
   key          uuid PRIMARY KEY,
-  scope        text NOT NULL,                     -- 'portfolio_txn'
+  scope        text NOT NULL,                     -- 'portfolio_txn' or 'mf_txn'
   request_hash text NOT NULL,                     -- sha256 of the normalised request; a different body under the same key is a 409
   response     jsonb,
   created_at   timestamptz NOT NULL DEFAULT now()
@@ -503,46 +503,52 @@ ALTER TABLE shareholding      ADD CONSTRAINT shareholding_batch_fk      FOREIGN 
 ALTER TABLE corporate_action  ADD CONSTRAINT corporate_action_batch_fk  FOREIGN KEY (import_batch_id) REFERENCES import_batch(id) ON DELETE SET NULL;
 
 -- ---------------------------------------------------------------------------
--- PROPOSED migration 0014_mf_txn (mutual fund holdings, decision D-MF, questions MFH-*). DESCRIPTION ONLY:
--- not DDL, not applied, not checked by the T02 table test. B15 turns this into the forward-only migration and
--- moves the final DDL into this file in the same change (like D-U / flag_dismissals).
---
--- Table mf_txn  (one row per dated unit movement of one scheme in one folio; the mutual-fund counterpart of
---                portfolio_txn; the summary engine tags both as asset_class 'mf' / 'equity', MFH-2)
---   id               bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY
---   scheme_code      integer NOT NULL, FK -> mf_scheme(code) ON DELETE RESTRICT   (units must never be orphaned)
---   folio            text NOT NULL, CHECK (length(btrim(folio)) BETWEEN 1 AND 40)        (MFH-11, no placeholder)
---   txn_type         text NOT NULL, CHECK IN ('purchase','sip','redemption','switch_in','switch_out',
---                                              'idcw_payout','idcw_reinvest','bonus_merger')
---                    (all eight listed so v1 -> later needs no migration; v1 API accepts purchase, sip,
---                     redemption, idcw_payout, idcw_reinvest, MFH-4)
---   txn_date         date NOT NULL                                  (IST market date, allotment/credit date; not in the future)
---   units            numeric(18,4) NOT NULL CHECK (units > 0)        (sign comes from txn_type; never negative, MFH-16)
---   nav              numeric(18,4) NOT NULL CHECK (nav > 0)          (INR per unit at allotment/redemption, as on the statement)
---   amount           numeric(18,4) NOT NULL CHECK (amount > 0)       (INR; purchase: cash paid incl. stamp duty; redemption: net credited;
---                                                                     idcw_payout: cash received; idcw_reinvest: payout amount reinvested; MFH-6, MFH-7, MFH-17)
---   stamp_duty       numeric(18,4) NOT NULL DEFAULT 0 CHECK (stamp_duty >= 0)
---   source           text NOT NULL CHECK (source IN ('manual','import'))
---   external_ref     text                                           (order/transaction reference if the statement has one, MFH-12)
---   dedupe_key       text                                           (imports only; sha256 hex, MFH-12; NULL for manual rows)
---   import_batch_id  bigint, FK -> import_batch(id) ON DELETE SET NULL
---   note             text    (max 500 chars, checked in the API)
---   created_at, updated_at timestamptz NOT NULL DEFAULT now()
---   Plan (Regular/Direct) and option (Growth/IDCW) are NOT copied here: they are read from mf_scheme.plan and
---   mf_scheme.option_type ('unknown' is shown as such), so a corrected scheme row corrects every transaction.
---
--- Indexes
---   mf_txn_seq_idx        ON mf_txn (scheme_code, folio, txn_date, id)         -- FIFO and sequence re-validation per scheme and folio
---   mf_txn_date_idx       ON mf_txn (txn_date, id)                             -- listing and XIRR flow scan
---   mf_txn_dedupe_uq      UNIQUE ON mf_txn (dedupe_key) WHERE dedupe_key IS NOT NULL   -- idempotent re-import
---   mf_txn_batch_idx      ON mf_txn (import_batch_id) WHERE import_batch_id IS NOT NULL -- undo
---   mf_scheme_isin_growth_idx   ON mf_scheme (isin_growth)       WHERE isin_growth IS NOT NULL        -- statement ISIN lookup
---   mf_scheme_isin_reinv_idx    ON mf_scheme (isin_div_reinvest) WHERE isin_div_reinvest IS NOT NULL
---
--- Changes to existing objects
---   import_batch.kind CHECK gains 'mf_statement' (drop and re-add the constraint in the same migration).
---   idempotency_key.scope: new value 'mf_txn' (free text, no DDL change; the comment above lists 'portfolio_txn').
---   mf_scheme.is_tracked is set true by the API when the first mf_txn for a scheme is written (so the scheme keeps
---   refreshing NAV, docs/04); on delete it is re-derived like B11-6 (watchlist or remaining holdings keep it).
---   Backup (docs/04 3.11, D08): mf_txn joins the exported tables. No derived table is added: holdings, XIRR and P&L
---   are computed on read from mf_txn + mf_nav (a few hundred rows; no cache table in v1).
+-- Migration 0014_mf_txn (B15; mutual fund holdings, decisions D-MF and D-MF3, questions MFH-2, MFH-6, MFH-12, MFH-23, MFH-24).
+-- mf_txn is the mutual-fund counterpart of portfolio_txn: one row per dated unit movement of one scheme in one folio. The
+-- summary engine tags both as asset_class 'mf' / 'equity' (a logical ledger, MFH-2). Plan (Regular/Direct) and option
+-- (Growth/IDCW) are NOT copied here: they are read from mf_scheme.plan and mf_scheme.option_type ('unknown' is shown as such).
+-- No derived table: holdings, XIRR and P&L are computed on read from mf_txn + mf_nav.
+CREATE TABLE mf_txn (
+  id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  scheme_code     integer NOT NULL REFERENCES mf_scheme(code) ON DELETE RESTRICT,   -- units must never be orphaned
+  folio           text NOT NULL CHECK (length(btrim(folio)) BETWEEN 1 AND 40),      -- text: a slash and leading zeros are kept; not unique per fund (MFH-11)
+  txn_type        text NOT NULL CHECK (txn_type IN ('purchase','sip','redemption','switch_in','switch_out','idcw_payout','idcw_reinvest','bonus_merger')),
+                                                                                    -- all eight listed so later versions need no migration; v1 accepts purchase, sip, redemption, idcw_payout, idcw_reinvest (MFH-4)
+  txn_date        date NOT NULL,                                                    -- IST market date; not in the future
+  units           numeric(18,4) NOT NULL CHECK (units > 0),                         -- sign comes from txn_type
+  nav             numeric(18,4) NOT NULL CHECK (nav > 0),                           -- INR per unit as on the statement
+  amount          numeric(18,4) NOT NULL CHECK (amount > 0),                        -- purchase: units x NAV EXCLUDING stamp duty; redemption: net credited; idcw_payout: cash received; idcw_reinvest: amount reinvested
+  stamp_duty      numeric(18,4) NOT NULL DEFAULT 0 CHECK (stamp_duty >= 0),         -- cost and cash outflow of a purchase = amount + stamp_duty (MFH-6 correction)
+  source          text NOT NULL CHECK (source IN ('manual','import')),
+  external_ref    text,                                                             -- order reference if a statement has one (the owner's has none)
+  fund_name       text,                                                             -- imports only: the Fund Name as on the statement
+  fund_name_key   text,                                                             -- imports only: normalised fund name; the link to mf_fund_name_map used by a re-map (MFH-23)
+  dedupe_key      text,                                                             -- imports only; sha256 hex of fund_name_key|folio|txn_date|txn_type|units|nav|amount|stamp_duty|n, n = occurrence index of identical rows (MFH-12, MFH-24)
+  import_batch_id bigint REFERENCES import_batch(id) ON DELETE SET NULL,
+  note            text,                                                             -- max 500 chars, checked in the API
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX mf_txn_seq_idx ON mf_txn (scheme_code, folio, txn_date, id);                 -- FIFO and sequence re-validation per scheme and folio
+CREATE INDEX mf_txn_date_idx ON mf_txn (txn_date, id);                                    -- listing and XIRR flow scan
+CREATE UNIQUE INDEX mf_txn_dedupe_uq ON mf_txn (dedupe_key) WHERE dedupe_key IS NOT NULL; -- idempotent re-import
+CREATE INDEX mf_txn_batch_idx ON mf_txn (import_batch_id) WHERE import_batch_id IS NOT NULL; -- undo
+CREATE INDEX mf_txn_fundkey_idx ON mf_txn (fund_name_key) WHERE fund_name_key IS NOT NULL;   -- rows that depend on a fund-name mapping (re-map)
+
+-- The statement has only a Fund Name (no ISIN): the owner picks the scheme once per name (MFH-23).
+CREATE TABLE mf_fund_name_map (
+  fund_name_key text PRIMARY KEY,                 -- normalised: lower case, & as 'and', punctuation removed, whitespace collapsed
+  fund_name     text NOT NULL,                    -- the name as first seen, max 200 chars
+  scheme_code   integer NOT NULL REFERENCES mf_scheme(code) ON DELETE RESTRICT,
+  audit_note    text,                             -- re-map history, appended in the same transaction as the row rewrite
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX mf_scheme_isin_growth_idx ON mf_scheme (isin_growth) WHERE isin_growth IS NOT NULL;
+CREATE INDEX mf_scheme_isin_reinv_idx ON mf_scheme (isin_div_reinvest) WHERE isin_div_reinvest IS NOT NULL;
+
+-- Other changes of the migration: import_batch.kind CHECK gains 'mf_statement' (drop and re-add in the migration; shown inline above).
+-- idempotency_key.scope has the new value 'mf_txn' (free text, no DDL). mf_scheme.is_tracked is set true by the API when the
+-- first mf_txn of a scheme is written and re-derived on delete (watchlist, remaining holdings or an open keep it).
+-- Backup (docs/04 3.11, D08): mf_txn and mf_fund_name_map join the exported tables.

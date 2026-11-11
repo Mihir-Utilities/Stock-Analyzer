@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/india-analyzer/api/internal/instruments"
+	"github.com/india-analyzer/api/internal/mfhold"
 )
 
 // WatchStock is one watched stock (docs/03 section 11). Prices are the latest valid imported bar:
@@ -292,7 +293,7 @@ func (s *Service) Remove(ctx context.Context, id int64) error {
 	if inst != nil {
 		err = recomputeTracking(ctx, tx, *inst)
 	} else if code != nil {
-		_, err = tx.Exec(ctx, `UPDATE mf_scheme SET is_tracked = false WHERE code = $1`, *code)
+		err = mfhold.RecomputeTracking(ctx, tx, int32(*code)) // MF transactions keep a scheme tracked (docs/03 12a)
 	}
 	if err != nil {
 		return err

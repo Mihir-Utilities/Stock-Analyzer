@@ -104,7 +104,9 @@ _REFERENCED_INSTRUMENTS = (
 )
 _REFERENCED_SCHEMES = (
     "SELECT mf_scheme_code FROM watchlist_item WHERE mf_scheme_code IS NOT NULL "
-    "UNION SELECT mf_scheme_code FROM alert WHERE mf_scheme_code IS NOT NULL"
+    "UNION SELECT mf_scheme_code FROM alert WHERE mf_scheme_code IS NOT NULL "
+    "UNION SELECT scheme_code FROM mf_txn "  # units must never be orphaned (FK RESTRICT, B15)
+    "UNION SELECT scheme_code FROM mf_fund_name_map"
 )
 
 # Restore order = dependency order.
@@ -215,6 +217,36 @@ TABLES: tuple[TableSpec, ...] = (
         ),
         identity=True,
         pk="id",
+    ),
+    TableSpec(
+        "mf_fund_name_map",
+        ("fund_name_key", "fund_name", "scheme_code", "audit_note", "created_at", "updated_at"),
+    ),
+    TableSpec(
+        "mf_txn",
+        (
+            "id",
+            "scheme_code",
+            "folio",
+            "txn_type",
+            "txn_date",
+            "units",
+            "nav",
+            "amount",
+            "stamp_duty",
+            "source",
+            "external_ref",
+            "fund_name",
+            "fund_name_key",
+            "dedupe_key",
+            "import_batch_id",
+            "note",
+            "created_at",
+            "updated_at",
+        ),
+        identity=True,
+        pk="id",
+        exprs=(_BATCH_REF,),  # a prices batch is not exported; mf_statement batches are
     ),
     TableSpec(
         "corporate_action",

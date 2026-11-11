@@ -440,6 +440,31 @@ async def test_hkx01_mf_navs_older_than_12_months_only_for_unopened_schemes(
 
 
 @pytest.mark.integration
+async def test_hkx01b_scheme_with_mf_transactions_keeps_its_navs(pg_full: asyncpg.Pool) -> None:
+    """B15: held units need NAV history even when the scheme is not tracked, opened or watched."""
+    await pg_full.execute(
+        "INSERT INTO mf_scheme (code, name, is_tracked) VALUES (11,'held',false),(12,'plain',false)"
+    )
+    await pg_full.execute(
+        "INSERT INTO mf_txn (scheme_code, folio, txn_type, txn_date, units, nav, amount, source) "
+        "VALUES (11,'F1','sip','2025-01-05',10,10,100,'manual')"
+    )
+    for code in (11, 12):
+        await pg_full.execute(
+            "INSERT INTO mf_nav (scheme_code, nav_date, nav) VALUES "
+            "($1, (now() - interval '13 months')::date, 10), ($1, (now() - interval '2 months')::date, 11)",
+            code,
+        )
+    out = await run_housekeeping(pg_full, JobContext(job="housekeeping"), FakeNotifier())
+    assert out["mf_nav_deleted"] == 1
+    left = {
+        r["scheme_code"]: r["n"]
+        for r in await pg_full.fetch("SELECT scheme_code, count(*) n FROM mf_nav GROUP BY 1")
+    }
+    assert left == {11: 2, 12: 1}
+
+
+@pytest.mark.integration
 async def test_hkx02_opened_untracked_scheme_with_13_month_old_nav_is_kept(
     pg_full: asyncpg.Pool,
 ) -> None:

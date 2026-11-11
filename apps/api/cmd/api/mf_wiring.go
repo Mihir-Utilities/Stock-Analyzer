@@ -4,9 +4,12 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/india-analyzer/api/internal/dbq"
 	"github.com/india-analyzer/api/internal/jobs"
 	"github.com/india-analyzer/api/internal/mf"
+	"github.com/india-analyzer/api/internal/mfhold"
 )
 
 // mfBackfiller adapts the jobs service to mf.Backfiller (docs/03 section 10: a scheme without NAV
@@ -25,6 +28,22 @@ func (b mfBackfiller) EnqueueMFRefresh(ctx context.Context, code int32) (mf.Back
 	}
 	id := job.ID
 	return mf.Backfill{Status: status, JobID: &id}, nil
+}
+
+// mfRefresher adapts the jobs service to mfhold.Refresher and importers.MFRefresher: a scheme that has
+// transactions but no NAV rows enqueues mf_refresh (the API only records the job).
+type mfRefresher struct{ jobs *jobs.Service }
+
+func (r mfRefresher) EnqueueMFRefresh(ctx context.Context, code int32) error {
+	_, _, err := r.jobs.Enqueue(ctx, jobs.KindMFRefresh, strconv.FormatInt(int64(code), 10))
+	return err
+}
+
+// mfHoldingsService wires the mutual fund ledger (B15).
+func mfHoldingsService(pool *pgxpool.Pool, j *jobs.Service) *mfhold.Service {
+	s := mfhold.New(pool)
+	s.Refresh = mfRefresher{jobs: j}
+	return s
 }
 
 func mfService(db dbq.DBTX, j *jobs.Service) *mf.Service {

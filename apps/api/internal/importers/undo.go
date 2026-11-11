@@ -69,7 +69,7 @@ func (s *Service) Undo(ctx context.Context, id int64) (*UndoResult, error) {
 		return nil, err
 	}
 	table, ok := undoTables[kind]
-	if !ok {
+	if !ok && kind != KindMFStatement {
 		return nil, ErrNotUndoable
 	}
 	if undone != nil {
@@ -80,6 +80,17 @@ func (s *Service) Undo(ctx context.Context, id int64) (*UndoResult, error) {
 		return nil, ErrUndoExpired
 	}
 	res := &UndoResult{BatchID: id, Warnings: []string{}, EarlierBatchIDs: []int64{}}
+	if kind == KindMFStatement {
+		n, err := s.undoMF(ctx, tx, id)
+		if err != nil {
+			return nil, err
+		}
+		res.Removed = n
+		if _, err := tx.Exec(ctx, `UPDATE import_batch SET undone_at = $2 WHERE id = $1`, id, now); err != nil {
+			return nil, err
+		}
+		return res, tx.Commit(ctx)
+	}
 	if kind == KindCorporateActions {
 		var n int
 		if err := tx.QueryRow(ctx, `SELECT count(*) FROM portfolio_adjustment pa JOIN corporate_action ca ON ca.id = pa.corporate_action_id

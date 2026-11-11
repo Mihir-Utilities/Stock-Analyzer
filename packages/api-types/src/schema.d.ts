@@ -796,6 +796,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/portfolio/mf/fund-mappings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fund-name to scheme mappings chosen by the owner for statement imports, with the number of stored transactions that depend on each (MFH-23). (docs/03 section 12a) */
+        get: operations["getPortfolioMfFundMappings"];
+        /** Save the scheme chosen for a statement fund name. Changing a mapping that stored transactions depend on is 409 FUND_MAPPING_IN_USE unless remap=true, which rewrites those rows in one transaction with an audit note. (MFH-23, docs/03 section 12a) */
+        put: operations["putPortfolioMfFundMappings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/alerts": {
         parameters: {
             query?: never;
@@ -926,7 +944,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Validate an upload (multipart, 5 MB / 50,000 rows; prices 25 MB / 300,000 rows; mf_statement 2 MB / 5,000 rows, type checked by content, read-only parsing; data.mf carries date_from, date_to, rows_by_type, schemes[], unmatched_isins[], duplicates_in_db). Nothing is written. (docs/03 section 14, 12a) */
+        /** Validate an upload (multipart, 5 MB / 50,000 rows; prices 25 MB / 300,000 rows; mf_statement 2 MB / 5,000 rows, CSV or .xlsx, type checked by content, read-only parsing, columns Date | Fund Name | Transaction Type | Folio No | Units Traded | NAV | Amount | Stamp Duty; data.mf carries date_from, date_to, rows_by_type, funds[], unmapped_funds[] (with scheme candidates), fund_mappings[], duplicate_groups[], duplicates_in_db). Nothing is written. (docs/03 section 14, 12a) */
         post: operations["postImportsKindValidate"];
         delete?: never;
         options?: never;
@@ -945,6 +963,23 @@ export interface paths {
         put?: never;
         /** Commit a validated upload in one transaction. (docs/03 section 14) */
         post: operations["postImportsKindCommit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/imports/mf_statement/revalidate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Re-run the validation of a stored mf_statement upload against the current fund-name mappings, without re-uploading; same body as validate with the same upload_id (the 1 h TTL is not extended). (docs/03 section 12a) */
+        post: operations["postImportsMfStatementRevalidate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1366,11 +1401,21 @@ export interface components {
             units: string;
             /** @description INR per unit, decimal string > 0, up to 4 decimals. */
             nav: string;
-            /** @description INR, decimal string > 0, up to 4 decimals (purchase: cash paid incl. stamp duty; redemption: net credited). */
+            /** @description INR, decimal string > 0, up to 4 decimals (purchase: units x NAV, EXCLUDING stamp duty; redemption: net credited). The cost and cash outflow of a purchase is amount + stamp_duty (MFH-6 correction). */
             amount: string;
             /** @description INR, decimal string >= 0 (default 0). */
             stamp_duty?: string;
             note?: string;
+        };
+        MfFundMappingPut: {
+            fund_name: string;
+            /** Format: int64 */
+            scheme_code: number;
+            /**
+             * @description Needed to change a mapping that stored transactions depend on; rewrites them in one transaction.
+             * @default false
+             */
+            remap: boolean;
         };
         /** @description Same fields as MfTxnCreate, all optional; scheme_code and source cannot be changed. */
         MfTxnPatch: {
@@ -1509,6 +1554,8 @@ export interface components {
             /** Format: uuid */
             upload_group?: string;
             note?: string;
+            /** @description mf_statement only: file lines the owner unticked (for example one of a DUPLICATE_IN_FILE group); they are not imported (docs/03 12a). */
+            excluded_rows?: number[];
         };
         PricesAdjustmentPut: {
             value: boolean;
@@ -4047,6 +4094,86 @@ export interface operations {
             };
         };
     };
+    getPortfolioMfFundMappings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success. data: {items: [{fund_name, fund_name_key, scheme_code, scheme_name, plan, option, isin, rows, audit_note, created_at, updated_at}]} */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            429: components["responses"]["RateLimited"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    putPortfolioMfFundMappings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description CSRF guard for non-GET requests. */
+                "X-Requested-With": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfFundMappingPut"];
+            };
+        };
+        responses: {
+            /** @description Success. data: the mapping item. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /** @description FUND_MAPPING_IN_USE (details.rows) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["RateLimited"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     getAlerts: {
         parameters: {
             query?: {
@@ -4465,7 +4592,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success. data: {upload_id, upload_group, rows, preview (first 20 normalized rows), errors[{row,column,message}], warnings[], error_count, warning_count, estimated_growth_mb (prices), prices_already_adjusted (prices; null = not chosen yet)}. Row numbers are file lines (header = 1). The error and warning lists keep the first 200 entries; the counts are complete. Nothing is written; the file is stored in import_upload for 1 hour. 413 when the file exceeds the byte limit (5 MB; prices 5 MB until spike S9 passes, then 25 MB); 422 for more rows than allowed, a wrong type (CSV only; xlsx, zip and UTF-16 are refused) or no file; 404 for an unknown kind. 429 RATE_LIMITED with Retry-After when 10 validated uploads or 100 MB of them are already waiting for a commit (they expire after 1 hour). */
+            /** @description Success. data: {upload_id, upload_group, rows, preview (first 20 normalized rows), errors[{row,column,message,code?}], warnings[], error_count, warning_count, estimated_growth_mb (prices), prices_already_adjusted (prices; null = not chosen yet)}. Row numbers are file lines (header = 1). The error and warning lists keep the first 200 entries; the counts are complete. Nothing is written; the file is stored in import_upload for 1 hour. 413 when the file exceeds the byte limit (5 MB; prices 5 MB until spike S9 passes, then 25 MB); 422 for more rows than allowed, a wrong type (CSV only; xlsx, zip and UTF-16 are refused, except for mf_statement which also takes .xlsx) or no file; 404 for an unknown kind. 429 RATE_LIMITED with Retry-After when 10 validated uploads or 100 MB of them are already waiting for a commit (they expire after 1 hour). */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4518,7 +4645,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Success. data: {batch_id, inserted, updated, renamed, post_import_job_id (null when nothing was queued), warnings[] (TRACKED_OVER_400, POST_IMPORT_NOT_QUEUED)}. 422 UNPROCESSABLE when the upload has errors, PRICES_ADJUSTMENT_UNSET while the raw/adjusted choice is missing, DB_SIZE_LIMIT when the file would exceed DB_SOFT_LIMIT_MB; 404 when the upload is unknown or expired. */
+            /** @description Success. data: {batch_id, inserted, updated, renamed, post_import_job_id (null when nothing was queued), warnings[] (TRACKED_OVER_400, POST_IMPORT_NOT_QUEUED)}. For mf_statement: {batch_id, inserted, skipped_duplicates, warnings[]} (no post_import_job_id); 422 INSUFFICIENT_UNITS when a redemption row would oversell. 422 UNPROCESSABLE when the upload has errors, PRICES_ADJUSTMENT_UNSET while the raw/adjusted choice is missing, DB_SIZE_LIMIT when the file would exceed DB_SOFT_LIMIT_MB; 404 when the upload is unknown or expired. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4532,6 +4659,49 @@ export interface operations {
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    postImportsMfStatementRevalidate: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description CSRF guard for non-GET requests. */
+                "X-Requested-With": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    upload_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success. data as validate. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["RateLimited"];
             /** @description Error envelope */
             default: {
                 headers: {

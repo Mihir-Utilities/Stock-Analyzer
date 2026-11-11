@@ -66,6 +66,9 @@ func (rt route) handler(d Deps) http.Handler {
 	if h := importsHandler(rt, d); h != nil { // B06a (imports_handlers.go)
 		return h
 	}
+	if h := mfHoldingsHandler(rt, d); h != nil { // B15 (mfholdings_handlers.go)
+		return h
+	}
 	if h := portfolioHandler(rt, d); h != nil { // B11 (portfolio_handlers.go)
 		return h
 	}
@@ -188,6 +191,8 @@ var routes = []route{
 	{Method: mPatch, Path: "/portfolio/mf/txns/{id}"},
 	{Method: mDelete, Path: "/portfolio/mf/txns/{id}"},
 	{Method: mGet, Path: "/portfolio/mf/holdings"},
+	{Method: mGet, Path: "/portfolio/mf/fund-mappings"},
+	{Method: mPut, Path: "/portfolio/mf/fund-mappings"},
 	{Method: mGet, Path: "/portfolio/adjustments"},
 	{Method: mPost, Path: "/portfolio/adjustments"},
 
@@ -205,6 +210,7 @@ var routes = []route{
 	// Imports and owner-entered data (section 14)
 	{Method: mPost, Path: "/imports/{kind}/validate", Body: ImportBodyLimit},
 	{Method: mPost, Path: "/imports/{kind}/commit"},
+	{Method: mPost, Path: "/imports/mf_statement/revalidate"},
 	{Method: mGet, Path: "/imports/batches"},
 	{Method: mPost, Path: "/imports/batches/{id}/undo"},
 	{Method: mGet, Path: "/imports/templates/{kind}"},

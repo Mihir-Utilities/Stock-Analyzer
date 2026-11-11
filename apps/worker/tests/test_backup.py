@@ -74,6 +74,26 @@ def test_spec_never_lists_secret_columns_or_tables() -> None:
     assert "password_hash" not in app_user.columns
 
 
+def test_mf_ledger_tables_are_exported_in_dependency_order() -> None:
+    """MFH-F61 (D08 amendment, B15): the MF ledger and the fund-name mapping join the dump."""
+    names = [t.name for t in TABLES]
+    assert {"mf_txn", "mf_fund_name_map"} <= set(names)
+    for dep, table in (
+        ("mf_scheme", "mf_txn"),
+        ("import_batch", "mf_txn"),
+        ("mf_scheme", "mf_fund_name_map"),
+    ):
+        assert names.index(dep) < names.index(table)  # restore order = dependency order
+    mf_txn = next(t for t in TABLES if t.name == "mf_txn")
+    assert {"dedupe_key", "import_batch_id", "folio", "stamp_duty"} <= set(mf_txn.columns)
+    assert dict(mf_txn.exprs).keys() == {
+        "import_batch_id"
+    }  # a prices batch reference is exported as NULL
+    assert (
+        "mf_txn" in backup._REFERENCED_SCHEMES and "mf_fund_name_map" in backup._REFERENCED_SCHEMES
+    )
+
+
 def test_only_allow_listed_settings_are_backed_up() -> None:
     for key in ("BROKER_TOKEN_KEY", "api_secret", "ADMIN_PASSWORD", "DB_WARN_NOTIFIED", "new_key"):
         assert not backup.is_backed_up_setting_key(key)
@@ -254,6 +274,34 @@ async def _seed_owner_data(pool: asyncpg.Pool) -> dict[str, int]:
         "INSERT INTO watchlist_item (instrument_id, note) VALUES ($1,'watch')", ids["AAA"]
     )
     await pool.execute("INSERT INTO watchlist_item (mf_scheme_code) VALUES (100)")
+    # B15: mutual fund ledger (synthetic) and the fund-name mapping; scheme 300 is referenced only by them.
+    await pool.execute("INSERT INTO mf_scheme (code, name) VALUES (300,'Fund C')")
+    mf_batch = int(
+        await pool.fetchval(
+            "INSERT INTO import_batch (kind, filename, row_count) "
+            "VALUES ('mf_statement','s.csv',2) RETURNING id"
+        )
+    )
+    ids["mf_batch"] = mf_batch
+    await pool.execute(
+        "INSERT INTO mf_txn (scheme_code, folio, txn_type, txn_date, units, nav, amount, stamp_duty, "
+        "source, note) VALUES (300,'12345/67','sip','2026-01-05',12.3450,81.0000,999.9500,0.0500,"
+        "'manual','m1')"
+    )
+    await pool.execute(
+        "INSERT INTO mf_txn (scheme_code, folio, txn_type, txn_date, units, nav, amount, stamp_duty, "
+        "source, fund_name, fund_name_key, dedupe_key, import_batch_id) VALUES "
+        "(300,'12345/67','purchase','2026-02-05',12.1000,82.6400,999.9400,0.0500,'import','Alpha Fund',"
+        "'alpha fund','dk-1',$1), "
+        "(300,'12345/67','purchase','2026-02-05',12.1000,82.6400,999.9400,0.0500,'import','Alpha Fund',"
+        "'alpha fund','dk-2',$2)",
+        mf_batch,
+        prices_batch,  # a batch that is not exported: the reference is exported as NULL
+    )
+    await pool.execute(
+        "INSERT INTO mf_fund_name_map (fund_name_key, fund_name, scheme_code, audit_note) "
+        "VALUES ('alpha fund','Alpha Fund',300,'remapped 2026-11-11: 100 -> 300 (2 rows)')"
+    )
     await pool.execute(
         "INSERT INTO portfolio_txn (instrument_id, side, qty, price, fees, trade_date, note) VALUES "
         "($1,'buy',10.5000,123.4500,1.2000,'2026-01-05','first'), "
@@ -324,11 +372,14 @@ async def test_backup_has_no_broker_token_or_password_hash(pg_full: asyncpg.Pool
     assert "token_enc" not in text and "broker_key" not in text and "failed_logins" not in text
     assert dump.counts["app_user"] == 1
     assert dump.counts["app_setting"] == 2  # RISK_FREE_RATE, PRICES_ALREADY_ADJUSTED only
-    assert dump.counts["import_batch"] == 1  # the prices batch is not owner data
+    assert (
+        dump.counts["import_batch"] == 2
+    )  # corporate_actions + mf_statement; the prices batch is not owner data
     assert dump.counts["corporate_action"] == 1  # the detected row is a heuristic
     assert dump.counts["fundamental_value"] == 1  # derived rows are recomputed
     assert dump.counts["instrument"] == 2  # AAA and CCC; BBB is only in a detected row
-    assert dump.counts["mf_scheme"] == 1  # only the referenced scheme
+    assert dump.counts["mf_scheme"] == 2  # the watchlisted scheme and the scheme of the MF ledger
+    assert dump.counts["mf_txn"] == 3 and dump.counts["mf_fund_name_map"] == 1  # MFH-F61
 
 
 @pytest.mark.integration
@@ -433,7 +484,7 @@ async def test_backup_job_dry_run_needs_no_key_and_writes_nothing(
 
 
 _WIPE = (
-    "TRUNCATE alert, portfolio_adjustment, corporate_action, portfolio_txn, watchlist_item, "
+    "TRUNCATE alert, portfolio_adjustment, corporate_action, portfolio_txn, mf_txn, mf_fund_name_map, watchlist_item, "
     "fundamental_value, shareholding, import_batch, instrument, mf_scheme, app_setting, app_user, "
     "price_daily RESTART IDENTITY CASCADE"
 )
@@ -481,6 +532,26 @@ async def test_sys08_restore_drill_encrypted_dump_counts_and_values(
         else:
             assert after[name] == report.counts_in_file[name], name
     assert before["portfolio_txn"] == after["portfolio_txn"] == 2
+    assert before["mf_txn"] == after["mf_txn"] == 3  # MFH-F61: the MF ledger round-trips
+
+    mf_rows = await pg_full.fetch(
+        "SELECT units, nav, amount, stamp_duty, folio, dedupe_key, import_batch_id FROM mf_txn ORDER BY id"
+    )
+    assert [str(mf_rows[0][k]) for k in ("units", "nav", "amount", "stamp_duty")] == [
+        "12.3450",
+        "81.0000",
+        "999.9500",
+        "0.0500",
+    ]
+    assert mf_rows[0]["folio"] == "12345/67" and mf_rows[0]["dedupe_key"] is None
+    assert mf_rows[1]["dedupe_key"] == "dk-1" and mf_rows[1]["import_batch_id"] is not None
+    assert mf_rows[2]["dedupe_key"] == "dk-2" and mf_rows[2]["import_batch_id"] is None
+    assert (
+        await pg_full.fetchval(
+            "SELECT scheme_code FROM mf_fund_name_map WHERE fund_name_key='alpha fund'"
+        )
+        == 300
+    )
 
     # values survive exactly
     txn = await pg_full.fetchrow(

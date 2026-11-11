@@ -5,7 +5,7 @@
 | Track | backend |
 | Depends on | B11 (portfolio engine, idempotency), B06a (upload store and import pattern), B10 (mf_scheme/mf_nav reads), D04 (NAV data), T02; spike S18 for the `.xlsx` reader only |
 | Size | L (S < 0.5 day, M 0.5-1.5 days, L 1.5-4 days of focused work) |
-| Status | PROPOSED (D-MF spec, 2026-11-11); do not start before the owner answers the blocking questions in `docs/OPEN_QUESTIONS.md` (MFH-2, MFH-3, MFH-4, MFH-5, MFH-14, MFH-15) |
+| Status | BUILT (2026-11-11; spec amended by D-MF3: real statement header, stamp duty separate, fund-name mapping, multiset duplicates; stdlib `.xlsx` reader, B15-1) |
 
 ## Read first
 - docs/03-api-spec.md sections 1, 12, 12a, 14
@@ -32,15 +32,15 @@ Add mutual fund holdings to the portfolio: a `mf_txn` ledger, `GET/POST/PATCH/DE
 1. Migration and sqlc/pgx queries; 2. lot engine and XIRR with the golden vectors of `docs/05` 8.5.5; 3. transactions and holdings handlers; 4. summary views; 5. importer (CSV, then xlsx if allowed); 6. contract regeneration; 7. tests and RUNBOOK.
 
 ## Acceptance criteria (all must be true)
-- [ ] Every row MFH-V01..V15, MFH-I20..I32 (except I21 until the xlsx reader exists), MFH-F40..F62 passes; MFH-F60 stays N/A.
-- [ ] Golden vectors of `docs/05` 8.5.5 pass within 1e-4; the pooled XIRR is never the average of the two.
-- [ ] `view=equity` (and a missing `view`) returns exactly the pre-D-MF stocks-only response (existing PF tests still pass, PF-07 amended per MFH-3).
-- [ ] No new egress host; deny-list, SAF-13 and licence scan pass; no secrets or personal data in logs or fixtures (MFH-I30).
-- [ ] Contract-first: docs/03, openapi.yaml, field-map.json and generated types agree.
+- [x] Every row MFH-V01..V16, MFH-I20..I36, MFH-F40..F63 passes (MFH-F61 in the worker backup tests, MFH-F62 by `check:generated` and the router/OpenAPI test); MFH-F60 stays N/A.
+- [x] Golden vectors of `docs/05` 8.5.5 pass within 1e-4; the pooled XIRR is never the average of the two.
+- [x] `view=equity` (and a missing `view`) returns exactly the pre-D-MF stocks-only response (existing PF tests still pass, PF-07 amended per MFH-3).
+- [x] No new egress host; deny-list, SAF-13 and licence scan pass; no secrets or personal data in logs or fixtures (MFH-I30).
+- [x] Contract-first: docs/03, openapi.yaml, field-map.json and generated types agree.
 
 ## Required tests
 `MFH-V01..V15`, `MFH-I20..I32`, `MFH-F40..F62`, `PF-01..PF-15` (regression), `SAF-01`, `SAF-13`.
 
 ## Definition of done
-- [ ] Behaviour matches the cited spec sections exactly; tests pass in CI; new edge cases added to `docs/07`.
-- [ ] `docs/RUNBOOK.md` updated; questions recorded in `docs/OPEN_QUESTIONS.md` instead of guessed.
+- [x] Behaviour matches the cited spec sections exactly; tests pass in CI; new edge cases added to `docs/07`.
+- [x] `docs/RUNBOOK.md` updated; questions recorded in `docs/OPEN_QUESTIONS.md` instead of guessed.

@@ -2369,6 +2369,69 @@ paths:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/ErrorEnvelope"
+  "/portfolio/mf/fund-mappings":
+    get:
+      operationId: "getPortfolioMfFundMappings"
+      tags:
+        - "portfolio"
+      summary: "Fund-name to scheme mappings chosen by the owner for statement imports, with the number of stored transactions that depend on each (MFH-23). (docs/03 section 12a)"
+      responses:
+        "200":
+          description: "Success. data: {items: [{fund_name, fund_name_key, scheme_code, scheme_name, plan, option, isin, rows, audit_note, created_at, updated_at}]}"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+    put:
+      operationId: "putPortfolioMfFundMappings"
+      tags:
+        - "portfolio"
+      summary: "Save the scheme chosen for a statement fund name. Changing a mapping that stored transactions depend on is 409 FUND_MAPPING_IN_USE unless remap=true, which rewrites those rows in one transaction with an audit note. (MFH-23, docs/03 section 12a)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/MfFundMappingPut"
+      responses:
+        "200":
+          description: "Success. data: the mapping item."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "409":
+          description: "FUND_MAPPING_IN_USE (details.rows)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
   "/alerts":
     post:
       operationId: "postAlerts"
@@ -2698,7 +2761,7 @@ paths:
       operationId: "postImportsKindValidate"
       tags:
         - "imports"
-      summary: "Validate an upload (multipart, 5 MB / 50,000 rows; prices 25 MB / 300,000 rows; mf_statement 2 MB / 5,000 rows, type checked by content, read-only parsing; data.mf carries date_from, date_to, rows_by_type, schemes[], unmatched_isins[], duplicates_in_db). Nothing is written. (docs/03 section 14, 12a)"
+      summary: "Validate an upload (multipart, 5 MB / 50,000 rows; prices 25 MB / 300,000 rows; mf_statement 2 MB / 5,000 rows, CSV or .xlsx, type checked by content, read-only parsing, columns Date | Fund Name | Transaction Type | Folio No | Units Traded | NAV | Amount | Stamp Duty; data.mf carries date_from, date_to, rows_by_type, funds[], unmapped_funds[] (with scheme candidates), fund_mappings[], duplicate_groups[], duplicates_in_db). Nothing is written. (docs/03 section 14, 12a)"
       parameters:
         - name: "kind"
           in: "path"
@@ -2733,7 +2796,7 @@ paths:
                 - "file"
       responses:
         "200":
-          description: "Success. data: {upload_id, upload_group, rows, preview (first 20 normalized rows), errors[{row,column,message}], warnings[], error_count, warning_count, estimated_growth_mb (prices), prices_already_adjusted (prices; null = not chosen yet)}. Row numbers are file lines (header = 1). The error and warning lists keep the first 200 entries; the counts are complete. Nothing is written; the file is stored in import_upload for 1 hour. 413 when the file exceeds the byte limit (5 MB; prices 5 MB until spike S9 passes, then 25 MB); 422 for more rows than allowed, a wrong type (CSV only; xlsx, zip and UTF-16 are refused) or no file; 404 for an unknown kind. 429 RATE_LIMITED with Retry-After when 10 validated uploads or 100 MB of them are already waiting for a commit (they expire after 1 hour)."
+          description: "Success. data: {upload_id, upload_group, rows, preview (first 20 normalized rows), errors[{row,column,message,code?}], warnings[], error_count, warning_count, estimated_growth_mb (prices), prices_already_adjusted (prices; null = not chosen yet)}. Row numbers are file lines (header = 1). The error and warning lists keep the first 200 entries; the counts are complete. Nothing is written; the file is stored in import_upload for 1 hour. 413 when the file exceeds the byte limit (5 MB; prices 5 MB until spike S9 passes, then 25 MB); 422 for more rows than allowed, a wrong type (CSV only; xlsx, zip and UTF-16 are refused, except for mf_statement which also takes .xlsx) or no file; 404 for an unknown kind. 429 RATE_LIMITED with Retry-After when 10 validated uploads or 100 MB of them are already waiting for a commit (they expire after 1 hour)."
           content:
             "application/json":
               schema:
@@ -2794,7 +2857,7 @@ paths:
               "$ref": "#/components/schemas/ImportCommit"
       responses:
         "200":
-          description: "Success. data: {batch_id, inserted, updated, renamed, post_import_job_id (null when nothing was queued), warnings[] (TRACKED_OVER_400, POST_IMPORT_NOT_QUEUED)}. 422 UNPROCESSABLE when the upload has errors, PRICES_ADJUSTMENT_UNSET while the raw/adjusted choice is missing, DB_SIZE_LIMIT when the file would exceed DB_SOFT_LIMIT_MB; 404 when the upload is unknown or expired."
+          description: "Success. data: {batch_id, inserted, updated, renamed, post_import_job_id (null when nothing was queued), warnings[] (TRACKED_OVER_400, POST_IMPORT_NOT_QUEUED)}. For mf_statement: {batch_id, inserted, skipped_duplicates, warnings[]} (no post_import_job_id); 422 INSUFFICIENT_UNITS when a redemption row would oversell. 422 UNPROCESSABLE when the upload has errors, PRICES_ADJUSTMENT_UNSET while the raw/adjusted choice is missing, DB_SIZE_LIMIT when the file would exceed DB_SOFT_LIMIT_MB; 404 when the upload is unknown or expired."
           content:
             "application/json":
               schema:
@@ -2809,6 +2872,48 @@ paths:
           "$ref": "#/components/responses/RateLimited"
         "501":
           "$ref": "#/components/responses/NotImplemented"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/imports/mf_statement/revalidate":
+    post:
+      operationId: "postImportsMfStatementRevalidate"
+      tags:
+        - "imports"
+      summary: "Re-run the validation of a stored mf_statement upload against the current fund-name mappings, without re-uploading; same body as validate with the same upload_id (the 1 h TTL is not extended). (docs/03 section 12a)"
+      parameters:
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                upload_id:
+                  type: "string"
+                  format: "uuid"
+              required:
+                - "upload_id"
+              additionalProperties: false
+      responses:
+        "200":
+          description: "Success. data as validate."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
         default:
           description: "Error envelope"
           content:
@@ -3789,7 +3894,7 @@ components:
           description: "INR per unit, decimal string > 0, up to 4 decimals."
         amount:
           type: "string"
-          description: "INR, decimal string > 0, up to 4 decimals (purchase: cash paid incl. stamp duty; redemption: net credited)."
+          description: "INR, decimal string > 0, up to 4 decimals (purchase: units x NAV, EXCLUDING stamp duty; redemption: net credited). The cost and cash outflow of a purchase is amount + stamp_duty (MFH-6 correction)."
         stamp_duty:
           type: "string"
           description: "INR, decimal string >= 0 (default 0)."
@@ -3804,6 +3909,24 @@ components:
         - "units"
         - "nav"
         - "amount"
+      additionalProperties: false
+    MfFundMappingPut:
+      type: "object"
+      properties:
+        fund_name:
+          type: "string"
+          minLength: 1
+          maxLength: 200
+        scheme_code:
+          type: "integer"
+          format: "int64"
+        remap:
+          type: "boolean"
+          default: false
+          description: "Needed to change a mapping that stored transactions depend on; rewrites them in one transaction."
+      required:
+        - "fund_name"
+        - "scheme_code"
       additionalProperties: false
     MfTxnPatch:
       type: "object"
@@ -4115,6 +4238,12 @@ components:
           format: "uuid"
         note:
           type: "string"
+        excluded_rows:
+          type: "array"
+          description: "mf_statement only: file lines the owner unticked (for example one of a DUPLICATE_IN_FILE group); they are not imported (docs/03 12a)."
+          items:
+            type: "integer"
+            minimum: 2
       description: "Either upload_id, or upload_ids with upload_group (large prices file split by the browser)."
     PricesAdjustmentPut:
       type: "object"

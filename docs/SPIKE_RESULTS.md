@@ -23,7 +23,7 @@ Run on 2026-10-10 by Claude Code (agent) from the owner's Windows 11 machine, ma
 | S15 | Licence scan | GO | scan passes on 410 packages; ECharts 6.1.0 Apache-2.0, zrender BSD-3, lucide-react ISC, Inter OFL-1.1 confirmed at F02 (850 packages) |
 | S16 | Ratio accuracy | GO on synthetic known answers; real-company comparison BLOCKED-OWNER | 22 formula checks pass; definition choice alone moves ROE by 6.8% |
 | S17 | Owner effort | BLOCKED-OWNER | needs the owner's timing |
-| S18 | MF statement format (D-MF, MFH-5) | BLOCKED-OWNER | the owner's statement file was not available to the spec author; no header names verified |
+| S18 | MF statement format (D-MF, MFH-5) | PARTIAL: header known, file layout to be confirmed by the first real upload | header names and value shapes pasted by the owner on 2026-11-11 (no ISIN column, fund name only); whether the file is .xlsx or .csv and its sheet layout are unverified |
 
 ## S1 Broker decision  (2026-10-10, desk, Claude Code)
 Steps: recorded decision D-1 in `docs/BROKER_DECISION.md`; no broker docs or sites were read or contacted.
@@ -183,5 +183,6 @@ Verdict: BLOCKED-OWNER.
 
 ## S18 Mutual fund statement format  (2026-11-11, desk, Claude; BLOCKED-OWNER)
 Steps: looked for `Statement 2023-01-01 - 2026-11-10.xlsx` in the main checkout root, read-only. Raw results: **the file was not there**. The root holds `YourStatement.xlsx` (sheets 'Broking Ledger' and 'Charges', i.e. a stock broking ledger, not an MF statement), `ProfitLoss_Statement.xlsx` and `Reliance Industries.xlsx`; none was opened beyond sheet names. No MF statement header names, row layout, date format, transaction wording or reference column are known. Everything in `docs/01` 7.9 is therefore specified by logical field, by header name and by the app's own `mf_statement.csv` template, not by the Angel One layout. The only facts are the owner's description (80 purchases, 8 funds, SIP-style, no redemptions, ISINs available, all funds already on the watchlist).
-Verdict: BLOCKED-OWNER. The owner supplies the file (kept untracked) or the header row text; B15 builds the `.xlsx` reader only after S18 is GO (MFH-5, MFH-15).
+**Update 2026-11-11 (owner pasted the header and sample rows; names and shapes only recorded here, no real row, folio or amount):** columns in order `Date | Fund Name | Transaction Type | Folio No | Units Traded | NAV | Amount | Stamp Duty`; a blank row right after the header; dates like `05-Nov-2026` (DD-Mon-YYYY); transaction type seen so far: only `Purchase`; units 3 decimals, NAV up to 3, Amount and Stamp Duty 2; folio numbers are strings that may contain a slash; `Amount` = Units x NAV (to rounding), stamp duty separate; **no ISIN and no scheme code column** (fund name only, MFH-23); identical rows occur and are genuine (MFH-24). Still unverified: the file type (.xlsx or .csv), sheet names, header row index, any other columns (personal data to discard), other transaction wordings.
+Verdict: PARTIAL, 'header known, file layout to be confirmed by the first real upload'. B15 supports CSV and .xlsx with header-name mapping (MFH-5, MFH-15) so the first real upload is the confirmation; no GO is claimed.
 Spec amendments: none yet. Fixtures saved: none (any fixture is synthetic).
