@@ -574,3 +574,6 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - **A tab that looks wrong:** check the response first. An unexpected field type or enum value is shown as unknown or generic copy by design (degrade per field); fix the cause in the API or add the new enum copy in `lib/stock/prediction.ts`.
 - **Not yet shown:** the calibration plot and AUC-by-fold bars (the API serves only the aggregate card, F09-1).
 - **Tests:** `cd apps/web && npx vitest run tests/unit/prediction-tab.test.tsx`.
+
+## 130. Mutual fund holdings (decision D-MF; spec only, built by B15 and F16)
+Planned operational notes, finalised when B15 lands. Import failures: a row error names the row and column; fix the file (or use the `mf_statement.csv` template) and re-upload; re-uploading the same statement is safe (idempotent by `dedupe_key`). Wrong import: Undo the batch within 30 days (409 `UNDO_BREAKS_HOLDINGS` means a later manual redemption depends on it; delete that first). Value shows an em dash: the scheme has no NAV yet, wait for the `mf_refresh` job or open the scheme page; NAV older than 4 calendar days shows the stale chip. Backups include `mf_txn` (docs/04 3.11). The statement contains personal data: never commit it; logs and fixtures must not contain its contents (MFH-V, MFH-I30).

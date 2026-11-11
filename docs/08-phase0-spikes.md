@@ -39,6 +39,9 @@ S1 is recorded as "manual price mode" (no broker comparison needed); **S2, S3 an
 5. Choose raw / already adjusted in the wizard (this sets `PRICES_ALREADY_ADJUSTED`), commit, and record stocks, observed ratios, the answer and the date in `SPIKE_RESULTS.md`.
 Pass: all checked stocks agree. Fail (mixed answers): the price source is mixed; the owner must use one kind per source (re-export) before any prices are committed.
 
+## S18 Mutual fund statement format (decision D-MF, question MFH-5; gates B15's `.xlsx` reader)
+Goal: learn the real layout of the owner's Angel One MF statement before writing a parser. Steps (owner-assisted, nothing is committed): 1. The owner places the statement in the main checkout (it stays untracked and gitignored) or pastes only the header row. 2. Record, in `SPIKE_RESULTS.md`, **header names only** (never amounts, folios, names, PAN or other personal data): sheet names, header row index, the column carrying ISIN, folio, date, transaction type wording (distinct values only, e.g. what a SIP row is called), units, NAV, amount, stamp duty, any order/reference column, and which columns are personal data to discard. 3. Check: are all 80 rows purchases/SIP; does every ISIN match `mf_scheme.isin_growth` or `isin_div_reinvest` (count only); is the date format fixed; are negative or reversal rows present; is there a reference column usable for `dedupe_key` (MFH-12). 4. Decide the reader (MFH-15). Pass: header names recorded and every logical field of `01` 7.9 is found. Fail: the owner converts the sheet to the `mf_statement.csv` template and B15 ships CSV-only.
+
 ## Result template (`SPIKE_RESULTS.md`)
 ```
 ## S<id> <name>  (date, environment, who)

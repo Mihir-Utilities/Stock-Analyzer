@@ -2015,8 +2015,19 @@ paths:
       operationId: "getPortfolioSummary"
       tags:
         - "portfolio"
-      summary: "Holdings, totals, XIRR, realized/unrealized P&L, allocation. Money fields are strings with 4 decimals (INR); percent fields are percent numbers; unknown values are null with a sibling *_reason. (docs/03 section 12)"
+      summary: "Holdings, totals, XIRR, realized/unrealized P&L, allocation for view=all|equity|mf (breakdown[], mf_holdings[], returns.span_days for the D-MF views). Money fields are strings with 4 decimals (INR); percent fields are percent numbers; under one year returns.xirr_pct is null with xirr_reason under_one_year and absolute_return_pct is shown; unknown values are null with a sibling *_reason. (docs/03 section 12, 12a)"
       parameters:
+        - name: "view"
+          in: "query"
+          required: false
+          description: "Asset-class filter of one ledger (D-MF, docs/03 section 12a): all = equity + mutual funds (pooled cash flows, XIRR never averaged), equity (default, unchanged stocks-only contract), mf. Other values are 422."
+          schema:
+            type: "string"
+            enum:
+              - "all"
+              - "equity"
+              - "mf"
+            default: "equity"
         - name: "as_of"
           in: "query"
           required: false
@@ -2106,6 +2117,252 @@ paths:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/ErrorEnvelope"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/portfolio/mf/txns":
+    get:
+      operationId: "getPortfolioMfTxns"
+      tags:
+        - "portfolio"
+      summary: "List mutual fund transactions (asset_class mf), newest first. (docs/03 section 12a)"
+      parameters:
+        - name: "scheme_code"
+          in: "query"
+          required: false
+          schema:
+            type: "integer"
+            format: "int64"
+        - name: "folio"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+        - name: "type"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            enum:
+              - "purchase"
+              - "sip"
+              - "redemption"
+              - "switch_in"
+              - "switch_out"
+              - "idcw_payout"
+              - "idcw_reinvest"
+              - "bonus_merger"
+        - name: "from"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            format: "date"
+        - name: "to"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            format: "date"
+        - name: "source"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            enum:
+              - "manual"
+              - "import"
+        - "$ref": "#/components/parameters/Limit"
+        - "$ref": "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: "Success"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+    post:
+      operationId: "postPortfolioMfTxns"
+      tags:
+        - "portfolio"
+      summary: "Create a mutual fund transaction (optional Idempotency-Key header, 24 h). v1 types: purchase, sip, redemption, idcw_payout, idcw_reinvest; others 422 MF_TXN_TYPE_NOT_SUPPORTED; a redemption above the held units of the scheme+folio is 422 INSUFFICIENT_UNITS. (docs/03 section 12a)"
+      parameters:
+        - name: "Idempotency-Key"
+          in: "header"
+          required: false
+          schema:
+            type: "string"
+            format: "uuid"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/MfTxnCreate"
+      responses:
+        "201":
+          description: "Success"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "409":
+          description: "CONFLICT (Idempotency-Key reused with a different request)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/portfolio/mf/txns/{id}":
+    patch:
+      operationId: "patchPortfolioMfTxnsId"
+      tags:
+        - "portfolio"
+      summary: "Edit a mutual fund transaction (scheme_code and source cannot change; the whole scheme+folio sequence is re-validated, 422 INSUFFICIENT_UNITS). (docs/03 section 12a)"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Numeric id."
+          schema:
+            type: "integer"
+            format: "int64"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/MfTxnPatch"
+      responses:
+        "200":
+          description: "Success"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+    delete:
+      operationId: "deletePortfolioMfTxnsId"
+      tags:
+        - "portfolio"
+      summary: "Delete a mutual fund transaction (the whole scheme+folio sequence is re-validated, 422 INSUFFICIENT_UNITS). (docs/03 section 12a)"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Numeric id."
+          schema:
+            type: "integer"
+            format: "int64"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: "Success"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/portfolio/mf/holdings":
+    get:
+      operationId: "getPortfolioMfHoldings"
+      tags:
+        - "portfolio"
+      summary: "Mutual fund holdings: units, cost (FIFO, cost of units held), NAV with its date, value, unrealised/realised P&L, IDCW income, XIRR or absolute return per scheme or folio. Money and units are strings; unknown values are null with a sibling *_reason. (docs/03 section 12a, docs/05 8.5)"
+      parameters:
+        - name: "as_of"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            format: "date"
+        - name: "include_exited"
+          in: "query"
+          required: false
+          description: "Also list schemes with zero units (hidden by default; their realised P&L stays in the totals)."
+          schema:
+            type: "boolean"
+            default: false
+        - name: "group"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            enum:
+              - "scheme"
+              - "folio"
+            default: "scheme"
+      responses:
+        "200":
+          description: "Success"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
         default:
           description: "Error envelope"
           content:
@@ -2441,7 +2698,7 @@ paths:
       operationId: "postImportsKindValidate"
       tags:
         - "imports"
-      summary: "Validate an upload (multipart, 5 MB / 50,000 rows; prices 25 MB / 300,000 rows). Nothing is written. (docs/03 section 14)"
+      summary: "Validate an upload (multipart, 5 MB / 50,000 rows; prices 25 MB / 300,000 rows; mf_statement 2 MB / 5,000 rows, type checked by content, read-only parsing; data.mf carries date_from, date_to, rows_by_type, schemes[], unmatched_isins[], duplicates_in_db). Nothing is written. (docs/03 section 14, 12a)"
       parameters:
         - name: "kind"
           in: "path"
@@ -2460,6 +2717,7 @@ paths:
               - "shareholding"
               - "corporate_actions"
               - "instrument_meta"
+              - "mf_statement"
         - "$ref": "#/components/parameters/CsrfHeader"
       requestBody:
         required: true
@@ -2526,6 +2784,7 @@ paths:
               - "shareholding"
               - "corporate_actions"
               - "instrument_meta"
+              - "mf_statement"
         - "$ref": "#/components/parameters/CsrfHeader"
       requestBody:
         required: true
@@ -2656,6 +2915,7 @@ paths:
               - "shareholding"
               - "corporate_actions"
               - "instrument_meta"
+              - "mf_statement"
       responses:
         "200":
           description: "CSV template (header row and one example row; the holidays template is the header only, no example dates) as an attachment. 404 unknown kind."
@@ -3493,6 +3753,82 @@ components:
         - "symbol"
         - "effective_date"
         - "qty_multiplier"
+      additionalProperties: false
+    MfTxnCreate:
+      type: "object"
+      properties:
+        scheme_code:
+          type: "integer"
+          format: "int64"
+          description: "AMFI scheme code; must exist in mf_scheme (404 otherwise)."
+        folio:
+          type: "string"
+          minLength: 1
+          maxLength: 40
+        txn_type:
+          type: "string"
+          description: "v1 accepts purchase, sip, redemption, idcw_payout, idcw_reinvest; switch_in, switch_out and bonus_merger are 422 MF_TXN_TYPE_NOT_SUPPORTED (MFH-4)."
+          enum:
+            - "purchase"
+            - "sip"
+            - "redemption"
+            - "switch_in"
+            - "switch_out"
+            - "idcw_payout"
+            - "idcw_reinvest"
+            - "bonus_merger"
+        txn_date:
+          type: "string"
+          format: "date"
+          description: "IST market date; not in the future, not before 1990-01-01."
+        units:
+          type: "string"
+          description: "Decimal string, 0 < units <= 1e9, up to 4 decimals."
+        nav:
+          type: "string"
+          description: "INR per unit, decimal string > 0, up to 4 decimals."
+        amount:
+          type: "string"
+          description: "INR, decimal string > 0, up to 4 decimals (purchase: cash paid incl. stamp duty; redemption: net credited)."
+        stamp_duty:
+          type: "string"
+          description: "INR, decimal string >= 0 (default 0)."
+        note:
+          type: "string"
+          maxLength: 500
+      required:
+        - "scheme_code"
+        - "folio"
+        - "txn_type"
+        - "txn_date"
+        - "units"
+        - "nav"
+        - "amount"
+      additionalProperties: false
+    MfTxnPatch:
+      type: "object"
+      description: "Same fields as MfTxnCreate, all optional; scheme_code and source cannot be changed."
+      properties:
+        folio:
+          type: "string"
+          minLength: 1
+          maxLength: 40
+        txn_type:
+          type: "string"
+        txn_date:
+          type: "string"
+          format: "date"
+        units:
+          type: "string"
+        nav:
+          type: "string"
+        amount:
+          type: "string"
+        stamp_duty:
+          type: "string"
+        note:
+          type: "string"
+          maxLength: 500
       additionalProperties: false
     TxnPatch:
       type: "object"

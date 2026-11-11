@@ -7,6 +7,7 @@ Every formula here must have a unit test with a hand-computed or reference-libra
 ## 1. Conventions
 
 - Prices for returns/indicators: `adj_close` (series A). **Price returns only**: dividends are not adjusted in the Safe Edition; the UI says "price return (excludes dividends)". High/low/open scaled by `k = adj_close/close` per row when "adjusted" is needed. Suspect rows excluded before anything else; gaps are never forward-filled.
+- **Mutual fund holdings are the one place where dividends/payouts ARE included (decision D-MF 4).** Stocks keep the price-return rule above. For the portfolio's mutual fund sleeve (section 8.5): a **Growth** plan's NAV already reflects reinvested income, so units x NAV is a total-return value and needs no special handling; an **IDCW** plan's NAV drops by every payout, so the owner's return must be **total return**: payouts are cash inflows in XIRR (`idcw_payout`) or extra units (`idcw_reinvest`). The scheme-level returns of section 9 (NAV only) stay price-only for IDCW schemes and keep the "not comparable" warning. The UI labels portfolio MF figures "total return (includes IDCW payouts)" and stock figures "price return (excludes dividends)"; the combined view shows both labels (docs/06 6.7).
 - Trading-day windows: 1W=5, 1M=21, 3M=63, 6M=126, 1Y=252 trading rows. **Display returns** (performance table) use calendar offsets (1M, 3M, 6M, 1Y, 3Y, 5Y) with the latest bar on or before `end_date - offset`; used in UI. ML and indicators use trading-row windows.
 - Annualization factor 252. `ddof=1` sample std unless stated.
 - Null rules: insufficient history for a window -> `null` (never partial-window values). Division by zero or non-positive base for growth -> `null` with reason `n/m`.
@@ -141,7 +142,7 @@ Sources: owner-entered/imported actions (status `confirmed`) and app-detected ca
 Adjustment rule: for every lot with `trade_date < ex_date <= as_of`, `qty *= multiplier` and `unit_cost /= multiplier` (total cost unchanged). Lots bought on/after ex_date are in post-action units already. A sell on date d validates against holdings computed with confirmed actions having `ex_date <= d`. Owner overrides in `portfolio_adjustment` take precedence for the same `(instrument, ex_date)`. History adjustment (`adj_close`): for each trading date t before ex_date, `adj_close_t = close_t * product(1/multiplier for confirmed actions with ex_date > t)` when `PRICES_ALREADY_ADJUSTED=false`.
 
 ### 8.3 XIRR
-Cash flows: buy `-(qty*price + fees)` at trade_date; sell `+(qty*price - fees)`; plus a terminal inflow of current market value (`sum(qty*LTP)` using latest price as of `as_of`) dated `as_of` (only for open holdings). `t_i = (date_i - date_0)/365`. Solve `sum(cf_i/(1+r)^t_i) = 0`. Method: bracket on `r in [-0.9999, 100]` and use Brent's method (bisection fallback), tolerance 1e-7, max 200 iterations. Return null if no sign change or fewer than one outflow and one inflow. If total span < 30 days (first flow to the terminal value dated `as_of`, or to the last flow when no holding is open), display absolute return only and mark XIRR `n/a (period too short)`. Test vector: flows `-1000` on 2020-01-01 and `+1100` on 2021-01-01 -> r = 0.09973 (leap-year day count: 366/365; tolerance 1e-4).
+Cash flows: buy `-(qty*price + fees)` at trade_date; sell `+(qty*price - fees)`; plus a terminal inflow of current market value (`sum(qty*LTP)` using latest price as of `as_of`) dated `as_of` (only for open holdings). `t_i = (date_i - date_0)/365`. Solve `sum(cf_i/(1+r)^t_i) = 0`. Method: bracket on `r in [-0.9999, 100]` and use Brent's method (bisection fallback), tolerance 1e-7, max 200 iterations. Return null if no sign change or fewer than one outflow and one inflow. If total span < 30 days (first flow to the terminal value dated `as_of`, or to the last flow when no holding is open), display absolute return only and mark XIRR `n/a (period too short)`. **(Amended by D-MF 2 / MFH-3, pending the owner's answer: once the mutual fund feature lands, a span under 365 days shows absolute return instead of XIRR for every view and holding, section 8.5.6; the 30-day rule then only guards the absolute-return calculation itself.)** Test vector: flows `-1000` on 2020-01-01 and `+1100` on 2021-01-01 -> r = 0.09973 (leap-year day count: 366/365; tolerance 1e-4).
 
 ### 8.4 Other portfolio outputs
 - Day change = `sum(qty * (LTP - prev_close))` for holdings.
@@ -149,6 +150,59 @@ Cash flows: buy `-(qty*price + fees)` at trade_date; sell `+(qty*price - fees)`;
 - Estimated dividends received: for each owner-entered dividend action with ex_date inside the holding period: `qty_held_at_record_date * amount_per_share`; shown separately as "estimated, not included in XIRR/P&L".
 - Benchmark comparison: invest the same cash flows into Nifty 50 (`NIFTY50` series from the broker, price index, excludes dividends) and report its XIRR; omitted with a note if the index series is unavailable. The benchmark assumes the same cash flows invested in NIFTY; its units may go negative when the owner's sales outperformed the index (hypothetical comparison, B11-10), so it always computes when the series covers the first flow.
 - Brokerage, STT, taxes beyond the `fees` the user enters are not modelled.
+
+### 8.5 Asset-class views and mutual fund holdings (decision D-MF; questions MFH-2..MFH-22)
+All amounts are INR, computed with decimals (`shopspring/decimal`), never floats; units and NAV keep 4 decimals; money is returned as 4-decimal strings. Percent fields are percent numbers.
+
+**8.5.1 One ledger, three views.** Every dated movement becomes an entry `(asset_class, instrument_or_scheme, folio, date, type, units/qty, amount)`: stock rows of `portfolio_txn` get `asset_class='equity'`, rows of `mf_txn` get `'mf'` (physical tables stay separate, MFH-2). A **view** is a filter over the ledger: `equity` = equity entries, `mf` = mf entries, `all` = both. Holdings, cost, P&L and XIRR are always computed from the filtered ledger by the same functions; there is no separate "total" calculation. The three views' numbers need **not** add up (XIRR is not additive), and the UI never sums or averages XIRRs.
+
+**8.5.2 MF lots and FIFO.** Per `(scheme_code, folio)`, ordered by `(txn_date, type_rank, id)` where type_rank puts unit-adding rows (`purchase`, `sip`, `idcw_reinvest`) before `redemption` on the same date (same rule as B11-1; `idcw_payout` has no units). A unit-adding row creates a lot `(date, units, unit_cost = amount/units)`: for `purchase`/`sip` the cost is `amount` (stamp duty included, MFH-6); for `idcw_reinvest` the cost is the reinvested `amount` (MFH-17). A `redemption` consumes lots FIFO by `(date, id)`; consumed cost of a partly used lot is `unit_cost x units_taken` (pro rata, no rounding until display); `realized_pnl += amount - consumed_cost`. A redemption larger than the held units: `INSUFFICIENT_UNITS` (accepted with `UNITS_ROUNDED` when it exceeds by <= 0.001, clamped to held units, MFH-8). `idcw_payout` adds `amount` to `idcw_income` and creates no lot. Golden example: lots 100.0000 u cost 1000 and 100.0000 u cost 1200; redeem 150 u for 2250 -> consumed 1000 + 0.5 x 1200 = 1600, realised 650; remaining 50 u cost 600; at NAV 14 value 700, unrealised 100.
+
+**8.5.3 Value, invested, P&L (per holding row = one scheme, folios summed; per folio optional).**
+- `units = sum(remaining lot units)`; zero units = **exited** (hidden unless `include_exited`; its realised P&L and IDCW income stay in the totals).
+- `nav` = `nav_on_or_before(as_of)` (9.1) for that scheme; `nav_date` its date. `market_value = units x nav`. **Stale rule:** `nav_stale = (as_of - nav_date) > 4 calendar days` (same limit as docs/03 section 1 and B10-3); a stale value is still shown, with the chip, never hidden or zeroed. **No NAV row on or before `as_of`**: `nav`, `market_value`, `unrealized_*`, `xirr_pct` are `null` with reason `no_nav`.
+- `invested = sum(remaining lot cost)` (the owner's definition: **cost of units still held**; reinvested IDCW lots included, MFH-17). `avg_cost = invested / units`.
+- `unrealized_pnl = market_value - invested`; `unrealized_pct = unrealized_pnl / invested x 100` (`null`, reason `n/m` when invested is 0).
+- `realized_pnl` (sum over redemptions, FIFO) and `idcw_income` (sum of `idcw_payout` and `idcw_reinvest` amounts) are separate buckets, each shown on its own; `total_pnl = unrealized_pnl + realized_pnl + idcw_income` (null when any open holding has no value; the reason names the schemes, `missing_nav: <name>, ...`, the existing B11 wording style).
+- `weight_pct` = holding value / the view's total value x 100 (null when the total or the holding is unpriced).
+- Day change = `units x (nav - previous_nav)` using the scheme's two latest NAV rows on or before `as_of`; null with reason `no_previous_nav` or `nav_stale` (a stale NAV has no meaningful day change). The view total is null with a reason naming the unavailable schemes if any open holding lacks it; in `all` the equity and MF parts are shown separately in `breakdown` and each uses its own latest close/NAV date (labelled).
+- Totals of a view = decimal sums of the holdings (and for `all`: equity totals + MF totals). `market_value` is null (reason `missing_nav: ...` or `missing_price: ...`) if any open holding in the view is unpriced; never a partial sum presented as the total.
+
+**8.5.4 Cash flows for XIRR (exact rules).** Per view, from its ledger entries up to `as_of` (entries dated after `as_of` are ignored):
+| Entry | Flow dated at the entry date |
+|---|---|
+| equity buy | `-(qty x price + fees)` (section 8.3) |
+| equity sell | `+(qty x price - fees)` (section 8.3) |
+| `purchase`, `sip` | `-amount` |
+| `redemption` | `+amount` |
+| `idcw_payout` | `+amount` |
+| `idcw_reinvest` | **no flow** (cash never left the owner; the units are valued in the terminal flow) |
+| `switch_out`, `switch_in` (v2) | scheme-level view: `+amount` / `-amount`; `mf` and `all` views: the matched pair cancels and contributes no flow (MFH-22); not implemented in v1 |
+| terminal | `+market_value` of the open holdings **of that view**, dated `as_of`: equity `sum(qty x LTP)` and/or MF `sum(units x nav)`; none for exited holdings; omitted if any open holding is unpriced (XIRR then `null`, reason `missing_nav` or `missing_price`) |
+`all` pools the equity and MF flows into one list sorted by date and solves **one** equation (8.3 method, `t = days/365`). It is **never** the average (or value-weighted average) of the two XIRRs. A holding row's `xirr_pct` uses only that holding's flows plus its own terminal value.
+
+**8.5.5 Golden vectors (tolerance 1e-4 on the rate).**
+- MF only: `-1000` on 2024-01-01, `-1000` on 2024-07-01, terminal `+2300` on 2025-01-01 -> r = 0.20214.
+- Equity only: `-5000` on 2024-01-01, terminal `+5500` on 2025-01-01 -> r = 0.09971.
+- All (pooled flows of the two above: `-1000`, `-5000` on 2024-01-01, `-1000` on 2024-07-01, terminal `+7800` on 2025-01-01) -> r = 0.12294; the average of the two (0.15093) is wrong and a test asserts it is not returned.
+- SIP: `-1000` on 2024-01-05, 2024-02-05, 2024-03-05, terminal `+3300` on 2025-03-05 -> r = 0.09213.
+- IDCW payout: `-1000` on 2023-01-01, `+50` payout on 2024-01-01, terminal `+1100` on 2025-01-01 -> r = 0.07400.
+- With a redemption: `-1000` on 2023-01-02, `-1000` on 2024-01-02, `+1200` on 2024-07-01 (redemption), terminal `+1000` on 2025-01-02 -> r = 0.08033.
+
+**8.5.6 Under one year: absolute return instead of XIRR/CAGR (D-MF 2, MFH-3).** For a view or a holding, `span_days = as_of - date of its first flow`. If `span_days < 365`: `xirr_pct = null`, `xirr_reason = "under_one_year"`, and `absolute_return_pct` is shown (MFH-18: `(market_value + redemption_proceeds + idcw_cash - purchase_cash) / purchase_cash x 100`; for equity `purchase_cash` = buys incl. fees and proceeds are net of fees; `absolute_return_basis` says so). If `span_days >= 365`: XIRR is shown **and** the absolute return is also returned (labelled "simple, not annualised"). A SIP holding whose first instalment is over a year old is annualised even though its latest instalments are recent (the flows carry the dates); the UI footnote says "XIRR weights each instalment by how long it was invested". Return null with the existing reasons when no sign change (`no_sign_change`), fewer than one outflow and one inflow (`insufficient_flows`), or `purchase_cash = 0` (`no_purchases`). `span_days < 30` also keeps the reason `period_too_short` only when the absolute return cannot be computed.
+
+**8.5.7 Edge cases (each has an MFH- row in docs/07).**
+- *No NAV for the scheme:* value, unrealised, total P&L and XIRR null with `no_nav`; units and invested still shown; totals follow 8.5.3 (null with reason naming the scheme).
+- *NAV missing for a transaction date:* never an error (the row carries its own NAV from the statement); a scheme whose first stored NAV is later than the transaction date raises warning `NAV_FEED_STARTS_AFTER_TXN`; `mf_nav` gaps (weekends, holidays) use `nav_on_or_before` only for valuation.
+- *Zero units:* exited, no terminal flow, XIRR from the realised flows only (positive and negative flows both present), realised P&L shown.
+- *Same-day multiple transactions:* order per 8.5.2; two identical rows are legitimate (no dedupe on manual entry; the importer keeps both, MFH-12); a warning `DUPLICATE_LOOKING_TXN` on manual create.
+- *Future-dated transaction:* rejected (`422`, field `txn_date`); import row error.
+- *Negative or zero units/NAV/amount:* rejected; reversals are not modelled (MFH-16).
+- *Redemption before any purchase or above held units:* `INSUFFICIENT_UNITS`; edits and deletes re-validate the whole `(scheme, folio)` sequence.
+- *Fund merger or closed scheme:* `mf_scheme.status='inactive'` or last NAV older than 10 days -> warning `SCHEME_MAY_BE_MERGED` (9.5) and `nav_stale`; value uses the last NAV and says so; `bonus_merger` is unsupported in v1 (MFH-13).
+- *IDCW scheme with no `idcw_*` rows recorded:* warning `IDCW_PAYOUTS_NOT_RECORDED` ("returns exclude payouts you have not entered").
+- *Stock `PRICES_ALREADY_ADJUSTED`, splits and adjustments:* unchanged and equity-only; MF units never receive corporate-action adjustments (the AMC reports unit changes on the statement).
+- *Taxes, exit load beyond `amount`, TDS:* not modelled; P&L is pre-tax.
 
 ## 9. Mutual fund math
 

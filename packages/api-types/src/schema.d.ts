@@ -715,7 +715,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Holdings, totals, XIRR, realized/unrealized P&L, allocation. Money fields are strings with 4 decimals (INR); percent fields are percent numbers; unknown values are null with a sibling *_reason. (docs/03 section 12) */
+        /** Holdings, totals, XIRR, realized/unrealized P&L, allocation for view=all|equity|mf (breakdown[], mf_holdings[], returns.span_days for the D-MF views). Money fields are strings with 4 decimals (INR); percent fields are percent numbers; under one year returns.xirr_pct is null with xirr_reason under_one_year and absolute_return_pct is shown; unknown values are null with a sibling *_reason. (docs/03 section 12, 12a) */
         get: operations["getPortfolioSummary"];
         put?: never;
         post?: never;
@@ -737,6 +737,59 @@ export interface paths {
         put?: never;
         /** Override the quantity multiplier of an ex-date; the whole sequence is re-validated (422 INSUFFICIENT_HOLDINGS). (docs/03 section 12) */
         post: operations["postPortfolioAdjustments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portfolio/mf/txns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List mutual fund transactions (asset_class mf), newest first. (docs/03 section 12a) */
+        get: operations["getPortfolioMfTxns"];
+        put?: never;
+        /** Create a mutual fund transaction (optional Idempotency-Key header, 24 h). v1 types: purchase, sip, redemption, idcw_payout, idcw_reinvest; others 422 MF_TXN_TYPE_NOT_SUPPORTED; a redemption above the held units of the scheme+folio is 422 INSUFFICIENT_UNITS. (docs/03 section 12a) */
+        post: operations["postPortfolioMfTxns"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portfolio/mf/txns/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a mutual fund transaction (the whole scheme+folio sequence is re-validated, 422 INSUFFICIENT_UNITS). (docs/03 section 12a) */
+        delete: operations["deletePortfolioMfTxnsId"];
+        options?: never;
+        head?: never;
+        /** Edit a mutual fund transaction (scheme_code and source cannot change; the whole scheme+folio sequence is re-validated, 422 INSUFFICIENT_UNITS). (docs/03 section 12a) */
+        patch: operations["patchPortfolioMfTxnsId"];
+        trace?: never;
+    };
+    "/portfolio/mf/holdings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mutual fund holdings: units, cost (FIFO, cost of units held), NAV with its date, value, unrealised/realised P&L, IDCW income, XIRR or absolute return per scheme or folio. Money and units are strings; unknown values are null with a sibling *_reason. (docs/03 section 12a, docs/05 8.5) */
+        get: operations["getPortfolioMfHoldings"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -873,7 +926,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Validate an upload (multipart, 5 MB / 50,000 rows; prices 25 MB / 300,000 rows). Nothing is written. (docs/03 section 14) */
+        /** Validate an upload (multipart, 5 MB / 50,000 rows; prices 25 MB / 300,000 rows; mf_statement 2 MB / 5,000 rows, type checked by content, read-only parsing; data.mf carries date_from, date_to, rows_by_type, schemes[], unmatched_isins[], duplicates_in_db). Nothing is written. (docs/03 section 14, 12a) */
         post: operations["postImportsKindValidate"];
         delete?: never;
         options?: never;
@@ -1290,6 +1343,45 @@ export interface components {
              * @description Optional; must belong to the symbol and have the same ex-date.
              */
             corporate_action_id?: number;
+            note?: string;
+        };
+        MfTxnCreate: {
+            /**
+             * Format: int64
+             * @description AMFI scheme code; must exist in mf_scheme (404 otherwise).
+             */
+            scheme_code: number;
+            folio: string;
+            /**
+             * @description v1 accepts purchase, sip, redemption, idcw_payout, idcw_reinvest; switch_in, switch_out and bonus_merger are 422 MF_TXN_TYPE_NOT_SUPPORTED (MFH-4).
+             * @enum {string}
+             */
+            txn_type: "purchase" | "sip" | "redemption" | "switch_in" | "switch_out" | "idcw_payout" | "idcw_reinvest" | "bonus_merger";
+            /**
+             * Format: date
+             * @description IST market date; not in the future, not before 1990-01-01.
+             */
+            txn_date: string;
+            /** @description Decimal string, 0 < units <= 1e9, up to 4 decimals. */
+            units: string;
+            /** @description INR per unit, decimal string > 0, up to 4 decimals. */
+            nav: string;
+            /** @description INR, decimal string > 0, up to 4 decimals (purchase: cash paid incl. stamp duty; redemption: net credited). */
+            amount: string;
+            /** @description INR, decimal string >= 0 (default 0). */
+            stamp_duty?: string;
+            note?: string;
+        };
+        /** @description Same fields as MfTxnCreate, all optional; scheme_code and source cannot be changed. */
+        MfTxnPatch: {
+            folio?: string;
+            txn_type?: string;
+            /** Format: date */
+            txn_date?: string;
+            units?: string;
+            nav?: string;
+            amount?: string;
+            stamp_duty?: string;
             note?: string;
         };
         /** @description Same fields as TxnCreate, all optional. */
@@ -3627,6 +3719,8 @@ export interface operations {
     getPortfolioSummary: {
         parameters: {
             query?: {
+                /** @description Asset-class filter of one ledger (D-MF, docs/03 section 12a): all = equity + mutual funds (pooled cash flows, XIRR never averaged), equity (default, unchanged stocks-only contract), mf. Other values are 422. */
+                view?: "all" | "equity" | "mf";
                 as_of?: string;
                 /** @description Also list fully sold positions (hidden by default; their realized P&L is always in the totals). */
                 include_exited?: boolean;
@@ -3727,6 +3821,219 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["RateLimited"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getPortfolioMfTxns: {
+        parameters: {
+            query?: {
+                scheme_code?: number;
+                folio?: string;
+                type?: "purchase" | "sip" | "redemption" | "switch_in" | "switch_out" | "idcw_payout" | "idcw_reinvest" | "bonus_merger";
+                from?: string;
+                to?: string;
+                source?: "manual" | "import";
+                /** @description Page size (values above 200 are clamped). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor from next_cursor. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["RateLimited"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    postPortfolioMfTxns: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key"?: string;
+                /** @description CSRF guard for non-GET requests. */
+                "X-Requested-With": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfTxnCreate"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /** @description CONFLICT (Idempotency-Key reused with a different request) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["RateLimited"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    deletePortfolioMfTxnsId: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description CSRF guard for non-GET requests. */
+                "X-Requested-With": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                /** @description Numeric id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["RateLimited"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    patchPortfolioMfTxnsId: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description CSRF guard for non-GET requests. */
+                "X-Requested-With": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                /** @description Numeric id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfTxnPatch"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["RateLimited"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getPortfolioMfHoldings: {
+        parameters: {
+            query?: {
+                as_of?: string;
+                /** @description Also list schemes with zero units (hidden by default; their realised P&L stays in the totals). */
+                include_exited?: boolean;
+                group?: "scheme" | "folio";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             /** @description Error envelope */
@@ -4145,7 +4452,7 @@ export interface operations {
             };
             path: {
                 /** @description Import kind. */
-                kind: "prices" | "instruments" | "holidays" | "results_quarterly" | "results_annual" | "balance_cashflow" | "fundamentals_long" | "shareholding" | "corporate_actions" | "instrument_meta";
+                kind: "prices" | "instruments" | "holidays" | "results_quarterly" | "results_annual" | "balance_cashflow" | "fundamentals_long" | "shareholding" | "corporate_actions" | "instrument_meta" | "mf_statement";
             };
             cookie?: never;
         };
@@ -4201,7 +4508,7 @@ export interface operations {
             };
             path: {
                 /** @description Import kind. */
-                kind: "prices" | "instruments" | "holidays" | "results_quarterly" | "results_annual" | "balance_cashflow" | "fundamentals_long" | "shareholding" | "corporate_actions" | "instrument_meta";
+                kind: "prices" | "instruments" | "holidays" | "results_quarterly" | "results_annual" | "balance_cashflow" | "fundamentals_long" | "shareholding" | "corporate_actions" | "instrument_meta" | "mf_statement";
             };
             cookie?: never;
         };
@@ -4325,7 +4632,7 @@ export interface operations {
             header?: never;
             path: {
                 /** @description Import kind. */
-                kind: "prices" | "instruments" | "holidays" | "results_quarterly" | "results_annual" | "balance_cashflow" | "fundamentals_long" | "shareholding" | "corporate_actions" | "instrument_meta";
+                kind: "prices" | "instruments" | "holidays" | "results_quarterly" | "results_annual" | "balance_cashflow" | "fundamentals_long" | "shareholding" | "corporate_actions" | "instrument_meta" | "mf_statement";
             };
             cookie?: never;
         };
