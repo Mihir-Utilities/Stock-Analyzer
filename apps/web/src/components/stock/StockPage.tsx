@@ -54,6 +54,10 @@ const EventsTab = dynamic(() => import("./events/EventsTab").then((m) => m.Event
 const OwnershipTab = dynamic(() => import("./ownership/OwnershipTab").then((m) => m.OwnershipTab), {
   loading: tabLoading,
 });
+const PredictionTab = dynamic(
+  () => import("./prediction/PredictionTab").then((m) => m.PredictionTab),
+  { loading: tabLoading },
+);
 const PeersTab = dynamic(() => import("./peers/PeersTab").then((m) => m.PeersTab), {
   loading: tabLoading,
 });
@@ -85,14 +89,6 @@ const TAB_LABELS: Record<TabId, string> = {
 
 export function parseTab(v: string | null): TabId {
   return (TAB_IDS as readonly string[]).includes(v ?? "") ? (v as TabId) : "overview";
-}
-
-function NotBuilt({ tab }: { tab: string }) {
-  return (
-    <EmptyState
-      message={`The ${tab} tab is not built yet. The Overview tab shows the figures available today.`}
-    />
-  );
 }
 
 function NotFound({ symbol }: { symbol: string }) {
@@ -269,11 +265,11 @@ function Inner({ symbol }: { symbol: string }) {
     if (id === "fundamentals") return <FundamentalsTab symbol={profile.symbol} />;
     if (id === "ownership") return <OwnershipTab symbol={profile.symbol} />;
     if (id === "peers") return <PeersTab profile={profile} />;
+    if (id === "prediction") return <PredictionTab symbol={profile.symbol} />;
     if (id === "events") {
       return <EventsTab profile={profile} eventsLoad={eventsLoad} linksLoad={linksLoad} />;
     }
-    if (id === "data") return <DataTab profile={profile} warnings={warnings} />;
-    return <NotBuilt tab={TAB_LABELS[id]} />;
+    return <DataTab profile={profile} warnings={warnings} />;
   };
 
   return (
