@@ -1012,4 +1012,18 @@ Worker rows (INV-M, INV-S, INV-P, INV-D, INV-H, INV-E, INV-V, INV-L, INV-R) are 
 | INV-U08 | Analysis tab axe and 375 px | Axe clean in both themes at 375 and 1440 px; no horizontal page scroll; tables scroll inside labelled regions | E |
 | INV-U09 | Definitions | The ten owner-text keys of docs/05 12.12 exist in `definitions.ts` after `npm run gen:definitions`; `--check` passes; the tooltips contain no ids or section numbers | U |
 | INV-U10 | Heatmap component | `Heatmap` with trailing columns and footer rows keeps the existing callers unchanged (MF detail, calendar) and its scroll region stays focusable | U |
+| INVA-01 | All-stocks scope | `GET /stocks/seasonality` (default scope) lists every tracked stock with `seasonality` of today's IST month; the same object as `GET /watchlist` for a stock on both | I |
+| INVA-02 | Watchlist filter | `scope=watchlist` lists only watchlisted stocks; `scope=all` lists them too | I |
+| INVA-03 | on_watchlist marker | `on_watchlist` is true exactly for stocks with a watchlist item | I |
+| INVA-04 | Untracked excluded | A stock with a snapshot but `is_tracked = false` is not listed in either scope | I |
+| INVA-05 | Stock without snapshot | Tracked stock with no snapshot: `seasonality` null with `no_history` (prices imported) or `no_prices_imported`; 200 and the other rows are unaffected | I |
+| INVA-06 | Empty universe | No tracked stocks -> `stocks: []`, `as_of` null, `month` still set, 200 | I |
+| INVA-07 | scope validation | `scope=foo` -> 422 `UNPROCESSABLE` (field error `scope`); an empty `scope=` means the default | I |
+| INVA-08 | Month boundary | With a fake clock the month flips at 00:00 IST (18:30 UTC) and `month`, `month_name` and every row follow; no recompute | I |
+| INVA-09 | Auth and contract | 401 without a session (envelope); route in `openapi.yaml` and `routes.go`; `GET /watchlist` fields unchanged | I |
+| INVA-10 | Cost | 48, 100 and 200 tracked stocks with full-size snapshots answer under 500 ms locally; the measured value is in the test log and OPEN_QUESTIONS | I |
+| INVA-11 | Tile scope control | Default All stocks; radio-group semantics (`role=radiogroup`, two radios, arrow keys select); switching refetches with the scope in the query key; component state only | U |
+| INVA-12 | Tile watchlist chip | In All mode a watchlisted stock shows the Watchlist chip (text and icon); unlisted stocks have none | U |
+| INVA-13 | Tile copy by scope | Empty copy, nothing-ranked copy and caption follow the scope; footnote and "history starts" text unchanged | U |
+| INVA-14 | Tile 48 stocks | 48 stocks: ranking, collapsed short group, sort and min-years still work; 375 px no horizontal scroll; axe clean in both themes at 375 and 1440 px with the scope control | E |
 | INV-Z01 | Safe Edition | No new egress, no new dependency with a forbidden licence; deny-list, SAF-13 and licence scan pass | CI |

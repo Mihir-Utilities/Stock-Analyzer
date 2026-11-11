@@ -398,6 +398,42 @@ paths:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/ErrorEnvelope"
+  "/stocks/seasonality":
+    get:
+      operationId: "getStocksSeasonality"
+      tags:
+        - "stocks"
+      summary: "Home tile 'This month, across the years' over every tracked stock (decision D-INV2). (docs/03 section 4b)"
+      parameters:
+        - name: "scope"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            enum:
+              - "all"
+              - "watchlist"
+            default: "all"
+          description: "all = every tracked stock; watchlist = only watchlisted stocks. Any other value is 422."
+      responses:
+        "200":
+          description: "Success. data = SeasonalityList: today's IST month, the newest as_of, and one row per tracked stock with on_watchlist and the same seasonality object as GET /watchlist (or null with seasonality_reason)."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
   "/stocks/{symbol}":
     get:
       operationId: "getStocksSymbol"
@@ -4260,6 +4296,55 @@ components:
           "$ref": "#/components/schemas/InvSipBacktest"
         risk_adjusted:
           "$ref": "#/components/schemas/InvRiskAdjusted"
+    SeasonalityList:
+      type: "object"
+      description: "data of GET /stocks/seasonality (docs/03 section 4b)."
+      properties:
+        month:
+          type: "integer"
+          minimum: 1
+          maximum: 12
+        month_name:
+          type: "string"
+        as_of:
+          type: "string"
+          format: "date"
+          nullable: true
+        scope:
+          type: "string"
+          enum:
+            - "all"
+            - "watchlist"
+        stocks:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              symbol:
+                type: "string"
+              name:
+                type: "string"
+              on_watchlist:
+                type: "boolean"
+              seasonality:
+                nullable: true
+                allOf:
+                  - "$ref": "#/components/schemas/WatchlistSeasonality"
+              seasonality_reason:
+                type: "string"
+                nullable: true
+                description: "no_prices_imported | no_history"
+            required:
+              - "symbol"
+              - "name"
+              - "on_watchlist"
+              - "seasonality"
+      required:
+        - "month"
+        - "month_name"
+        - "as_of"
+        - "scope"
+        - "stocks"
     WatchlistSeasonality:
       type: "object"
       description: "stocks[].seasonality of GET /watchlist (docs/03 section 11): the current IST calendar month across past years. green_pct is a percent number; the running month is never counted; data_since is the first imported bar, not the listing date."
