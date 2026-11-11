@@ -166,6 +166,20 @@ export function formatMb(
   return known(`${r.negative ? "-" : ""}${r.body} MB`, r.direction);
 }
 
+/** A duration given in milliseconds: `850 ms`, `1.2 s`, `3 min 05 s`, `2 h 05 min`. */
+export function formatDuration(ms: number | null | undefined, o: NullOpts = {}): Formatted {
+  if (!isKnown(ms) || ms < 0) return unknown(o.reason);
+  if (ms < 1000) return known(`${Math.round(ms)} ms`);
+  const totalS = ms / 1000;
+  if (totalS < 60) return known(`${totalS.toFixed(1)} s`);
+  const whole = Math.round(totalS);
+  const h = Math.floor(whole / 3600);
+  const m = Math.floor((whole % 3600) / 60);
+  const sec = whole % 60;
+  if (h > 0) return known(`${h} h ${String(m).padStart(2, "0")} min`);
+  return known(`${m} min ${String(sec).padStart(2, "0")} s`);
+}
+
 /** A plain ratio such as an observed close ratio: `0.5002` (4 decimals unless told otherwise). */
 export function formatRatio(
   v: number | null | undefined,

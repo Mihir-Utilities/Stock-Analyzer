@@ -180,7 +180,11 @@ export function StockHeader({
           <h1 data-testid="stock-symbol" className="text-page font-semibold text-text-1">
             {profile.symbol}
           </h1>
-          <div data-testid="stock-name" className="truncate text-body-sm text-text-2">
+          <div
+            data-testid="stock-name"
+            className="truncate text-body-sm text-text-2"
+            title={profile.name}
+          >
             {profile.name}
           </div>
         </div>

@@ -14,7 +14,17 @@ const nextConfig: NextConfig = {
     return [{ source: "/api/:path*", destination: `${apiBase}/api/:path*` }];
   },
   async headers() {
-    return [{ source: "/:path*", headers: [...staticSecurityHeaders] }];
+    return [
+      { source: "/:path*", headers: [...staticSecurityHeaders] },
+      // The worker script must always be revalidated so a new version reaches the browser.
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache" },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+    ];
   },
 };
 

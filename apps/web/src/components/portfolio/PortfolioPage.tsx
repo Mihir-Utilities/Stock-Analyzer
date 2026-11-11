@@ -1,16 +1,23 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { ToastProvider } from "@/components/ui/overlays";
 import { describeError, asOfText } from "@/lib/dashboard/state";
 import { usePortfolioSummaryFull } from "@/lib/portfolio/api";
-import { AdjustmentsPanel, DividendsCard } from "./AdjustmentsPanel";
-import { ChartsSection } from "./ChartsSection";
-import { HoldingsSection, SummaryCards, WarningBanners } from "./SummarySection";
+import { SummaryCards, WarningBanners } from "./SummarySection";
 import { MANUAL_PRICE_NOTE, PORTFOLIO_SOURCE } from "./text";
-import { TxnSection } from "./TxnSection";
+
+// Charts, the transaction forms and adjustments load on demand (250 kB gzip route budget, docs/06a section 10).
+const ChartsSection = dynamic(() => import("./ChartsSection").then((m) => m.ChartsSection));
+const DividendsCard = dynamic(() => import("./AdjustmentsPanel").then((m) => m.DividendsCard));
+const AdjustmentsPanel = dynamic(() =>
+  import("./AdjustmentsPanel").then((m) => m.AdjustmentsPanel),
+);
+const HoldingsSection = dynamic(() => import("./HoldingsSection").then((m) => m.HoldingsSection));
+const TxnSection = dynamic(() => import("./TxnSection").then((m) => m.TxnSection));
 
 function Body() {
   const [showExited, setShowExited] = useState(false);

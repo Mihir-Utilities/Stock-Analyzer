@@ -134,12 +134,24 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      # Bundle budget (docs/06a section 10, PERF-01): at most 250 kB gzip of JS per route.
+      - run: npm run check:bundle
       - run: npm run build-storybook
       # The Playwright run must serve the e2e build: it bakes the /api rewrite to a closed port, so
       # an unmocked call fails fast. It runs after the plain build and replaces its .next output.
       - run: npm run build:e2e
       # Browser tests (UI-03, SEC-06, no external requests, axe) use the runner's Chrome.
       - run: npm run test:e2e
+      # Lighthouse mobile gate (performance >= 90, accessibility >= 95) on /login, the one main
+      # route that renders without the API (F15-7). The other routes have axe + the bundle budget.
+      - name: Lighthouse gate on /login (PERF-02)
+        run: |
+          npx next start -p 3200 -H 127.0.0.1 &
+          until curl -sf http://127.0.0.1:3200/login > /dev/null; do sleep 1; done
+          npm run check:lighthouse -- http://127.0.0.1:3200 /login
+        env:
+          API_BASE_URL: http://127.0.0.1:9
+          CHROME_PATH: /usr/bin/google-chrome
 
   api-types:
     name: Generated API types (openapi.yaml)

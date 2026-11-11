@@ -67,7 +67,7 @@ describe("PF-01/PF-09 summary, honesty and warnings", () => {
     expect(text).toMatch(/As of 24 Oct 2026/);
     expect(text).not.toMatch(/NaN|Infinity|undefined/);
     expect(screen.getByTestId("pf-manual-note")).toHaveTextContent(/not a live quote/);
-    expect(screen.getByTestId("pf-ltp-note")).toHaveTextContent(/latest valid close/);
+    expect(await screen.findByTestId("pf-ltp-note")).toHaveTextContent(/latest valid close/);
   });
 
   it("REVIEW_NEEDED and UNCONFIRMED_ACTION banners use honest wording", async () => {

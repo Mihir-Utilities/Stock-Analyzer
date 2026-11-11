@@ -1,5 +1,9 @@
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterEach } from "vitest";
+
+// Heavy tabs and sections load through next/dynamic (route budget, F15); the first import in a
+// worker has to be transformed, which can take longer than the 1 s default.
+configure({ asyncUtilTimeout: 5000 });
 
 afterEach(() => cleanup());
 

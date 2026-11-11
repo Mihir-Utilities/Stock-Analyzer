@@ -41,7 +41,9 @@ function HeatTile({ stock, maxAbs }: { stock: WatchStock; maxAbs: number }) {
       className="flex min-h-11 touch-target min-w-0 flex-col justify-between gap-1 rounded-control border border-border px-3 py-2 text-text-1"
       style={{ backgroundColor: heatColor(stock.change_pct ?? null, maxAbs) }}
     >
-      <span className="truncate text-body-sm font-medium">{stock.symbol}</span>
+      <span className="truncate text-body-sm font-medium" title={stock.symbol}>
+        {stock.symbol}
+      </span>
       {/* Text stays --text-1: up/down colours do not reach 4.5:1 on the tinted tile. The arrow and the sign carry direction. */}
       <span className="num inline-flex items-center gap-0.5 text-body-sm">
         {change.direction === "up" ? (

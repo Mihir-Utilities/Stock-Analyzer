@@ -23,7 +23,6 @@ vi.mock("@/components/shell/AppShell", () => ({
   AppShell: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
-import AdminStatusRoute from "@/app/(app)/admin/status/page";
 import NotFound from "@/app/not-found";
 import { StocksBrowse } from "@/components/stocks/StocksBrowse";
 
@@ -188,21 +187,8 @@ describe("compare selection on the browse list (F10-d)", () => {
   });
 });
 
-describe("not-available pages and not-found (UI-96)", () => {
-  it.each([["admin-status-na", AdminStatusRoute, "B14"]])(
-    "%s says what it waits for and makes no request",
-    (id, Route, token) => {
-      const mock = createMockFetch({});
-      vi.stubGlobal("fetch", mock.impl);
-      render(<Route />);
-      expect(screen.getByTestId(`${id}-note`)).toHaveTextContent("Not available yet");
-      expect(screen.getByTestId(`${id}-note`)).toHaveTextContent(token);
-      expect(screen.getByTestId(`${id}-home`)).toHaveAttribute("href", "/");
-      expect(screen.getByTestId(`${id}-stocks`)).toHaveAttribute("href", "/stocks");
-      expect(mock.calls).toHaveLength(0);
-    },
-  );
-
+// The admin status screen now reads GET /admin/status; its 501 state is tested in admin-status.test.tsx.
+describe("not-found (UI-96)", () => {
   it("not-found keeps its testids and adds a Stocks link", () => {
     render(<NotFound />);
     expect(screen.getByTestId("not-found-title")).toHaveTextContent("Page not found");
