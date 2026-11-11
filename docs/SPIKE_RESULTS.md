@@ -23,6 +23,7 @@ Run on 2026-10-10 by Claude Code (agent) from the owner's Windows 11 machine, ma
 | S15 | Licence scan | GO | scan passes on 410 packages; ECharts 6.1.0 Apache-2.0, zrender BSD-3, lucide-react ISC, Inter OFL-1.1 confirmed at F02 (850 packages) |
 | S16 | Ratio accuracy | GO on synthetic known answers; real-company comparison BLOCKED-OWNER | 22 formula checks pass; definition choice alone moves ROE by 6.8% |
 | S17 | Owner effort | BLOCKED-OWNER | needs the owner's timing |
+| S18 | MF statement format (D-MF, MFH-5) | BLOCKED-OWNER | the owner's statement file was not available to the spec author; no header names verified |
 
 ## S1 Broker decision  (2026-10-10, desk, Claude Code)
 Steps: recorded decision D-1 in `docs/BROKER_DECISION.md`; no broker docs or sites were read or contacted.
@@ -179,3 +180,8 @@ Spec amendments: none (OQ-11 touches `shares_outstanding` unit). Fixtures saved:
 ## S17 Owner effort  (BLOCKED-OWNER)
 Needs the owner's time. Checklist: after F13b exists, time entering the latest 8 quarters for 10 companies through CSV (pass: <= 20 min per company) and through forms; use `fixtures/templates/results_quarterly.csv` as the starting file; record minutes per company, pain points and whether the workflow is acceptable. Fail path: reduce required metrics; keep optional ones optional.
 Verdict: BLOCKED-OWNER.
+
+## S18 Mutual fund statement format  (2026-11-11, desk, Claude; BLOCKED-OWNER)
+Steps: looked for `Statement 2023-01-01 - 2026-11-10.xlsx` in the main checkout root, read-only. Raw results: **the file was not there**. The root holds `YourStatement.xlsx` (sheets 'Broking Ledger' and 'Charges', i.e. a stock broking ledger, not an MF statement), `ProfitLoss_Statement.xlsx` and `Reliance Industries.xlsx`; none was opened beyond sheet names. No MF statement header names, row layout, date format, transaction wording or reference column are known. Everything in `docs/01` 7.9 is therefore specified by logical field, by header name and by the app's own `mf_statement.csv` template, not by the Angel One layout. The only facts are the owner's description (80 purchases, 8 funds, SIP-style, no redemptions, ISINs available, all funds already on the watchlist).
+Verdict: BLOCKED-OWNER. The owner supplies the file (kept untracked) or the header row text; B15 builds the `.xlsx` reader only after S18 is GO (MFH-5, MFH-15).
+Spec amendments: none yet. Fixtures saved: none (any fixture is synthetic).

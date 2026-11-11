@@ -59,7 +59,7 @@ Loading (skeleton; "waking server" after 3 s) | Empty (explanation + action) | P
 Password field (`autocomplete="current-password"`), show/hide, Enter submits, generic error "Invalid credentials or temporarily locked." No registration or forgot-password (CLI reset in RUNBOOK).
 
 ### 6.2 Dashboard
-Tiles: Index sparklines (Nifty 50, India VIX; only if served, else reason), Market status/next open, Watchlist heatmap/treemap and movers, Upcoming events timeline (owner-entered), Portfolio snapshot (value, day change, XIRR) with allocation sunburst, Alerts activity, Data-health strip (broker session countdown with Reconnect, MF freshness, last job status).
+Tiles: Index sparklines (Nifty 50, India VIX; only if served, else reason), Market status/next open, Watchlist heatmap/treemap and movers, Upcoming events timeline (owner-entered), Portfolio snapshot (value, day change, XIRR) with the same All / Equity / Mutual funds switcher as 6.7 (default All, `data-testid` `dash-portfolio-view-all|equity|mf`, component state only) and allocation sunburst, Alerts activity, Data-health strip (broker session countdown with Reconnect, MF freshness, last job status).
 
 ### 6.3 Stocks browse
 Search input, filters (Tracked only toggle, Sector, Index tag, Kind, Status), sortable virtualized table (Symbol, Name, Price, 1D, 1Y with sparkline, P/E if entered, Quality if available). Untracked rows show "Import prices to see history" (manual mode). With no instruments at all: "No stocks yet. Import instruments.csv or add a stock." with buttons to the Import center and the Add stock form.
@@ -94,6 +94,34 @@ Filter builder (whitelisted metrics with units), presets, universe selector, res
 ### 6.7 Portfolio
 Summary cards (Invested, Value, Unrealized, Realized, Day change, XIRR, vs Nifty 50 if available); holdings table; allocation sunburst/treemap; contribution bars; P&L waterfall; growth vs benchmark line; drawdown; transactions list with filters. Add transaction form (symbol search, side, qty, price, fees, date with weekend/holiday warning, note) with server messages (`INSUFFICIENT_HOLDINGS`). Adjustments panel (confirmed actions applied, override, "review needed" for rights/mergers/unconfirmed detected). Estimated dividends card (from owner-entered dividend actions; excluded from XIRR).
 
+### 6.7a Portfolio views: All, Equity, Mutual funds (decision D-MF; spec only, built by F16 after B15)
+**Switcher.** A three-segment control at the top of `/portfolio` (and the Dashboard snapshot): `All` | `Equity` | `Mutual funds`, `data-testid` `pf-view-switcher`, segments `pf-view-all`, `pf-view-equity`, `pf-view-mf`. State lives in the URL (`/portfolio?view=all|equity|mf`, default `all`, an unknown value falls back to `all`); keyboard operable (radio-group semantics, arrow keys), the active segment is announced; switching never reloads the page and keeps the previous view's data on screen while the next loads (no layout jump). The view is a filter: every number comes from `GET /portfolio/summary?view=` (the UI sends `view` explicitly, MFH-14) and the screen never computes totals or XIRR itself.
+
+**What each view shows** (summary cards use the existing card component; every card shows unit, source and as-of, or a reason when null):
+| Card / section | All | Equity | Mutual funds |
+|---|---|---|---|
+| Money invested (cost of units/shares still held) | yes | yes | yes |
+| Current value | yes | yes | yes |
+| Profit/loss: unrealised, plus separate Realised and IDCW income cards (never merged into one number) | yes | yes (no IDCW card) | yes |
+| XIRR, or Absolute return when under one year (`05` 8.5.6) | yes (pooled flows) | yes | yes |
+| Day change | yes (each part with its own date) | yes | yes |
+| vs Nifty 50 | hidden (reason `not_defined_for_view`) | yes | hidden |
+| Breakdown table (Equity row, Mutual funds row: invested, value, P&L, XIRR each) with the footnote "XIRR cannot be added or averaged; each row uses only its own cash flows." | yes | no | no |
+| Holdings | two tables, "Stocks" then "Mutual funds" (each with its own totals row) | stocks table (as F11) | MF holdings table |
+| Allocation | by asset class, then by stock/sector and by scheme/category (each sleeve sums to 100%) | stock, sector | scheme, category |
+| Transactions list and Add form | tabs "Stock transactions" / "MF transactions" | stock | MF |
+| Estimated dividends card | yes (equity only, labelled) | yes | hidden |
+| Adjustments panel | yes | yes | hidden |
+Return-basis labels: stock figures "price return (excludes dividends)"; MF figures "total return (includes IDCW payouts)"; in All both labels appear next to their sleeves and the All cards carry the line "Stocks: price return. Mutual funds: total return." (`05` section 1, D-MF 4).
+
+**MF holdings table** (`data-testid` `pf-mf-holdings-table`, row `pf-mf-row-{scheme_code}`): scheme name (links to `/mf/{code}`), plan chip (Direct/Regular/unknown) and option chip (Growth/IDCW/unknown), folio(s) (expand for per-folio rows, `group=folio`), units, avg cost, invested, NAV with `nav_date`, value, unrealised P&L and %, realised, IDCW income, day change, weight, XIRR or absolute return with an "under 1 year" chip. Sort and column rules as the stock table; exited schemes behind the "Show exited" toggle. IDCW rows show the warning chip "IDCW: returns include payouts you entered".
+
+**MF transactions:** list (`pf-mf-txn-list`) with filters scheme, folio, type, date range, source (manual/import) and Load more; **Add MF transaction** form (`pf-mf-txn-form`): scheme search (reuses the fund search; shows plan/option), folio, type (purchase, SIP, redemption, IDCW payout, IDCW reinvest; the three unsupported types are not offered, and a server `MF_TXN_TYPE_NOT_SUPPORTED` is shown inline), date (weekend/holiday warning), units, NAV, amount, stamp duty, note; server messages `INSUFFICIENT_UNITS`, `AMOUNT_MISMATCH`, `UNITS_ROUNDED`, `DUPLICATE_LOOKING_TXN` inline; edit and delete with the sequence re-validation message. **Import statement** button (`pf-mf-import-open`) opens `/imports?kind=mf_statement` (wizard of F13: choose file, validate, preview the first 20 rows with counts by type, matched schemes and date range, errors by row, commit; Undo in batches). The page never shows file contents beyond the normalised preview.
+
+**States (docs/06 section 5), per view:** *Loading*: skeletons per card, "waking server" after 3 s. *Empty*: for `mf` with no MF transactions: "No mutual fund transactions yet. Import your broker's MF statement or add a transaction." with the two actions; `all` with only one class present shows that class plus a hint card for the other; with nothing at all, the existing empty copy. *Partial*: unpriced holdings or missing NAV render with an em dash and reason ("No NAV for this fund yet"), the card total shows an em dash with the reason "Value unavailable: {names} have no NAV" instead of a partial sum; an info banner lists the unpriced names. *Stale*: amber chip "NAV as of {date}" on each stale MF row and on the card (more than 4 calendar days old; value still shown); stock staleness as F11. *Error*: message + Retry + request id (existing component); one failed card degrades alone. *Under one year*: the XIRR card reads "Absolute return" with the sublabel "XIRR is shown after the first year" (never an annualised figure, never 0). *No XIRR possible* (`no_sign_change`, `insufficient_flows`, `no_nav`): em dash with the reason text.
+
+**Honesty rules (all views).** Every number shows its unit (INR, units, %), its source ("your statement" or "your entries" for units and amounts; "NAV data: AMFI, via mfapi.in" for value) and its as-of date. Unknown values are an em dash with a tooltip reason; never `0`, `NaN`, `Infinity` or a partial total presented as complete. Figures that mix sources (All) say so. Percent signs and up/down arrows follow section 3. Total return and price return are never put in one unlabelled column. "Realised" and "IDCW income" are separate from "Unrealised". No forecast, target or advice text appears on these views (forecasts keep their own banner rules on the stock Prediction tab). Footer disclaimer and MF attribution are present (SAF-03).
+
 ### 6.8 Alerts
 List with status chips; create dialog (target, kind, dynamic params with units, one-shot, cooldown, expiry); Telegram card (not linked/linked; code + deep link + 15:00 countdown; polls `/auth/me` every 3 s up to 2 min; Send test; Unlink); history with delivery status; quiet hours editor; threshold-already-met error shown inline.
 
@@ -127,7 +155,8 @@ WCAG 2.1 AA; contrast >= 4.5:1 (text) and 3:1 (graphics) in both themes; visible
 | `/market/overview` | indices, vix, movers, market_status -> Dashboard/top bar |
 | `/compare` | rebased, metrics, best -> Compare |
 | `/screener/query` | items, coverage, excluded_for_missing -> Screener |
-| `/portfolio/summary` | holdings, totals, xirr, realized/unrealized, day change, allocation, benchmark, adjustments_applied -> Portfolio |
+| `/portfolio/summary` | holdings, totals, xirr, realized/unrealized, day change, allocation, benchmark, adjustments_applied -> Portfolio; D-MF additions `view`, `asset_classes_present`, `totals.idcw_income/total_pnl/purchase_cash`, `returns.span_days/first_flow_date`, `breakdown`, `mf_holdings`, `allocation_by_scheme/category/asset_class` -> Portfolio views (6.7a) |
+| `/portfolio/mf/holdings`, `/portfolio/mf/txns*` | every item field -> MF holdings table, MF transactions list and form (6.7a) |
 | `/watchlist` | stocks, funds -> Watchlist/Dashboard |
 | `/alerts*` | all alert and event fields -> Alerts |
 | `/mf/*` | meta, returns, risk, warnings, points, sip outputs, compare -> Funds |
@@ -143,6 +172,10 @@ A Playwright test iterates the OpenAPI schema and asserts each field name appear
 - Forecast hidden: "Forecast hidden: {plain reason}."
 - Footer: "Personal research tool. Data may be delayed, incomplete or wrong. Not investment advice."
 - MF attribution: "NAV data: AMFI via mfapi.in."
+- No MF transactions: "No mutual fund transactions yet. Import your broker's MF statement or add a transaction."
+- Under one year: "XIRR is shown after the first year. Absolute return is shown instead."
+- Missing NAV total: "Value unavailable: {names} have no NAV yet."
+- Switch/merger entry: "Switches and merger/bonus entries are not supported yet. Enter a switch as a redemption plus a purchase."
 
 ## 10. Frontend test plan
 Unit: formatters, search ranking, fiscal labels, definitions, decimal sums. Component: each card in each state (Storybook/Vitest). E2E (Playwright, mocked API fixtures): login/lockout; search `M&M` and `BAJAJ-AUTO`; every stock tab with partial data; refresh flow (queued/ok/429/failed/timeout); broker reconnect banner; detected-split confirm flow; add transaction (valid/invalid/oversell); alert creation incl. threshold-already-met; Telegram link flow; import wizard (valid, errors, undo); MF search and SIP; screener build/save; mobile snapshots; dark/light; axe on every route; field-coverage test.

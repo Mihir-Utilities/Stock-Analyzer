@@ -6,9 +6,9 @@ Each file is a self-contained work package: goal, scope, out-of-scope, deliverab
 | Track | Folder | Tasks | What it covers |
 |---|---|---|---|
 | Foundation | `foundation/` | T00-T02 | Repo, CI, safety guards, spikes, migrations |
-| Backend (Go API) | `backend/` | B01-B14 | HTTP API, auth, imports, portfolio, alerts API, MF API |
+| Backend (Go API) | `backend/` | B01-B14 (+ B15 proposed, D-MF) | HTTP API, auth, imports, portfolio, alerts API, MF API |
 | Data/Worker (Python) | `data/` | D01-D08 | Ingestion jobs (`post_import`), analytics, alerts, ML, housekeeping (broker adapter D02 removed) |
-| Frontend (Next.js) | `frontend/` | F01-F15 | Design system, screens, visualisations |
+| Frontend (Next.js) | `frontend/` | F01-F15 (+ F16 proposed, D-MF) | Design system, screens, visualisations |
 
 ## Recommended order (sequential waves; tasks inside a wave can run in parallel)
 | Wave | Tasks | Notes |
@@ -24,6 +24,7 @@ Each file is a self-contained work package: goal, scope, out-of-scope, deliverab
 | 8 | B11, B12, D06, F11, F12 | Portfolio, alerts, Telegram, settings (no broker card) |
 | 9 | D07, B14, F09 | Experimental predictions |
 | 10 | D08, F15 | Hardening, workflows, polish |
+| 11 (PROPOSED, D-MF) | S18 spike, B15, then F16 | Mutual fund holdings: backend ledger/API/importer (B15, needs B11, B06a, B10; `.xlsx` reader gated by S18), then the web views (F16, needs F11, F13, B15). Not started until the owner answers MFH-2..MFH-5, MFH-14, MFH-15 |
 
 ## Contract-first rule (lets frontend and backend run in parallel)
 1. B01 produces `openapi.yaml` and generated TypeScript types from `docs/03-api-spec.md`.
@@ -38,6 +39,7 @@ Each file is a self-contained work package: goal, scope, out-of-scope, deliverab
 T00 -> T01, T02
 T00,T02 -> B01 -> B02 -> B03,B08(status only),B10,B12 ; B03 -> B04,B05,B11 ; D01 -> B09 ; B03,B09 -> B06a ; B05,B06a -> B06b -> B07
 T00,T02 -> D01 -> D03 -> D05 -> D07 ; D01 -> D04 ; D03,B12 -> D06 ; D01,D03..D07 -> D08      (D02 removed)
+B11,B06a,B10 -> B15 -> F16 (D-MF, proposed)      F11,F13a,F13b -> F16
 T00,B01 -> F01 -> F02 -> F03 -> F04..F14 -> F15 ; F13a needs B06a, F13b needs B06b
 ```
 
