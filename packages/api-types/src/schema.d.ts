@@ -715,7 +715,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Holdings, totals, XIRR, realized/unrealized P&L, allocation for view=all|equity|mf (breakdown[], mf_holdings[], returns.span_days for the D-MF views). Money fields are strings with 4 decimals (INR); percent fields are percent numbers; under one year returns.xirr_pct is null with xirr_reason under_one_year and absolute_return_pct is shown; unknown values are null with a sibling *_reason. (docs/03 section 12, 12a) */
+        /** Holdings, totals, XIRR, realized/unrealized P&L, allocation for view=all|equity|mf (breakdown[], mf_holdings[], returns.span_days for the D-MF views). Money fields are strings with 4 decimals (INR); percent fields are percent numbers; under one year returns.xirr_pct is null with xirr_reason under_one_year and absolute_return_pct is shown; unknown values are null with a sibling *_reason (totals.unrealized_pct_reason is n/m for a zero cost base). benchmark has the keys code, xirr_pct, reason, level_as_of, note in every view; for view=all and view=mf all are null except reason, which is not_defined_for_view. (docs/03 section 12, 12a) */
         get: operations["getPortfolioSummary"];
         put?: never;
         post?: never;
@@ -786,7 +786,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Mutual fund holdings: units, cost (FIFO, cost of units held), NAV with its date, value, unrealised/realised P&L, IDCW income, XIRR or absolute return per scheme or folio. Money and units are strings; unknown values are null with a sibling *_reason. (docs/03 section 12a, docs/05 8.5) */
+        /** Mutual fund holdings: units, cost (FIFO, cost of units held), NAV with its date, value, unrealised/realised P&L, IDCW income, XIRR or absolute return per scheme or folio. Money and units are strings; unknown values are null with a sibling *_reason (unrealized_pct_reason is n/m for a zero cost base). (docs/03 section 12a, docs/05 8.5) */
         get: operations["getPortfolioMfHoldings"];
         put?: never;
         post?: never;
@@ -1554,7 +1554,7 @@ export interface components {
             /** Format: uuid */
             upload_group?: string;
             note?: string;
-            /** @description mf_statement only: file lines the owner unticked (for example one of a DUPLICATE_IN_FILE group); they are not imported (docs/03 12a). */
+            /** @description mf_statement only: file lines the owner unticked (for example one of a DUPLICATE_IN_FILE group, or a row with errors); they are not imported and the errors of an excluded row do not block the commit; an unknown line is 422; a header problem cannot be excluded (docs/03 12a). */
             excluded_rows?: number[];
         };
         PricesAdjustmentPut: {
@@ -3884,6 +3884,7 @@ export interface operations {
     getPortfolioMfTxns: {
         parameters: {
             query?: {
+                /** @description Whole number 1 to 2147483647 (full match: 1abc, 0, negative or larger values are 422 with field scheme_code). */
                 scheme_code?: number;
                 folio?: string;
                 type?: "purchase" | "sip" | "redemption" | "switch_in" | "switch_out" | "idcw_payout" | "idcw_reinvest" | "bonus_merger";

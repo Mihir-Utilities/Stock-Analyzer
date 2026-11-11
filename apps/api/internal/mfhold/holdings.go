@@ -59,39 +59,41 @@ type Input struct {
 
 // Holding is one row of GET /portfolio/mf/holdings (one scheme, folios summed, or one folio).
 type Holding struct {
-	AssetClass      string   `json:"asset_class"`
-	SchemeCode      int32    `json:"scheme_code"`
-	SchemeName      string   `json:"scheme_name"`
-	FundHouse       *string  `json:"fund_house"`
-	Category        *string  `json:"category"`
-	Plan            string   `json:"plan"`
-	Option          string   `json:"option"`
-	ISIN            *string  `json:"isin"`
-	Folio           *string  `json:"folio,omitempty"`
-	Folios          []string `json:"folios,omitempty"`
-	Units           string   `json:"units"`
-	AvgCost         *string  `json:"avg_cost"`
-	Invested        string   `json:"invested"`
-	NAV             *string  `json:"nav"`
-	NAVDate         *string  `json:"nav_date"`
-	NAVStale        bool     `json:"nav_stale"`
-	NAVReason       *string  `json:"nav_reason"`
-	MarketValue     *string  `json:"market_value"`
-	Unrealized      *string  `json:"unrealized_pnl"`
-	UnrealizedPct   *float64 `json:"unrealized_pct"`
-	Realized        string   `json:"realized_pnl"`
-	IDCWIncome      string   `json:"idcw_income"`
-	DayChange       *string  `json:"day_change"`
-	DayChangeReason *string  `json:"day_change_reason"`
-	WeightPct       *float64 `json:"weight_pct"`
-	XIRRPct         *float64 `json:"xirr_pct"`
-	XIRRReason      *string  `json:"xirr_reason"`
-	AbsolutePct     *float64 `json:"absolute_return_pct"`
-	FirstTxnDate    *string  `json:"first_txn_date"`
-	SpanDays        *int     `json:"span_days"`
-	Exited          bool     `json:"exited"`
-	Flags           []string `json:"flags"`
-	Source          string   `json:"source"`
+	AssetClass    string   `json:"asset_class"`
+	SchemeCode    int32    `json:"scheme_code"`
+	SchemeName    string   `json:"scheme_name"`
+	FundHouse     *string  `json:"fund_house"`
+	Category      *string  `json:"category"`
+	Plan          string   `json:"plan"`
+	Option        string   `json:"option"`
+	ISIN          *string  `json:"isin"`
+	Folio         *string  `json:"folio,omitempty"`
+	Folios        []string `json:"folios,omitempty"`
+	Units         string   `json:"units"`
+	AvgCost       *string  `json:"avg_cost"`
+	Invested      string   `json:"invested"`
+	NAV           *string  `json:"nav"`
+	NAVDate       *string  `json:"nav_date"`
+	NAVStale      bool     `json:"nav_stale"`
+	NAVReason     *string  `json:"nav_reason"`
+	MarketValue   *string  `json:"market_value"`
+	Unrealized    *string  `json:"unrealized_pnl"`
+	UnrealizedPct *float64 `json:"unrealized_pct"`
+	// UnrealizedPctReason is "n/m" when the percentage is not meaningful (nothing invested), B15 review N3.
+	UnrealizedPctReason *string  `json:"unrealized_pct_reason"`
+	Realized            string   `json:"realized_pnl"`
+	IDCWIncome          string   `json:"idcw_income"`
+	DayChange           *string  `json:"day_change"`
+	DayChangeReason     *string  `json:"day_change_reason"`
+	WeightPct           *float64 `json:"weight_pct"`
+	XIRRPct             *float64 `json:"xirr_pct"`
+	XIRRReason          *string  `json:"xirr_reason"`
+	AbsolutePct         *float64 `json:"absolute_return_pct"`
+	FirstTxnDate        *string  `json:"first_txn_date"`
+	SpanDays            *int     `json:"span_days"`
+	Exited              bool     `json:"exited"`
+	Flags               []string `json:"flags"`
+	Source              string   `json:"source"`
 
 	MV *decimal.Decimal `json:"-"`
 }
@@ -103,13 +105,15 @@ type Totals struct {
 	MarketValueReason *string  `json:"market_value_reason"`
 	Unrealized        *string  `json:"unrealized_pnl"`
 	UnrealizedPct     *float64 `json:"unrealized_pct"`
-	Realized          string   `json:"realized_pnl"`
-	IDCWIncome        string   `json:"idcw_income"`
-	TotalPnL          *string  `json:"total_pnl"`
-	TotalPnLReason    *string  `json:"total_pnl_reason"`
-	PurchaseCash      string   `json:"purchase_cash"`
-	DayChange         *string  `json:"day_change"`
-	DayChangeReason   *string  `json:"day_change_reason"`
+	// UnrealizedPctReason is "n/m" when the percentage is not meaningful (nothing invested), B15 review N3.
+	UnrealizedPctReason *string `json:"unrealized_pct_reason"`
+	Realized            string  `json:"realized_pnl"`
+	IDCWIncome          string  `json:"idcw_income"`
+	TotalPnL            *string `json:"total_pnl"`
+	TotalPnLReason      *string `json:"total_pnl_reason"`
+	PurchaseCash        string  `json:"purchase_cash"`
+	DayChange           *string `json:"day_change"`
+	DayChangeReason     *string `json:"day_change_reason"`
 }
 
 // Share is an allocation slice.
@@ -385,6 +389,8 @@ func fillNAV(h *Holding, sch Scheme, n SchemeNAV, units, cost decimal.Decimal, a
 	h.Unrealized = moneyP(mv.Sub(cost))
 	if cost.IsPositive() {
 		h.UnrealizedPct = pct(mv.Sub(cost).Div(cost).Mul(decimal.NewFromInt(100)))
+	} else {
+		h.UnrealizedPctReason = strp(ReasonNotMeaningful)
 	}
 	switch {
 	case h.NAVStale:
@@ -409,6 +415,8 @@ func (r *Result) totals(dayMissing []string, in Input) {
 		t.Unrealized = moneyP(a.MarketValue.Sub(a.Invested))
 		if a.Invested.IsPositive() {
 			t.UnrealizedPct = pct(a.MarketValue.Sub(a.Invested).Div(a.Invested).Mul(decimal.NewFromInt(100)))
+		} else {
+			t.UnrealizedPctReason = strp(ReasonNotMeaningful)
 		}
 		t.TotalPnL = moneyP(a.MarketValue.Sub(a.Invested).Add(a.Realized).Add(a.IDCWIncome))
 	default:

@@ -220,9 +220,50 @@ func TestDegenerateReturns(t *testing.T) {
 	}
 	tv := d("100")
 	signs := ComputeReturns(ReturnsIn{AsOf: asOf, Flows: flows("2022-01-01", "-100", "2022-06-01", "-100"), Terminal: &tv, HasOpen: true, PurchaseCash: d("200")})
-	// A terminal of 100 for 200 invested still has a sign change; the root is -0.5 per year or so.
-	if signs.XIRRPct == nil && (signs.XIRRReason == nil) {
-		t.Errorf("signs: %+v", signs)
+	// 200 invested over 2022 and a terminal value of 100 on 2025-01-01: a loss, so the XIRR is negative.
+	// B15 review S10: the value is asserted, not just "something came back".
+	if signs.XIRRReason != nil || signs.XIRRPct == nil {
+		t.Fatalf("signs: %+v", signs)
+	}
+	near(t, "signs", signs.XIRRPct, -0.21994)
+	if signs.AbsPct == nil || *signs.AbsPct != -50 {
+		t.Errorf("signs abs: %v", signs.AbsPct)
+	}
+}
+
+// B15 review S2 / S10 (MFHX-01): dust is clamped only against held units, at the exact 0.001 boundary.
+func TestDustBoundaries(t *testing.T) {
+	buy := tx(1, TypePurchase, "2024-01-01", "10.0000", "10", "100", "0")
+	cases := []struct {
+		name   string
+		units  string
+		wantOK bool
+	}{
+		{"exactly 0.001 over is clamped", "10.0010", true},
+		{"0.0011 over is rejected", "10.0011", false},
+		{"exactly held", "10.0000", true},
+	}
+	for _, c := range cases {
+		_, err := Replay([]Txn{buy, tx(2, TypeRedemption, "2024-02-01", c.units, "11", "110", "0")}, day("2024-03-01"))
+		var ie *InsufficientError
+		if c.wantOK && err != nil || !c.wantOK && !errors.As(err, &ie) {
+			t.Errorf("%s: %v", c.name, err)
+		}
+	}
+	// Nothing held: even a 0.0005-unit redemption is an oversell (no clamp against zero units).
+	var ie *InsufficientError
+	if _, err := Replay([]Txn{tx(1, TypeRedemption, "2024-01-01", "0.0005", "10", "0.005", "0")}, day("2024-03-01")); !errors.As(err, &ie) || !ie.Held.IsZero() {
+		t.Errorf("dust redemption with nothing held: %v", err)
+	}
+	// Fully redeemed, then a dust redemption: still an oversell.
+	_, err := Replay([]Txn{buy, tx(2, TypeRedemption, "2024-02-01", "10", "11", "110", "0"), tx(3, TypeRedemption, "2024-02-02", "0.0005", "11", "0.0055", "0")}, day("2024-03-01"))
+	if !errors.As(err, &ie) || ie.TxnID != 3 {
+		t.Errorf("dust after a full exit: %v", err)
+	}
+	// Dust left over by a redemption stays held (B15R-3): units are never deleted silently.
+	pos, err := Replay([]Txn{buy, tx(2, TypeRedemption, "2024-02-01", "9.9996", "11", "109.9956", "0")}, day("2024-03-01"))
+	if err != nil || !pos.Units().Equal(d("0.0004")) || len(pos.Rounded) != 0 {
+		t.Errorf("leftover dust: %v units %s", err, pos.Units())
 	}
 }
 
@@ -445,5 +486,26 @@ func TestSharedFolioAcrossFunds(t *testing.T) {
 	in.GroupFolio = true
 	if g := Build(in); len(g.Items) != 2 || *g.Items[0].Folio != "F1" {
 		t.Errorf("folio grouping %+v", g.Items)
+	}
+}
+
+// MFHX-18 (N3): a null unrealized percentage always has a reason; a zero cost base is "n/m".
+func TestUnrealizedPctReason(t *testing.T) {
+	// A zero-cost lot (a free allotment recorded with a zero amount, only reachable through a restore).
+	in := baseInput("2024-06-10", []Txn{tx(1, TypePurchase, "2023-01-01", "10", "10", "0", "0")},
+		map[int32]SchemeNAV{1: {Latest: nav("2024-06-10", "20")}})
+	r := Build(in)
+	h := r.Items[0]
+	if h.UnrealizedPct != nil || h.UnrealizedPctReason == nil || *h.UnrealizedPctReason != "n/m" {
+		t.Errorf("holding: pct %v reason %v", h.UnrealizedPct, h.UnrealizedPctReason)
+	}
+	if r.Totals.UnrealizedPct != nil || r.Totals.UnrealizedPctReason == nil || *r.Totals.UnrealizedPctReason != "n/m" {
+		t.Errorf("totals: pct %v reason %v", r.Totals.UnrealizedPct, r.Totals.UnrealizedPctReason)
+	}
+	// A normal holding has the percentage and no reason.
+	ok := Build(baseInput("2024-06-10", []Txn{tx(1, TypePurchase, "2023-01-01", "10", "10", "100", "0")},
+		map[int32]SchemeNAV{1: {Latest: nav("2024-06-10", "20")}}))
+	if ok.Items[0].UnrealizedPct == nil || ok.Items[0].UnrealizedPctReason != nil || *ok.Items[0].UnrealizedPct != 100 {
+		t.Errorf("normal holding: %+v", ok.Items[0])
 	}
 }

@@ -38,6 +38,7 @@ func newMFHEnv(t *testing.T) *mfhEnv {
 	imp := importers.New(e.pool, js, 380, zerolog.Nop())
 	imp.Now = func() time.Time { return mfhNow }
 	imp.DBSize = func(context.Context) (int64, error) { return 10 << 20, nil }
+	imp.MFXLSXEnabled = true // the xlsx path is off by default (B15R-1); tests turn it on and have their own flag-off test
 	mfh := mfhold.New(e.pool)
 	mfh.Now = func() time.Time { return mfhNow }
 	pf := portfolio.New(e.pool)

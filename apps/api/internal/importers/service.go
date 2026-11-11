@@ -136,6 +136,10 @@ type Service struct {
 	// DBSize returns the current database size in bytes (tests replace it).
 	DBSize func(ctx context.Context) (int64, error)
 
+	// MFXLSXEnabled turns the .xlsx path of the mf_statement import on (env MF_XLSX_ENABLED, default
+	// off until the owner's first real upload confirms the layout, spike S18 / B15R-1). CSV is always on.
+	MFXLSXEnabled bool
+
 	// mfRefresh queues mf_refresh for statement schemes without NAV rows (optional).
 	mfRefresh MFRefresher
 
