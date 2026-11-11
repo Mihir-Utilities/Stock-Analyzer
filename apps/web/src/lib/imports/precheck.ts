@@ -18,6 +18,23 @@ export interface Precheck {
 }
 
 export function precheckFile(file: { name: string; size: number }, kind: ImportKind): Precheck {
+  if (kind === "mf_statement") {
+    // D-MF3: CSV or .xlsx (also .txt), 2 MB; the type is checked by content on the server.
+    if (!/\.(csv|txt|xlsx)$/i.test(file.name)) {
+      return {
+        blocked:
+          "Only .csv or .xlsx statements can be imported. Choose a file that ends in .csv or .xlsx.",
+        warning: null,
+      };
+    }
+    if (file.size > 2 * MIB) {
+      return {
+        blocked: `This file is ${formatMb(file.size / MIB).text}, above the limit of 2 MB for a statement.`,
+        warning: null,
+      };
+    }
+    return { blocked: null, warning: null };
+  }
   if (!/\.csv$/i.test(file.name)) {
     return {
       blocked: "Only .csv files can be imported. Choose a file that ends in .csv.",

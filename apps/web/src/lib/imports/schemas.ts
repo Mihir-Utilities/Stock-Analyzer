@@ -14,6 +14,7 @@ export const IMPORT_KINDS = [
   "shareholding",
   "corporate_actions",
   "instrument_meta",
+  "mf_statement",
 ] as const;
 export type ImportKind = (typeof IMPORT_KINDS)[number];
 
@@ -21,6 +22,8 @@ export const rowIssueSchema = z.object({
   row: z.number(),
   column: z.string(),
   message: z.string(),
+  /** Stable machine code, set for mf_statement issues (for example UNMAPPED_FUND). */
+  code: z.string().optional(),
 });
 export type RowIssue = z.infer<typeof rowIssueSchema>;
 
@@ -47,6 +50,67 @@ export const commitResultSchema = z.object({
   warnings: z.array(z.string()),
 });
 export type CommitResult = z.infer<typeof commitResultSchema>;
+
+// ---- mf_statement (docs/03 12a, MFH-23, MFH-24) -----------------------------------------------
+
+const optStr = z.string().nullish().catch(null);
+
+export const mfCandidateSchema = z.object({
+  scheme_code: z.number(),
+  name: z.string(),
+  fund_house: optStr,
+  plan: z.string().catch("unknown"),
+  option: z.string().catch("unknown"),
+  isin: optStr,
+  on_watchlist: z.boolean().catch(false),
+  has_nav: z.boolean().catch(false),
+});
+export type MfCandidate = z.infer<typeof mfCandidateSchema>;
+
+export const mfUnmappedSchema = z.object({
+  fund_name: z.string(),
+  fund_name_key: optStr,
+  rows: z.number().catch(0),
+  candidates: z.array(z.unknown()).catch([]),
+});
+
+export const mfFundSchema = z.object({
+  fund_name: z.string(),
+  fund_name_key: optStr,
+  rows: z.number().catch(0),
+  mapped: z.boolean().catch(false),
+  scheme_code: z.number().nullish().catch(null),
+  scheme_name: optStr,
+  plan: optStr,
+  option: optStr,
+});
+export type MfFund = z.infer<typeof mfFundSchema>;
+
+export const mfDupGroupSchema = z.object({ rows: z.array(z.number()), count: z.number() });
+
+export const mfPreviewSchema = z.object({
+  date_from: optStr,
+  date_to: optStr,
+  rows_by_type: z.record(z.string(), z.number()).catch({}),
+  funds: z.array(z.unknown()).catch([]),
+  unmapped_funds: z.array(z.unknown()).catch([]),
+  fund_mappings: z.array(z.unknown()).catch([]),
+  duplicate_groups: z.array(z.unknown()).catch([]),
+  duplicates_in_db: z.number().catch(0),
+});
+export type MfPreview = z.infer<typeof mfPreviewSchema>;
+
+/** Validate and revalidate answer of the mf_statement kind: the usual envelope plus `mf`. */
+export const mfValidateSchema = validateResultSchema.extend({ mf: mfPreviewSchema });
+export type MfValidateResult = z.infer<typeof mfValidateSchema>;
+
+export const mfCommitResultSchema = z.object({
+  batch_id: z.number(),
+  inserted: z.number(),
+  skipped_duplicates: z.number().catch(0),
+  warnings: z.array(z.string()).catch([]),
+});
+export type MfCommitResult = z.infer<typeof mfCommitResultSchema>;
 
 export const pricesAdjustmentSchema = z.object({
   value: z.boolean().nullable(),

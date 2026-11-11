@@ -74,7 +74,7 @@ export const portfolioSummarySchema = z.object({
     absolute_return_basis: str,
   }),
   benchmark: z.object({
-    code: z.string(),
+    code: z.string().nullish(),
     xirr_pct: num,
     reason: str,
     level_as_of: str,

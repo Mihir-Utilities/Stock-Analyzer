@@ -37,7 +37,11 @@ function renderWith(ui: React.ReactElement, routes: Record<string, Handler>) {
 
 const val = (id: string) => (screen.getByTestId(id) as HTMLInputElement).value;
 
-beforeEach(() => vi.unstubAllGlobals());
+// These tests cover the stocks screen; the UI default is All (MFH-14), so they open the Equity view.
+beforeEach(() => {
+  vi.unstubAllGlobals();
+  window.history.replaceState(null, "", "/portfolio?view=equity");
+});
 afterEach(() => vi.unstubAllGlobals());
 
 async function fillForm(

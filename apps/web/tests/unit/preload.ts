@@ -11,6 +11,9 @@ export async function preloadPortfolioSections(): Promise<void> {
     import("@/components/portfolio/AdjustmentsPanel"),
     import("@/components/portfolio/HoldingsSection"),
     import("@/components/portfolio/TxnSection"),
+    import("@/components/portfolio/MfHoldingsSection"),
+    import("@/components/portfolio/MfChartsSection"),
+    import("@/components/portfolio/MfTxnSection"),
   ]);
 }
 

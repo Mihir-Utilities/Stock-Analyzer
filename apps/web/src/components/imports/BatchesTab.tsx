@@ -40,6 +40,19 @@ function dependentsText(error: unknown): string {
   return `A portfolio adjustment${count} uses a corporate action of this batch, so nothing was changed. Remove the adjustment first, then undo the batch.`;
 }
 
+/** 409 UNDO_BREAKS_HOLDINGS (docs/03 12a, MFH-20): a later redemption would exceed the units held. */
+export function breaksHoldingsText(error: unknown): string {
+  const d = error instanceof ApiError ? error.details : undefined;
+  const code = d?.scheme_code;
+  const folio = d?.folio;
+  const date = d?.date;
+  const where =
+    code !== undefined && folio !== undefined && typeof date === "string"
+      ? ` (scheme ${String(code)}, folio ${String(folio)}, from ${formatDate(date).text})`
+      : "";
+  return `Undoing this batch would leave a later redemption selling more units than you held${where}, so nothing was changed. Edit or delete that redemption first, then undo the batch.`;
+}
+
 const BATCH_PAGE = 50;
 
 const headingClass =
@@ -77,7 +90,11 @@ export function BatchesTab({ now }: { now?: number } = {}) {
       setFailure({
         batch: id,
         code: e instanceof ApiError ? e.code : "",
-        text: isApiError(e, "UNDO_HAS_DEPENDENTS") ? dependentsText(e) : describeError(e),
+        text: isApiError(e, "UNDO_HAS_DEPENDENTS")
+          ? dependentsText(e)
+          : isApiError(e, "UNDO_BREAKS_HOLDINGS")
+            ? breaksHoldingsText(e)
+            : describeError(e),
       });
       void qc.invalidateQueries({ queryKey: ["import-batches"] });
     },
@@ -96,9 +113,10 @@ export function BatchesTab({ now }: { now?: number } = {}) {
       </div>
       <p className="mb-3 text-body-sm text-text-2" data-testid="batches-note">
         Results, balance sheet, fundamentals, shareholding and corporate action batches can be
-        undone for {UNDO_WINDOW_DAYS} days. An undo deletes the rows of the batch; values that the
-        batch overwrote are not restored. Price, stock list, holiday, sector and manual-entry
-        batches cannot be undone: import corrected data instead.
+        undone for {UNDO_WINDOW_DAYS} days, and so can mutual fund statement batches. An undo
+        deletes the rows of the batch; values that the batch overwrote are not restored. Price,
+        stock list, holiday, sector and manual-entry batches cannot be undone: import corrected data
+        instead.
       </p>
       {done ? (
         <section
