@@ -155,6 +155,8 @@ Returns plain hyperlinks from `config/research_links.json` with `{symbol}`/`{nam
 ```
 `hidden_reason` enum: `model_not_better_than_baseline`, `insufficient_history`, `low_liquidity`, `near_corporate_action`, `no_model`, `stale_data`. Buckets: `strongly_down` (p<0.40), `slightly_down` (0.40-0.47), `neutral` (0.47-0.53), `slightly_up` (0.53-0.60), `strongly_up` (>0.60). Trend/risk are always shown when data suffices (rule-based, not ML).
 
+**Implementation notes (B14, decisions B14-1/2/7):** `data` also carries `state` (`ok|no_model|insufficient_universe|insufficient_history|guardrail_failed`) and `state_reason`; with no active model every horizon is `{days, shown:false, hidden_reason:"no_model"}` (hidden horizons never carry `p_up`, `bucket` or `band`) and `model`/`track_record`/`ref_close`/`as_of` are null with a reason. Each horizon also carries its own `model` card and `track_record`; the top-level ones mirror the first horizon that has them. `trend`/`risk` are `{score,label}` or null with `reason`. An old symbol answers `data.redirect_symbol`; an unknown symbol is `404 NOT_FOUND`. The response never contains a single target price.
+
 ## 7. Live refresh jobs
 
 ### POST `/stocks/{symbol}/refresh`
@@ -174,6 +176,8 @@ Same pattern, kind `mf_refresh`. Unknown scheme code: `404 NOT_FOUND`; non-numer
 
 ### GET `/market/overview`
 `{ "indices": [ {code,name,value,change,change_pct,as_of} ]  /* from `market_series` (reserved prices.csv symbols NIFTY50/INDIAVIX); otherwise empty with reason */, "vix": {...}, "movers": { "gainers": [...top 10 by day change among tracked, min volume filter], "losers": [...] }, "market_status": { "is_open": false, "next_open": "2026-10-12T03:45:00Z", "holiday": null } }`. Market hours 09:15-15:30 IST Mon-Fri excluding `market_holiday` (from `config/market_holidays.json`). There is no FII/DII data in the Safe Edition.
+
+**Implementation notes (B14, B14-4/9/10):** `indices[]` items are `{code,name,value,change,change_pct (percent number),as_of,source,unit}` with `change` null and `change_reason` when there is no previous value; empty `indices` carries `indices_reason`, a missing `vix` is null with `vix_reason`. `movers` items are `{symbol,name,close,change_pct,volume,as_of}`. `market_status` adds `holiday_list_loaded`. `GET /market/holidays` returns `{year, holidays:[{date,description}], year_loaded, note}`; the default year is the current IST year, an invalid year is 422.
 
 ### GET `/market/holidays?year=`
 List from `market_holiday` (trading) plus `"year_loaded": true|false`. When no rows exist for the year, `year_loaded=false` and the app treats only weekends as closed.
@@ -307,7 +311,7 @@ The token is never returned by any endpoint and never logged.
 
 ## 15. Admin / ops
 
-`GET /admin/status` -> `{ "sources": [source_health rows], "jobs": [latest ingestion_run per job], "coverage": { "instruments": 2231, "tracked": 612, "with_prices": 598, "with_fundamentals": 410, "with_shareholding": 401 }, "db": { "size_mb": 210, "tables": [ {name, mb, rows} ], "warn_level": "ok|70|85|95|limit" }, "holiday_list_missing_years": [2026], "version": "git sha", "storage_policy": {...}` . `GET /healthz` -> `{ "ok": true }` (no DB call; also served at the root path `/healthz` for the hosting health check). `GET /readyz` (auth) -> DB ping.
+`GET /admin/status` -> `{ "sources": [source_health rows], "jobs": [latest ingestion_run per job], "coverage": { "instruments": 2231, "tracked": 612, "with_prices": 598, "with_fundamentals": 410, "with_shareholding": 401 }, "db": { "size_mb": 210, "tables": [ {name, mb, rows} ], "warn_level": "ok|70|85|95|limit" }, "holiday_list_missing_years": [2026], "version": "git sha", "storage_policy": {...}` . Implementation notes (B14, B14-5/6/8): `sources` omit the dormant broker; `jobs` and `recent_errors` (newest 50 failed or partial runs with an error) use the table columns of docs/02 as keys; `db` also has `limit_mb` and `used_pct`, and `warn_level` is computed at read time; `storage_policy` is a flat key/value object; `version` is the `GIT_SHA` env var or `unknown`. No broker session state (manual price mode). `GET /healthz` -> `{ "ok": true }` (no DB call; also served at the root path `/healthz` for the hosting health check). `GET /readyz` (auth) -> DB ping.
 
 ## 16. Rate limits and security headers
 - Per-IP login: 10/min. Authenticated general: 120/min. Refresh endpoints: as above. Return `X-RateLimit-*` headers (optional).

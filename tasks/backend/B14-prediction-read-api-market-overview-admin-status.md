@@ -35,8 +35,8 @@ Expose forecasts with guardrail reasons, the market overview and the admin/data-
 2. Implement DB size queries and thresholds (70/85%)
 
 ## Acceptance criteria (all must be true)
-- [ ] ML-04, ML-05, ML-06, ML-12-related API behavior pass
-- [ ] Admin shows broker session state and holiday-file status
+- [x] ML-04, ML-05, ML-06, ML-12-related API behavior pass (PRD-01..05, no target-price key scan)
+- [x] Admin shows holiday-file status; broker session state is not shown in manual price mode (amendment, B14-8)
 
 ## Required tests (from `docs/07-edge-cases-tests.md`)
 - `ML-04` (see `docs/07-edge-cases-tests.md`)

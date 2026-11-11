@@ -77,6 +77,12 @@ type Deps struct {
 	// Actions serves PATCH /stocks/{symbol}/actions/{id} (B07); nil keeps it a 501 stub.
 	Actions ActionService
 
+	// Predict, Market and Admin serve the prediction read API, the market overview/holidays and the
+	// admin status (B14); nil keeps those routes 501 stubs.
+	Predict PredictService
+	Market  MarketService
+	Admin   AdminService
+
 	// LoginLimiter (default 10/min per IP) guards POST /auth/login; GeneralLimiter (default
 	// 120/min) guards authenticated routes (docs/03 section 16).
 	LoginLimiter   *Limiter

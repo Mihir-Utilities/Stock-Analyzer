@@ -1658,7 +1658,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data: sources[] (source_health rows without the dormant broker: source, checked_at, ok, latency_ms, consecutive_failures, disabled_until, note), jobs[] (latest ingestion_run per job: job, started_at, finished_at, status, rows_written, items_total, items_failed, error), recent_errors[] (newest 50 failed or partial runs with an error text, same keys), coverage {instruments, tracked, with_prices, with_fundamentals, with_shareholding}, db {size_mb, limit_mb, used_pct, tables[{name, mb, rows}], warn_level ok|70|85|95|limit}, holiday_list_missing_years[] (persistent while a year has no trading-holiday row), version (git sha from GIT_SHA, else unknown), storage_policy (flat key/value object). No broker session state in manual price mode. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2588,7 +2588,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data: experimental (always true), disclaimer, state (ok|no_model|insufficient_universe|insufficient_history|guardrail_failed) with state_reason, as_of, ref_close (null with ref_close_reason), horizons[] ({days 5|21, shown, hidden_reason enum or null; when shown p_up (fraction), bucket, band {q10,q50,q90 fractions, price_q10,price_q50,price_q90}}; hidden horizons carry no numbers; model card and live track_record per horizon), trend and risk ({score,label} or null with reason), model and track_record (mirror of the first horizon with an active model, else null). Never a single target price. An old symbol answers data.redirect_symbol. 404 NOT_FOUND for an unknown symbol. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2599,6 +2599,8 @@ export interface operations {
                      *       "data": {
                      *         "experimental": true,
                      *         "disclaimer": "Experimental. Not investment advice. Statistical models often fail out of sample.",
+                     *         "state": "ok",
+                     *         "state_reason": null,
                      *         "as_of": "2026-10-09",
                      *         "ref_close": 3500,
                      *         "horizons": [
@@ -2638,6 +2640,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
             /** @description Error envelope */
@@ -2794,7 +2797,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data: indices[] ({code,name,value,change,change_pct (percent number),as_of,source,unit}; empty with indices_reason no_index_series), vix (same shape or null with vix_reason), movers {gainers[], losers[]} (tracked stocks, day change on adjusted closes in percent, newest two bar dates, minimum turnover 0.5 crore; movers_reason when empty), market_status {is_open, next_open (UTC), holiday (name or null), holiday_list_loaded}. No FII/DII data. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2828,7 +2831,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success (stub: 501 until implemented) */
+            /** @description Success. data: year, holidays[] ({date,description}; trading segment only), year_loaded (false: weekends only, note explains). A year outside 2000-2100 or not an integer is 422. */
             200: {
                 headers: {
                     [name: string]: unknown;
