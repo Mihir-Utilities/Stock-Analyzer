@@ -12,7 +12,6 @@ export const SESSION_COOKIE = "session";
 export function isPwaShellPath(pathname: string): boolean {
   return (
     pathname === "/manifest.json" ||
-    pathname === "/manifest.webmanifest" ||
     pathname === "/sw.js" ||
     pathname === "/offline.html" ||
     pathname.startsWith("/icons/")

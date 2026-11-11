@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   description: "Personal research tool. Not investment advice.",
   robots: { index: false, follow: false },
   manifest: "/manifest.json",
-  icons: { icon: "/icons/icon-192.png", apple: "/icons/icon-192.png" },
+  icons: { icon: "/icons/icon-192.png", apple: "/icons/icon-180.png" },
 };
 
 export const viewport: Viewport = {

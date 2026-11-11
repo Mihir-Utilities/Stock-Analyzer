@@ -19,7 +19,9 @@ import {
 import { DB_SOFT_LIMIT_MB, warnLevelFor, warnLevelText } from "@/lib/imports/storage";
 import {
   adminStatusFullSchema,
+  extraSources,
   holidayWarning,
+  isPaused,
   recentErrors,
   runDurationMs,
   SOURCE_ORDER,
@@ -67,10 +69,12 @@ function SourceCard({
   name,
   row,
   asOf,
+  now,
 }: {
   name: string;
   row: SourceRow | undefined;
   asOf: string | null;
+  now: number;
 }) {
   const title = `Source: ${name}`;
   if (!row) {
@@ -108,7 +112,11 @@ function SourceCard({
         />
         <Dd
           label="Paused until"
-          value={row.disabled_until ? formatDateTime(row.disabled_until) : plain("Not paused")}
+          value={
+            isPaused(row.disabled_until, now)
+              ? formatDateTime(row.disabled_until ?? null)
+              : plain("Not paused")
+          }
         />
         {row.note ? <Dd label="Note" value={plain(row.note)} /> : null}
       </dl>
@@ -222,10 +230,30 @@ function CoverageCard({
   );
 }
 
-function DbCard({ db, asOf }: { db: NonNullable<AdminStatusFull["db"]>; asOf: string | null }) {
+/** The server's own limit (storage_policy.db_soft_limit_mb) wins over the built-in default. */
+export function softLimitMb(policy: AdminStatusFull["storage_policy"]): number {
+  const v = policy?.db_soft_limit_mb;
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : DB_SOFT_LIMIT_MB;
+}
+
+const MAX_TABLES = 10;
+const MAX_ERROR_CHARS = 500;
+
+function DbCard({
+  db,
+  asOf,
+  limitMb,
+}: {
+  db: NonNullable<AdminStatusFull["db"]>;
+  asOf: string | null;
+  limitMb: number;
+}) {
   const size = db.size_mb ?? null;
-  const level = db.warn_level ?? (size === null ? "ok" : warnLevelFor(size));
-  const pct = size === null ? 0 : Math.max(0, Math.min(100, (size / DB_SOFT_LIMIT_MB) * 100));
+  const level = db.warn_level ?? (size === null ? "ok" : warnLevelFor(size, limitMb));
+  const pct = size === null ? 0 : Math.max(0, Math.min(100, (size / limitMb) * 100));
+  const tables = [...(db.tables ?? [])]
+    .sort((a, b) => (b.mb ?? -1) - (a.mb ?? -1))
+    .slice(0, MAX_TABLES);
   const tone =
     level === "ok" ? "bg-accent" : level === "limit" || level === "95" ? "bg-down" : "bg-warn";
   return (
@@ -242,8 +270,7 @@ function DbCard({ db, asOf }: { db: NonNullable<AdminStatusFull["db"]>; asOf: st
       {size === null ? null : (
         <div className="flex flex-col gap-2">
           <p className="text-body text-text-1" data-testid="admin-db-text">
-            <Fmt f={formatMb(size)} /> of {DB_SOFT_LIMIT_MB} MB (
-            <Fmt f={formatPercentOf(size, DB_SOFT_LIMIT_MB)} />)
+            <Fmt f={formatMb(size)} /> of {limitMb} MB (<Fmt f={formatPercentOf(size, limitMb)} />)
             {level === "ok"
               ? ""
               : `. Warning level: ${level === "limit" ? "at limit" : `${level}%`}`}
@@ -252,9 +279,9 @@ function DbCard({ db, asOf }: { db: NonNullable<AdminStatusFull["db"]>; asOf: st
             role="meter"
             aria-label="Database size"
             aria-valuemin={0}
-            aria-valuemax={DB_SOFT_LIMIT_MB}
-            aria-valuenow={Math.min(size, DB_SOFT_LIMIT_MB)}
-            aria-valuetext={`${formatMb(size).text} of ${DB_SOFT_LIMIT_MB} MB`}
+            aria-valuemax={limitMb}
+            aria-valuenow={Math.min(size, limitMb)}
+            aria-valuetext={`${formatMb(size).text} of ${limitMb} MB`}
             data-testid="admin-db-bar"
             data-level={level}
             className="relative h-3 w-full overflow-hidden rounded-chip border border-border bg-surface-2"
@@ -271,7 +298,7 @@ function DbCard({ db, asOf }: { db: NonNullable<AdminStatusFull["db"]>; asOf: st
           </div>
         </div>
       )}
-      {db.tables && db.tables.length > 0 ? (
+      {tables.length > 0 ? (
         <div
           className="mt-3 overflow-x-auto"
           role="region"
@@ -295,7 +322,7 @@ function DbCard({ db, asOf }: { db: NonNullable<AdminStatusFull["db"]>; asOf: st
               </tr>
             </thead>
             <tbody>
-              {db.tables.map((t) => (
+              {tables.map((t) => (
                 <tr key={t.name} className="border-t border-border">
                   <th scope="row" className="py-1 pr-3 font-medium text-text-1">
                     <span className="block max-w-48 truncate" title={t.name}>
@@ -316,6 +343,10 @@ function DbCard({ db, asOf }: { db: NonNullable<AdminStatusFull["db"]>; asOf: st
       ) : null}
     </Card>
   );
+}
+
+function truncateError(text: string): string {
+  return text.length > MAX_ERROR_CHARS ? `${text.slice(0, MAX_ERROR_CHARS)}…` : text;
 }
 
 function ErrorsCard({ jobs, asOf }: { jobs: readonly JobRow[]; asOf: string | null }) {
@@ -345,7 +376,7 @@ function ErrorsCard({ jobs, asOf }: { jobs: readonly JobRow[]; asOf: string | nu
               className="whitespace-pre-wrap break-words text-text-1"
               data-testid="admin-error-text"
             >
-              {j.error}
+              {truncateError(j.error ?? "")}
             </p>
           </li>
         ))}
@@ -412,7 +443,7 @@ const HOME_LINK =
   "touch-target inline-flex h-11 w-fit items-center rounded-control border border-border bg-surface-2 px-4 text-body-sm font-medium text-text-1 no-underline hover:bg-surface-3";
 
 /** Admin status screen (docs/06 section 6.12): data health, read only, no job buttons in v1. */
-export function AdminStatus() {
+export function AdminStatus({ now }: { now?: number } = {}) {
   const q = useAdminPage();
   const h1 = (
     <h1 className="text-title font-semibold text-text-1" data-testid="admin-status-title">
@@ -424,6 +455,7 @@ export function AdminStatus() {
     return (
       <div className="flex flex-col gap-3" data-testid="admin-status">
         {h1}
+        <h2 className="sr-only">Data health</h2>
         <Card title="Data health" state="loading" testId="admin-loading" />
       </div>
     );
@@ -454,6 +486,7 @@ export function AdminStatus() {
     return (
       <div className="flex flex-col gap-3" data-testid="admin-status">
         {h1}
+        <h2 className="sr-only">Data health</h2>
         <Card
           title="Data health"
           state="error"
@@ -467,6 +500,7 @@ export function AdminStatus() {
   }
 
   const { status: s, asOf } = q.data;
+  const nowMs = now ?? q.dataUpdatedAt; // the instant the data was fetched
   const jobs = s.jobs ?? [];
   const sources = s.sources ?? [];
   return (
@@ -478,7 +512,16 @@ export function AdminStatus() {
       </p>
       <div className="grid grid-cols-1 gap-4 desktop:grid-cols-3">
         {SOURCE_ORDER.map((n) => (
-          <SourceCard key={n} name={n} row={sources.find((r) => r.source === n)} asOf={asOf} />
+          <SourceCard
+            key={n}
+            name={n}
+            row={sources.find((r) => r.source === n)}
+            asOf={asOf}
+            now={nowMs}
+          />
+        ))}
+        {extraSources(sources).map((r) => (
+          <SourceCard key={r.source} name={r.source} row={r} asOf={asOf} now={nowMs} />
         ))}
       </div>
       <HolidayCard years={s.holiday_list_missing_years ?? []} asOf={asOf} />
@@ -496,7 +539,7 @@ export function AdminStatus() {
           />
         )}
         {s.db ? (
-          <DbCard db={s.db} asOf={asOf} />
+          <DbCard db={s.db} asOf={asOf} limitMb={softLimitMb(s.storage_policy)} />
         ) : (
           <Card
             title="Database size"

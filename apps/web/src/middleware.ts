@@ -34,6 +34,6 @@ export function middleware(request: NextRequest) {
 export const config = {
   // Everything except Next's static assets and files in /public that carry no HTML.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|theme-init.js|manifest.webmanifest|manifest.json|sw.js|offline.html|icons/).*)",
+    "/((?!(?:_next/static|_next/image|icons)(?:/|$)|(?:favicon\\.ico|theme-init\\.js|manifest\\.json|sw\\.js|offline\\.html)$).*)",
   ],
 };

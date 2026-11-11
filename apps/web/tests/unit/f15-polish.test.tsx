@@ -45,19 +45,72 @@ function matrixPaths(): string[] {
   return out;
 }
 
-/** A mapped id is real when it (or its static part) appears in the source; dynamic ids are matched by prefix or suffix. */
+/**
+ * Every test id the source really declares: a string literal (static id) or a template literal
+ * (`row-${x}` becomes the pattern `^row-.+$`) after `data-testid`, `testId` or a `...TestId` key.
+ */
+const TESTID_RE =
+  /(?:data-testid|[A-Za-z]*[tT]estId)\s*[=:]\s*\{?\s*(?:"([^"\n]+)"|'([^'\n]+)'|`([^`]*)`)/g;
+const realStatic = new Set<string>();
+/** A declared template id. `leading` ones start with a hole (`${testId}-title`): the hole is a prop. */
+const realPatterns: Array<{ re: RegExp; leading: boolean }> = [];
+const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+for (const m of allSrc.matchAll(TESTID_RE)) {
+  const tpl = m[3];
+  if (tpl !== undefined && tpl.includes("${")) {
+    const parts = tpl.split(/\$\{[^}]*\}/).map(escapeRe);
+    // `${testId}-title`: the first hole is a prop; it only counts with a real static tail (>= 3 letters).
+    const leading = parts[0] === "" && /[A-Za-z]{3}/.test(parts[1] ?? "");
+    if (parts[0] === "" && !leading) continue; // `${a}-${b}`: could be any id, so it proves nothing
+    const body = parts.reduce(
+      (acc, part, i) => (i === 0 ? part : `${acc}${i === 1 && leading ? "(.+)" : ".+"}${part}`),
+      "",
+    );
+    realPatterns.push({ re: new RegExp(`^${body}$`), leading });
+  } else {
+    realStatic.add(m[1] ?? m[2] ?? tpl ?? "");
+  }
+}
+
+/** `testPrefix="fnd-period"` props: components that append `-${key}` to a declared prefix. */
+const realPrefixes = [...allSrc.matchAll(/testPrefix="([^"]+)"/g)].map((m) => m[1]!);
+
+/** True when a declared template produces exactly `id`. A leading hole must be a declared static id. */
+function templateMakes(id: string): boolean {
+  if (realPrefixes.some((p) => id.startsWith(`${p}-`) && id.length > p.length + 1)) return true;
+  return realPatterns.some(({ re, leading }) => {
+    const hit = re.exec(id);
+    return hit !== null && (!leading || realStatic.has(hit[1] ?? ""));
+  });
+}
+
+/**
+ * A mapped id (`admin-jobs`, or `badge-*` for a family) is real only on a FULL match: the id itself
+ * is a declared static id or is produced by a declared template; a `*` family matches a static id
+ * of that shape or a template that produces ids of that shape. No prefix or suffix guessing
+ * (F15R-B1).
+ */
 function idExists(id: string): boolean {
-  const base = id.replace(/\*/g, "");
-  if (allSrc.includes(base)) return true;
-  const parts = base.split("-");
-  const prefix = parts.slice(0, -1).join("-");
-  const suffix = parts.slice(1).join("-");
+  if (!id.includes("*")) return realStatic.has(id) || templateMakes(id);
+  const family = new RegExp(`^${id.split("*").map(escapeRe).join(".+")}$`);
   return (
-    (prefix.length > 3 && allSrc.includes(prefix)) || (suffix.length > 3 && allSrc.includes(suffix))
+    [...realStatic].some((r) => family.test(r)) ||
+    templateMakes(id.replace(/\*/g, "X")) ||
+    templateMakes(id.replace(/\*/g, "X-X"))
   );
 }
 
 describe("UI-09 field coverage matrix", () => {
+  it("matches whole ids only: a prefix, a suffix or a typo is not enough (F15R-B1)", () => {
+    expect(idExists("admin-jobs-table")).toBe(true);
+    expect(idExists("admin-job")).toBe(false); // prefix of a real id
+    expect(idExists("jobs-table")).toBe(false); // suffix of a real id
+    expect(idExists("admin-jobs-tabel")).toBe(false);
+    expect(idExists("admin-source-mfapi")).toBe(true); // produced by a template
+    expect(idExists("admin-source-*")).toBe(true);
+    expect(idExists("admin-nothing-*")).toBe(false);
+  });
+
   it("every mapped field names an existing test id, or says why it is not rendered", () => {
     const bad: string[] = [];
     for (const [endpoint, fields] of Object.entries(fieldMap)) {
@@ -96,10 +149,7 @@ describe("UI-09 field coverage matrix", () => {
       const path = key.split(" (")[0]!.replace(/^\w+ /, "");
       // The OpenAPI paths use {kind}/{code}; the field map names concrete or templated paths.
       const norm = (p: string) => p.replace(/\{[^}]+\}/g, "{}");
-      if (!paths.map(norm).includes(norm(path))) {
-        const generic = path.replace(/\/results$|\/shareholding$|\/actions$/, (m) => m);
-        if (!paths.map(norm).includes(norm(generic))) unknown.push(key);
-      }
+      if (!paths.map(norm).includes(norm(path))) unknown.push(key);
     }
     expect(unknown).toEqual([]);
   });
@@ -201,9 +251,11 @@ describe("PWA-01 manifest and icons", () => {
     expect(isPwaShellPath("/portfolio")).toBe(false);
     expect(isPublicPath("/icons")).toBe(false);
     const matcher = read(join(web, "src/middleware.ts"));
-    for (const f of ["manifest.json", "sw.js", "offline.html", "icons/"]) {
+    for (const f of ["manifest\\\\.json", "sw\\\\.js", "offline\\\\.html", "icons"]) {
       expect(matcher).toContain(f);
     }
+    expect(matcher).not.toContain("webmanifest");
+    expect(isPwaShellPath("/manifest.webmanifest")).toBe(false);
   });
   it("the offline fallback exists and carries the disclaimer", () => {
     expect(read(join(web, "public/offline.html"))).toContain("Not investment advice");
@@ -217,7 +269,7 @@ interface FakeEvent {
   waitUntil(p: Promise<unknown>): void;
 }
 
-function loadWorker() {
+function loadWorker(search = "") {
   const handlers: Record<string, (e: unknown) => void> = {};
   const store = new Map<string, Map<string, unknown>>();
   const caches = {
@@ -239,7 +291,7 @@ function loadWorker() {
     delete: async (k: string) => store.delete(k),
   };
   const self = {
-    location: { origin: "https://app.test" },
+    location: { origin: "https://app.test", search },
     addEventListener: (t: string, h: (e: unknown) => void) => void (handlers[t] = h),
     skipWaiting: () => undefined,
     clients: { claim: async () => undefined },
@@ -256,6 +308,8 @@ function loadWorker() {
     caches,
     fetch: fetchMock,
     URL,
+    URLSearchParams,
+    Response,
     Promise,
     console,
   });
@@ -275,15 +329,14 @@ function loadWorker() {
 }
 
 describe("PWA-02 service worker caches the shell only", () => {
-  it("precaches the offline page, manifest and icons on install", async () => {
-    const w = loadWorker();
+  it("precaches the offline page and the icons (not the manifest) on install", async () => {
+    const w = loadWorker("?v=abc123");
     let done: Promise<unknown> = Promise.resolve();
     w.handlers["install"]!({ waitUntil: (p: Promise<unknown>) => (done = p) });
     await done;
-    expect([...(w.store.get("shell-v1")?.keys() ?? [])].sort()).toEqual([
+    expect([...(w.store.get("shell-abc123")?.keys() ?? [])].sort()).toEqual([
       "/icons/icon-192.png",
       "/icons/icon-512.png",
-      "/manifest.json",
       "/offline.html",
     ]);
   });
@@ -300,7 +353,7 @@ describe("PWA-02 service worker caches the shell only", () => {
     const w = loadWorker();
     await w.fire("GET", "https://app.test/_next/static/chunk-1.js").responded;
     await w.fire("GET", "https://app.test/portfolio", "navigate").responded;
-    const cache = w.store.get("shell-v1");
+    const cache = w.store.get("shell-dev");
     expect([...(cache?.keys() ?? [])]).toEqual(["/_next/static/chunk-1.js"]);
   });
 
@@ -312,6 +365,41 @@ describe("PWA-02 service worker caches the shell only", () => {
     w.fetchMock.mockRejectedValueOnce(new Error("offline"));
     const r = await w.fire("GET", "https://app.test/portfolio", "navigate").responded;
     expect(r).toBe("precached:/offline.html");
+  });
+
+  it("activate keeps only the cache of the current build (old builds are pruned)", async () => {
+    const w = loadWorker("?v=new2");
+    w.store.set("shell-old1", new Map([["/_next/static/old.js", "x"]]));
+    w.store.set("shell-new2", new Map());
+    let done: Promise<unknown> = Promise.resolve();
+    w.handlers["activate"]!({ waitUntil: (p: Promise<unknown>) => (done = p) });
+    await done;
+    expect([...w.store.keys()]).toEqual(["shell-new2"]);
+  });
+
+  it("a build id with odd characters cannot break the cache name", () => {
+    const w = loadWorker("?v=../x y");
+    let done: Promise<unknown> = Promise.resolve();
+    w.handlers["install"]!({ waitUntil: (p: Promise<unknown>) => (done = p) });
+    return done.then(() => expect([...w.store.keys()]).toEqual(["shell-..x" + "y"]));
+  });
+
+  it("an offline navigation with no cached offline page still answers with a plain Response", async () => {
+    const w = loadWorker();
+    w.fetchMock.mockRejectedValueOnce(new Error("offline"));
+    const r = (await w.fire("GET", "https://app.test/portfolio", "navigate").responded) as Response;
+    expect(r.status).toBe(503);
+    expect(await r.text()).toContain("offline");
+  });
+
+  it("the page registers the worker with the build id", () => {
+    expect(read(join(web, "src/components/shell/PwaRegister.tsx"))).toContain("/sw.js?v=");
+    expect(read(join(web, "next.config.ts"))).toContain("NEXT_PUBLIC_BUILD_ID");
+  });
+
+  it("/sw.js is served with a strict CSP (F15R-S10)", () => {
+    const cfg = read(join(web, "next.config.ts"));
+    expect(cfg).toContain("default-src 'none'; connect-src 'self'");
   });
 
   it("the worker source has no API path in its cache rules and no external host", () => {

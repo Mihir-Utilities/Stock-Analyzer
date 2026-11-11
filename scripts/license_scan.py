@@ -101,6 +101,9 @@ def classify(expression: str | None) -> str:
         return "unknown"
     order = {"ok": 0, "review": 1, "unknown": 2, "copyleft": 3}
     expr = expression.strip()
+    if expr.endswith(REVIEWED_MARK.strip()):  # hand-reviewed override: never plain "ok"
+        base = classify(expr[: -len(REVIEWED_MARK.strip())].strip())
+        return max(base, "review", key=order.__getitem__)
     if " OR " in expr:
         return min((classify(part) for part in re.split(r"\s+OR\s+", expr)), key=order.__getitem__)
     if " AND " in expr:
@@ -130,6 +133,11 @@ class Entry:
         return classify(self.license)
 
 
+# npm packages whose registry metadata has no licence field; the licence is taken from the package
+# repository (LICENSE file). Owner: re-check when the dependency is bumped (docs/OPEN_QUESTIONS.md F15R-1).
+NPM_LICENSE_OVERRIDES = {"parse-cache-control": "BSD-3-Clause"}  # dev only: lighthouse
+
+
 # ------------------------------------------------------------------ collectors
 def npm_entries(lockfile: Path) -> list[Entry]:
     if not lockfile.exists():
@@ -140,7 +148,7 @@ def npm_entries(lockfile: Path) -> list[Entry]:
         if not key:  # the root project itself
             continue
         name = pkg.get("name") or key.split("node_modules/")[-1]
-        lic = pkg.get("license")
+        lic = pkg.get("license") or NPM_LICENSE_OVERRIDES.get(name)
         if isinstance(lic, dict):
             lic = lic.get("type")
         if isinstance(lic, list):
@@ -205,9 +213,16 @@ def previous_python_licenses(notices: str) -> dict[tuple[str, str], str]:
 
 
 # Packages whose wheel metadata carries only a long licence text (no SPDX field, no classifier), so
-# the probe cannot read a licence. Reviewed by hand; used only when the probe found nothing.
-# scipy (pulled in by lightgbm, D07): BSD-3-Clause per https://github.com/scipy/scipy/blob/main/LICENSE.txt
-PY_LICENSE_OVERRIDES = {"scipy": "BSD-3-Clause"}
+# the probe cannot read a licence. Keyed by exact (name, version): a new version is UNKNOWN (fails
+# the scan) until someone reviews it and adds a row. Used only when the probe found nothing, and
+# reported with status "Review" (never "ok") so the owner sees it in THIRD_PARTY_NOTICES.md.
+# scipy (pulled in by lightgbm, D07): the project licence is BSD-3-Clause; the wheel also bundles
+# third-party components (e.g. HiGHS, Boost, Qhull, PROPACK, ...) whose licences are all covered by
+# the scipy LICENSE.txt shipped in the wheel (https://github.com/scipy/scipy/blob/main/LICENSE.txt).
+REVIEWED_MARK = " (reviewed override)"
+PY_LICENSE_OVERRIDES: dict[tuple[str, str], str] = {
+    ("scipy", "1.17.1"): "BSD-3-Clause" + REVIEWED_MARK,
+}
 
 
 def python_entries_from(
@@ -217,8 +232,9 @@ def python_entries_from(
 ) -> list[Entry]:
     entries = []
     for name, version in locked:
-        lic = installed.get((name, version)) or previous.get((name, version))
-        lic = lic or PY_LICENSE_OVERRIDES.get(name) or "UNKNOWN"
+        lic = installed.get((name, version))
+        lic = lic or PY_LICENSE_OVERRIDES.get((name, version)) or previous.get((name, version))
+        lic = lic or "UNKNOWN"
         entries.append(Entry("python", name, version, lic, "runtime/dev"))
     return entries
 

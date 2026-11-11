@@ -1,9 +1,9 @@
-import { cleanup, configure } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
 
-// Heavy tabs and sections load through next/dynamic (route budget, F15); the first import in a
-// worker has to be transformed, which can take longer than the 1 s default.
-configure({ asyncUtilTimeout: 5000 });
+// The default 1 s async timeout applies. Tests that render a page with next/dynamic sections
+// preload those modules in a beforeAll (see tests/unit/preload.ts), so the transform cost of the
+// first import is not charged to a findBy* call.
 
 afterEach(() => cleanup());
 

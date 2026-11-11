@@ -77,7 +77,7 @@ test("every nav entry opens a real page (UI-94)", async ({ page }) => {
   }
 });
 
-test("browse pages, links with an encoded symbol, and the unbuilt pages call no API (UI-95)", async ({
+test("browse pages, links with an encoded symbol, and the admin page makes one status call (UI-95)", async ({
   page,
 }) => {
   const calls: string[] = [];
@@ -88,15 +88,15 @@ test("browse pages, links with an encoded symbol, and the unbuilt pages call no 
   await page.getByTestId("stocks-more").click();
   await expect(page.getByTestId("stocks-link-M&M")).toHaveAttribute("href", "/stocks/M%26M");
   await expect(page.getByTestId("stocks-more")).toHaveCount(0);
-  for (const path of ["/admin/status"]) {
-    calls.length = 0;
-    await page.goto(path);
-    await expect(page.getByTestId("app-footer")).toBeVisible();
-    // The shell's search palette preloads the live stock index; the page itself calls nothing.
-    expect(calls.filter((c) => !c.startsWith("GET /auth") && c !== "GET /stocks/index")).toEqual(
-      [],
-    );
-  }
+  // /admin/status is built (F15): it makes exactly one GET /admin/status (a 501 is not retried,
+  // F15R-S2) and nothing else besides the shell's own calls.
+  calls.length = 0;
+  await page.goto("/admin/status");
+  await expect(page.getByTestId("admin-status-na-note")).toBeVisible();
+  // The shell's search palette preloads the live stock index.
+  expect(calls.filter((c) => !c.startsWith("GET /auth") && c !== "GET /stocks/index")).toEqual([
+    "GET /admin/status",
+  ]);
 });
 
 test.describe("axe, touch targets and overflow on the new screens (UI-97)", () => {

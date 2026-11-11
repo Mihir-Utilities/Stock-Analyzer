@@ -3,13 +3,15 @@ import { z } from "zod";
 // GET /admin/status (docs/03 section 15). Row shapes follow the table columns in docs/02
 // (`source_health`, `ingestion_run`); the doc names the rows but not their JSON keys, so every
 // field is optional and an absent one is shown as a dash with a reason (F15-1).
-const str = z.string().nullish();
-const num = z.number().nullish();
+// Every field degrades on its own: a value of an unexpected type becomes "absent" (shown as a dash
+// with a reason) instead of failing the whole response and blanking the page (F15R-S3).
+const str = z.string().nullish().catch(undefined);
+const num = z.number().nullish().catch(undefined);
 
 export const sourceRowSchema = z.object({
   source: z.string(),
   checked_at: str,
-  ok: z.boolean().nullish(),
+  ok: z.boolean().nullish().catch(undefined),
   latency_ms: num,
   consecutive_failures: num,
   disabled_until: str,
@@ -27,44 +29,73 @@ export const jobRowSchema = z.object({
   error: str,
 });
 
+/** An array whose bad rows are dropped one by one; a non-array is treated as absent. */
+function lenientRows<T extends z.ZodType>(row: T) {
+  return z
+    .preprocess((v) => {
+      if (!Array.isArray(v)) return undefined;
+      return v.filter((x) => row.safeParse(x).success);
+    }, z.array(row).nullish())
+    .catch(undefined);
+}
+
+const coverageSchema = z.object({
+  instruments: num,
+  tracked: num,
+  with_prices: num,
+  with_fundamentals: num,
+  with_shareholding: num,
+});
+
+const tableSchema = z.object({ name: z.string(), mb: num, rows: num });
+
+const dbSchema = z.object({
+  size_mb: num,
+  tables: lenientRows(tableSchema),
+  // An unknown level is ignored: the level is then derived from the size.
+  warn_level: z.enum(["ok", "70", "85", "95", "limit"]).nullish().catch(undefined),
+});
+
 export const adminStatusFullSchema = z.object({
-  sources: z.array(sourceRowSchema).nullish(),
-  jobs: z.array(jobRowSchema).nullish(),
-  coverage: z
-    .object({
-      instruments: num,
-      tracked: num,
-      with_prices: num,
-      with_fundamentals: num,
-      with_shareholding: num,
-    })
-    .nullish(),
-  db: z
-    .object({
-      size_mb: num,
-      tables: z.array(z.object({ name: z.string(), mb: num, rows: num })).nullish(),
-      warn_level: z.enum(["ok", "70", "85", "95", "limit"]).nullish(),
-    })
-    .nullish(),
-  holiday_list_missing_years: z.array(z.number()).nullish(),
+  sources: lenientRows(sourceRowSchema),
+  jobs: lenientRows(jobRowSchema),
+  coverage: coverageSchema.nullish().catch(undefined),
+  db: dbSchema.nullish().catch(undefined),
+  holiday_list_missing_years: z.array(z.number().int()).nullish().catch(undefined),
   version: str,
   // docs/03 writes `{...}`: keys are unspecified, so primitives are listed as key and value (F15-2).
-  storage_policy: z.record(z.string(), z.unknown()).nullish(),
+  storage_policy: z.record(z.string(), z.unknown()).nullish().catch(undefined),
 });
 
 export type AdminStatusFull = z.infer<typeof adminStatusFullSchema>;
 export type SourceRow = z.infer<typeof sourceRowSchema>;
 export type JobRow = z.infer<typeof jobRowSchema>;
 
-/** Sources the owner sees (docs/06 section 6.12). The broker is dormant in manual price mode. */
+/** Sources the owner sees first (docs/06 section 6.12). The broker is dormant in manual price mode. */
 export const SOURCE_ORDER = ["mfapi", "amfi", "telegram"] as const;
+
+/** Source rows the server sent beyond the known three (for example `broker`); never dropped. */
+export function extraSources(sources: readonly SourceRow[]): SourceRow[] {
+  const known: readonly string[] = SOURCE_ORDER;
+  return sources.filter((r) => !known.includes(r.source));
+}
+
+/** True only while `disabled_until` is a valid instant after `now`. */
+export function isPaused(disabledUntil: string | null | undefined, now: number): boolean {
+  if (!disabledUntil) return false;
+  const t = Date.parse(disabledUntil);
+  return Number.isFinite(t) && t > now;
+}
 
 /** Failed or partial latest runs that carry an error text (F15-3). */
 export function recentErrors(jobs: readonly JobRow[]): JobRow[] {
-  const when = (j: JobRow) => j.finished_at ?? j.started_at ?? "";
+  const when = (j: JobRow) => {
+    const t = Date.parse(j.finished_at ?? j.started_at ?? "");
+    return Number.isFinite(t) ? t : 0;
+  };
   return jobs
     .filter((j) => (j.status === "failed" || j.status === "partial") && !!j.error)
-    .sort((a, b) => when(b).localeCompare(when(a)))
+    .sort((a, b) => when(b) - when(a))
     .slice(0, 50);
 }
 

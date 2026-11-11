@@ -12,6 +12,13 @@ from numpy.typing import NDArray
 F64 = NDArray[np.float64]
 
 TARGET_COVERAGE = 0.8
+P_EPS = 1e-3  # an isotonic step function can output exactly 0 or 1; a forecast is never certain
+
+
+def clip_prob(p: F64) -> F64:
+    """Calibrated probability kept strictly inside (0, 1): ``[P_EPS, 1 - P_EPS]``."""
+    out: F64 = np.clip(p, P_EPS, 1.0 - P_EPS)
+    return out
 
 
 @dataclass(frozen=True)

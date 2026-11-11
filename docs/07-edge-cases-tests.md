@@ -340,7 +340,7 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ID | Scenario | Required behavior | Test |
 |---|---|---|---|
 | ML-01 | Lookahead | Changing prices after `t` leaves features at `t` unchanged | U |
-| ML-02 | Label alignment with holidays | Correct `t+h` rows | U |
+| ML-02 | Label alignment with holidays | A label is exactly h trading days ahead (holidays skipped); a window whose target day has no bar, or a bar on a non-trading day, has a NaN label (D07-19) | U |
 | ML-03 | Embargo/purge | No overlap | U |
 | ML-04 | Fewer than 20 eligible stocks | `insufficient_universe`; forecasts hidden | I |
 | ML-05 | Guardrail fails | `shown=false`, reason; UI explanation | I/E |
@@ -352,14 +352,22 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ML-11 | Determinism | Same data/seed -> same metrics | U |
 | ML-12 | No single target price anywhere in UI | Component test | E |
 | ML-13 | Cross-sectional rank at `t` uses only stocks on date `t`; a date with one stock drops the row | Per-date ranks unchanged when other dates change | U |
-| ML-14 | Random-noise data (guardrail function over 150 seeds and three full LightGBM runs) | Never passes the guardrail | U |
-| ML-15 | Each guardrail condition alone; fewer than 12 folds; only the last 8 folds count; deterministic verdict | Fails with the named check / `insufficient_folds` | U |
+| ML-14 | Random-noise data (guardrail function over 150 seeds, a calibrated near-0.5 weakly correlated model over 60 seeds, and full LightGBM runs on both horizons 5 and 21) | Never passes the guardrail; the `auc_mean` check is what blocks the LightGBM noise runs | U |
+| ML-15 | Each guardrail condition alone; fewer than 12 folds; only the last 8 folds count; deterministic verdict | The bootstrap lower bound alone blocks a good fold-mean AUC; fails with the named check / `insufficient_folds` | U |
 | ML-16 | Conformal band calibration | Coverage 80% on fresh data, small-sample coverage at least 80%, median stays inside the band | U |
 | ML-17 | Outcome resolution | `realized`, `direction_correct`, `in_band` per docs/05 10.7; flat return is not "up"; unknown inputs give null | U |
 | ML-18 | `predict` twice for the same `as_of`; gated model | Stored rows are never rewritten; gated values stored with `shown=false` | I |
 | ML-19 | Activation rule | Passing horizon -> active and previous retired; failing -> candidate without artifact, older active kept; newer passing run replaces a gated one | I |
 | ML-20 | Universe selection | Stock with < 750 bars or an unconfirmed action is excluded with a reason; a model trained on other features is not used | I/U |
 | ML-21 | Market series gaps | Filled forward by at most one row, longer gaps drop the row | U |
+| ML-22 | Calibration purge (ML-03 for the calibration set) | Isotonic and conformal fits of fold k never use an earlier out-of-fold row whose label window reaches fold k; the final calibrator uses all; isotonic output stays inside [0.001, 0.999] | U |
+| ML-23 | Live gate evidence | 100 resolved rows on fewer than 20 distinct dates never trip; a live AUC that cannot be computed (one class) is insufficient, not a pass (D07-17) | U/I |
+| ML-24 | `predict` with fewer than 20 eligible stocks | Writes nothing, status `insufficient_universe` even when an active model exists | I |
+| ML-25 | Newer failing run | Stored as `candidate` without artifact and sets `guardrail_pass=false` on the older active pair (hidden, tracked); a later passing run replaces it and is shown at once | I |
+| ML-26 | Recovery after a live trip | A newer passing run starts gated (`live_recovery`); shown only after >= 100 resolved on >= 20 dates without a trip; 99 rows, a trip, or an intervening passing run do not shortcut it (D07-18) | I |
+| ML-28 | Horizon with no model (`insufficient_folds`) | No `model_run` rows, no hidden prediction rows, `no_model`; `rows_written` counts only horizons with a model | I |
+| ML-29 | Outcome horizon | Resolved on exactly the h-th trading day (holidays skipped); a missing bar on that day leaves the prediction pending, a later bar does not stand in for it | I |
+| ML-30 | `predict` after `process_queued_jobs` | Result under `details.predict`; skipped (`no_model`, `no_new_bar`); a failure is logged with a traceback and never fails the queue; `CancelledError` propagates | U/I |
 
 ## SEC/API: security and API
 | ID | Scenario | Required behavior | Test |
@@ -425,7 +433,7 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | UI-03 | 320 px width | No horizontal scroll except sticky-column tables | E |
 | UI-04 | Dark/light parity and contrast | Pass | E |
 | UI-05 | Search 2,200 items | Opens < 100 ms; < 16 ms/keystroke | E |
-| UI-06 | Offline | Banner; cached views | E |
+| UI-06 | Offline | Banner while `navigator.onLine` is false; already loaded screens keep their data. The service worker caches the app shell only (offline page, icons, hashed static files), never an API response or a page, so there are no cached data views (see UI-06b, PWA-02) | E |
 | UI-07 | Chart with < 10 bars | Renders | E |
 | UI-08 | Long names | Truncate with tooltip | E |
 | UI-09 | Every API field visible somewhere | Field-coverage test against `06-frontend-spec.md` matrix | E |
@@ -750,3 +758,11 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ML-05 (UI) | Guardrail fails | `guardrail_failed` banner, each hidden horizon shows its reason and no numbers, the model card says "Not passed", no fan chart | U (`prediction-tab.test.tsx` ML-05) |
 | ML-06 (UI) | Every `hidden_reason` enum value | Each of the six values has its own plain-language copy and no numbers; an unconfirmed action ("near_corporate_action") tells the owner to confirm the possible split first and links to the Events tab | U (`prediction-tab.test.tsx` ML-06) |
 | ML-12 (UI) | No single target price anywhere | Only the reference close and a price RANGE are rendered (the median price is never shown); the fan chart is three range lines; "target price" appears only in the banner's negation; the prediction source files never name a target price | U (`prediction-tab.test.tsx` ML-12) |
+| F15R-01 | UI-09 guard matches whole ids (F15 review B1) | A mapped test id must equal a declared `data-testid`/`testId` string or be produced by a declared template; a prefix, a suffix or a typo fails; wildcard-mapped admin fields render their own text | U (`f15-polish.test.tsx`, `admin-status.test.tsx`) |
+| F15R-02 | 501 is not retried (F15 review S2) | `shouldRetry` is false for 501 / `NOT_IMPLEMENTED`; with the app's default query client the admin screen calls `GET /admin/status` exactly once and shows "Not available yet" at once; the e2e run sees exactly one call | U (`admin-status.test.tsx`, `api-client.test.ts`), E (`browse.spec.ts`) |
+| F15R-03 | One odd value does not blank Admin status (F15 review S3) | An unknown `warn_level`, a string where a number belongs, a broken job or table row, or a wrong-typed block degrades only that field or card; source rows beyond mfapi/amfi/telegram (broker) are kept and shown | U (`admin-status.test.tsx`) |
+| F15R-04 | Paused until (F15 review S4) | Shown only while `disabled_until` is after now (now injected in tests); a past, null or invalid value shows "Not paused" | U (`admin-status.test.tsx`) |
+| F15R-05 | Bundle gate cannot pass on nothing (F15 review S5) | Zero measured routes, fewer routes than `app/**/page.tsx` files, or a listed chunk missing on disk is an error | U (`bundle-budget.test.ts`) |
+| F15R-06 | Lighthouse gate uses the median of 3 runs (F15 review S6) | Median per category; a missing score is a failure; a pinned `lighthouse` devDependency is used (no `npx --yes`) | U (`bundle-budget.test.ts`), CI |
+| F15R-07 | Service worker cache per build (F15 review S10) | The cache name carries the build id (`/sw.js?v=`); activate deletes every other cache; the manifest is not precached; an offline navigation with no cached offline page still gets a Response; `/sw.js` is served with `default-src 'none'; connect-src 'self'` | U (`f15-polish.test.tsx`) |
+| F15R-08 | Duration rounding (F15 review nit) | 999.6 ms is `1.0 s`, 59.96 s is `1 min 00 s`, a value under 0.5 ms is `<1 ms` | U (`format.test.ts`) |

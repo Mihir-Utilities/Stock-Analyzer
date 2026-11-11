@@ -62,6 +62,7 @@ function png(size, safe) {
 }
 
 mkdirSync("public/icons", { recursive: true });
+writeFileSync("public/icons/icon-180.png", png(180, 0.6)); // apple-touch-icon
 writeFileSync("public/icons/icon-192.png", png(192, 0.6));
 writeFileSync("public/icons/icon-512.png", png(512, 0.6));
 writeFileSync("public/icons/icon-maskable-512.png", png(512, 0.45));
