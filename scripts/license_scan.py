@@ -130,6 +130,11 @@ class Entry:
         return classify(self.license)
 
 
+# npm packages whose registry metadata has no licence field; the licence is taken from the package
+# repository (LICENSE file). Owner: re-check when the dependency is bumped (docs/OPEN_QUESTIONS.md F15R-1).
+NPM_LICENSE_OVERRIDES = {"parse-cache-control": "MIT"}  # dev only: lighthouse
+
+
 # ------------------------------------------------------------------ collectors
 def npm_entries(lockfile: Path) -> list[Entry]:
     if not lockfile.exists():
@@ -140,7 +145,7 @@ def npm_entries(lockfile: Path) -> list[Entry]:
         if not key:  # the root project itself
             continue
         name = pkg.get("name") or key.split("node_modules/")[-1]
-        lic = pkg.get("license")
+        lic = pkg.get("license") or NPM_LICENSE_OVERRIDES.get(name)
         if isinstance(lic, dict):
             lic = lic.get("type")
         if isinstance(lic, list):

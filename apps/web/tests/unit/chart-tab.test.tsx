@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { preloadBeforeAll } from "./preload";
 import { StockPage } from "@/components/stock/StockPage";
 import { fail } from "../mocks/imports-fixtures";
 import { createMockFetch, type Handler } from "../mocks/mock-fetch";
@@ -66,6 +67,8 @@ beforeEach(() => {
   replace.mockReset();
 });
 afterEach(() => vi.unstubAllGlobals());
+
+preloadBeforeAll("stock");
 
 describe("Chart tab", () => {
   it("renders the chart, controls, indicator summary and no 'not built' placeholder", async () => {

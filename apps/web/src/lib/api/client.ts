@@ -183,12 +183,14 @@ export function createApiClient(deps: ClientDeps = {}) {
 
 export const apiRequest = createApiClient();
 
-/** TanStack Query retry policy: 2 retries, never for 4xx answers (docs/06 section 1). */
+/** TanStack Query retry policy: 2 retries, never for 4xx answers or 501 NOT_IMPLEMENTED (docs/06 section 1). */
 export function shouldRetry(failureCount: number, error: unknown): boolean {
   if (failureCount >= 2) return false;
   if (error instanceof ApiError) {
     if (error.status >= 400 && error.status < 500) return false;
     if (error.code === "BAD_RESPONSE") return false;
+    // An endpoint that is not built yet will not become built in two seconds (F15R-S2).
+    if (error.status === 501 || error.code === "NOT_IMPLEMENTED") return false;
   }
   return true;
 }

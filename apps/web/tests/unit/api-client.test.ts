@@ -154,6 +154,7 @@ describe("retry policy (docs/06 section 1: retry 2, backoff)", () => {
     expect(shouldRetry(1, down)).toBe(true);
     expect(shouldRetry(2, down)).toBe(false);
     expect(shouldRetry(0, nf)).toBe(false);
+    expect(shouldRetry(0, new ApiError("NOT_IMPLEMENTED", "x", 501))).toBe(false);
     expect(retryDelay(0)).toBeLessThan(retryDelay(1));
   });
 });

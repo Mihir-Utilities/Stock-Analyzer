@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { preloadBeforeAll } from "./preload";
 import { StockPage } from "@/components/stock/StockPage";
 import { fail, ok } from "../mocks/imports-fixtures";
 import { createMockFetch, type Handler } from "../mocks/mock-fetch";
@@ -52,6 +53,8 @@ beforeEach(() => {
   vi.unstubAllGlobals();
 });
 afterEach(() => vi.unstubAllGlobals());
+
+preloadBeforeAll("stock");
 
 describe("stock header (BRK-12, SYS-14 header part, UI-02)", () => {
   it("manual mode: no Refresh button, import chip and Import prices link, last close with unit/source/as-of", async () => {

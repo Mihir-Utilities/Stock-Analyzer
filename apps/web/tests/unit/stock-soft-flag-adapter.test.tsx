@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { preloadBeforeAll } from "./preload";
 import { StockBanners } from "@/components/stock/StockBanners";
 import { profileDataSchema } from "@/lib/stock/schemas";
 import * as fx from "../mocks/stock-fixtures";
@@ -21,6 +22,8 @@ vi.mock("@/lib/stock/soft-flag-adapter", async (orig) => ({
 }));
 
 afterEach(cleanup);
+
+preloadBeforeAll("stock");
 
 describe("soft flag adapter", () => {
   it("the banner renders from the adapter's list, not from the bars", () => {

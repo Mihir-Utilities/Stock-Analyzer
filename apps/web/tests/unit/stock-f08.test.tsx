@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { preloadBeforeAll } from "./preload";
 import { buildOption } from "@/components/charts/chart-data";
 import { StockPage } from "@/components/stock/StockPage";
 import {
@@ -77,6 +78,8 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 const sh = (r: MockReply) => shareholdingDataSchema.parse((r.body as { data: unknown }).data);
+
+preloadBeforeAll("stock");
 
 describe("ownership model (SHP-01..04, SHP-06)", () => {
   it("SHP-01: no MF figure keeps DII whole in a named series and has no MF series", () => {

@@ -267,6 +267,14 @@ describe("UI-24: review fixes (crore tier, grouping preference, F13a helpers, IS
     expect(formatDuration(1234).text).toBe("1.2 s");
     expect(formatDuration(125_000).text).toBe("2 min 05 s");
     expect(formatDuration(7_500_000).text).toBe("2 h 05 min");
+    // Rounding edges move to the next tier instead of printing `1000 ms` or `60.0 s`.
+    expect(formatDuration(999.4).text).toBe("999 ms");
+    expect(formatDuration(999.6).text).toBe("1.0 s");
+    expect(formatDuration(59_940).text).toBe("59.9 s");
+    expect(formatDuration(59_960).text).toBe("1 min 00 s");
+    expect(formatDuration(3_599_600).text).toBe("1 h 00 min");
+    expect(formatDuration(0.3).text).toBe("<1 ms");
+    expect(formatDuration(0).text).toBe("0 ms");
     for (const v of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY, -1]) {
       const f = formatDuration(v);
       expect([f.text, f.reason === null]).toEqual([DASH, false]);
