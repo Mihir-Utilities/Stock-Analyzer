@@ -1658,7 +1658,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success. data: sources[] (source_health rows without the dormant broker: source, checked_at, ok, latency_ms, consecutive_failures, disabled_until, note), jobs[] (latest ingestion_run per job: job, started_at, finished_at, status, rows_written, items_total, items_failed, error), recent_errors[] (newest 50 failed or partial runs with an error text, same keys), coverage {instruments, tracked, with_prices, with_fundamentals, with_shareholding}, db {size_mb, limit_mb, used_pct, tables[{name, mb, rows}], warn_level ok|70|85|95|limit}, holiday_list_missing_years[] (persistent while a year has no trading-holiday row), version (git sha from GIT_SHA, else unknown), storage_policy (flat key/value object). No broker session state in manual price mode. */
+            /** @description Success. data: sources[] (source_health rows without the dormant broker: source, checked_at, ok, latency_ms, consecutive_failures, disabled_until, note), jobs[] (latest non-skipped ingestion_run per job: job, started_at, finished_at, status, rows_written, items_total, items_failed, error, last_skipped_at when a skipped run is newer), recent_errors[] (newest 50 failed or partial runs with an error text, same keys), coverage {instruments, tracked, with_prices, with_fundamentals, with_shareholding}, db {size_mb, limit_mb, used_pct (null without a limit), tables[{name, mb, rows (planner estimate, null if never analyzed)}], warn_level ok|70|85|95|limit}, holiday_list_missing_years[] (persistent while a year has no trading-holiday row), version (git sha from GIT_SHA, else unknown), storage_policy (flat key/value object). No broker session state in manual price mode. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2588,7 +2588,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success. data: experimental (always true), disclaimer, state (ok|no_model|insufficient_universe|insufficient_history|guardrail_failed) with state_reason, as_of, ref_close (null with ref_close_reason), horizons[] ({days 5|21, shown, hidden_reason enum or null; when shown p_up (fraction), bucket, band {q10,q50,q90 fractions, price_q10,price_q50,price_q90}}; hidden horizons carry no numbers; model card and live track_record per horizon), trend and risk ({score,label} or null with reason), model and track_record (mirror of the first horizon with an active model, else null). Never a single target price. An old symbol answers data.redirect_symbol. 404 NOT_FOUND for an unknown symbol. */
+            /** @description Success. data: experimental (always true), disclaimer, state (ok|no_model|insufficient_universe|insufficient_history|guardrail_failed|training_aborted) with state_reason, as_of (last stored prediction date), ref_close (adj_close of that date; null with ref_close_reason), horizons[] ({days 5|21, shown, hidden_reason (worker enum plus the API-only awaiting_predictions and not_tracked) or null; when shown p_up (fraction), bucket, band {q10,q50,q90 fractions, price_q10,price_q50,price_q90}}; hidden horizons carry no numbers; model card and live track_record per horizon), trend and risk ({score,label} or null with reason), model and track_record (mirror of the first horizon with an active model, else null). Never a single target price. meta.as_of is the last stored prediction date (null with meta.as_of_reason no_data when none); meta.stale follows the holiday-aware calendar. An old symbol answers data.redirect_symbol. 404 NOT_FOUND for an unknown symbol. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2797,7 +2797,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success. data: indices[] ({code,name,value,change,change_pct (percent number),as_of,source,unit}; empty with indices_reason no_index_series), vix (same shape or null with vix_reason), movers {gainers[], losers[]} (tracked stocks, day change on adjusted closes in percent, newest two bar dates, minimum turnover 0.5 crore; movers_reason when empty), market_status {is_open, next_open (UTC), holiday (name or null), holiday_list_loaded}. No FII/DII data. */
+            /** @description Success. data: indices[] ({code,name,value,change,change_pct (percent number),as_of,source,unit}; empty with indices_reason no_index_series), vix (same shape or null with vix_reason), movers {gainers[], losers[]} (tracked stocks, day change on adjusted closes in percent between the newest bar date and the trading day just before it, minimum 60-day average traded value 0.5 crore; movers_reason no_prices_imported|no_common_dates|no_qualifying_movers when empty), market_status {is_open, next_open (UTC), holiday (name or null), holiday_list_loaded}. No FII/DII data. Only NIFTY50 and INDIAVIX are shown; the VIX unit is percent (annualised implied volatility). meta.as_of is the newest index or mover date (null with as_of_reason no_data), meta.stale from the holiday-aware calendar. */
             200: {
                 headers: {
                     [name: string]: unknown;

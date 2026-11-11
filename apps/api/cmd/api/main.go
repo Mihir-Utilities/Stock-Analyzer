@@ -80,6 +80,8 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	adminSvc := admin.New(pool, cfg.DBSoftLimitMB, getenv("GIT_SHA"))
+	adminSvc.Scrub = scrub.Scrub
 	router := httpx.NewRouter(httpx.Deps{Log: log, Pinger: pool, Accounts: accounts, Jobs: jobSvc, Alerts: alertDeps, Stocks: instSvc,
 		Prices: prices.New(pool, instSvc), OwnerData: ownerSvc,
 		MF:               mfService(pool, jobSvc),
@@ -89,7 +91,7 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 		Actions:          actions.New(pool, jobSvc, log),
 		Predict:          predict.New(pool),
 		Market:           market.New(pool),
-		Admin:            admin.New(pool, cfg.DBSoftLimitMB, getenv("GIT_SHA")),
+		Admin:            adminSvc,
 		TrustedProxyHops: cfg.TrustedProxyHops})
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),

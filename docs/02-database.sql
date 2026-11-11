@@ -330,6 +330,7 @@ CREATE TABLE prediction (
   hidden_reason text,
   UNIQUE (instrument_id, as_of, horizon_days, model_run_id)
 );
+CREATE INDEX prediction_model_run_idx ON prediction (model_run_id) WHERE p_up IS NOT NULL;  -- live track record per run (B14 review)
 
 CREATE TABLE prediction_outcome (
   prediction_id bigint PRIMARY KEY REFERENCES prediction(id) ON DELETE CASCADE,

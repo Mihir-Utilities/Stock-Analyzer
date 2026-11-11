@@ -20,13 +20,23 @@ const (
 	closeHour, closeMin = 15, 30
 	// MoverLimit is the number of gainers and losers returned.
 	MoverLimit = 10
-	// MinMoverTurnoverCr is the minimum value traded on the latest day (INR crore) for a stock to
-	// qualify as a mover; the spec says "min volume filter" without a number (B14-4).
-	MinMoverTurnoverCr = 0.5
-	vixCode            = "INDIAVIX"
+	// MinMoverADVCr is the minimum 60-day average traded value (INR crore, docs/05 10.6
+	// adv_value_60) for a stock to qualify as a mover. The spec says "min volume filter" without
+	// a number; the docs/05 liquidity number is used and the owner confirms it (B14-4).
+	MinMoverADVCr = 0.5
+	vixCode       = "INDIAVIX"
+	niftyCode     = "NIFTY50"
 )
 
-var indexNames = map[string]string{"NIFTY50": "Nifty 50", "INDIAVIX": "India VIX"}
+// indexNames is also the whitelist of market_series codes the overview shows.
+var indexNames = map[string]string{niftyCode: "Nifty 50", vixCode: "India VIX"}
+
+// Movers reasons (movers_reason).
+const (
+	ReasonNoPrices      = "no_prices_imported"
+	ReasonNoCommonDates = "no_common_dates"
+	ReasonNoQualifying  = "no_qualifying_movers"
+)
 
 // Service reads the market overview.
 type Service struct {
@@ -85,7 +95,10 @@ type Overview struct {
 	MoversReason  *string      `json:"movers_reason,omitempty"`
 	MarketStatus  Status       `json:"market_status"`
 
-	AsOf time.Time `json:"-"` // newest index or mover date, else now
+	// AsOf is the newest index or mover date (never the clock); nil when there is no data.
+	AsOf          *time.Time `json:"-"`
+	Stale         bool       `json:"-"`
+	StaleAgeHours float64    `json:"-"`
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -93,7 +106,7 @@ func ptr[T any](v T) *T { return &v }
 // Overview builds the overview.
 func (s *Service) Overview(ctx context.Context) (Overview, error) {
 	now := s.Now()
-	o := Overview{Indices: []IndexQuote{}, Movers: Movers{Gainers: []Mover{}, Losers: []Mover{}}, AsOf: now}
+	o := Overview{Indices: []IndexQuote{}, Movers: Movers{Gainers: []Mover{}, Losers: []Mover{}}}
 
 	codes, err := s.seriesCodes(ctx)
 	if err != nil {
@@ -107,6 +120,9 @@ func (s *Service) Overview(ctx context.Context) (Overview, error) {
 		if q == nil {
 			continue
 		}
+		if d, perr := time.Parse(time.DateOnly, q.AsOf); perr == nil {
+			o.AsOf = later(o.AsOf, d)
+		}
 		if code == vixCode {
 			o.VIX = q
 		} else {
@@ -119,11 +135,20 @@ func (s *Service) Overview(ctx context.Context) (Overview, error) {
 	if o.VIX == nil {
 		o.VIXReason = ptr("no_index_series")
 	}
-	if o.Movers, o.AsOf, err = s.movers(ctx, o.AsOf); err != nil {
+	cal, loaded, err := instruments.LoadCalendar(ctx, s.db, now)
+	if err != nil {
 		return o, err
 	}
-	if len(o.Movers.Gainers)+len(o.Movers.Losers) == 0 {
-		o.MoversReason = ptr("no_prices_imported")
+	var moverDate *time.Time
+	if o.Movers, o.MoversReason, moverDate, err = s.movers(ctx, cal); err != nil {
+		return o, err
+	}
+	if moverDate != nil {
+		o.AsOf = later(o.AsOf, *moverDate)
+	}
+	if o.AsOf != nil {
+		st := cal.PricesStaleness(now, o.AsOf, loaded)
+		o.Stale, o.StaleAgeHours = st.Stale, st.AgeHours
 	}
 	if o.MarketStatus, err = s.status(ctx, now); err != nil {
 		return o, err
@@ -131,8 +156,17 @@ func (s *Service) Overview(ctx context.Context) (Overview, error) {
 	return o, nil
 }
 
+// later returns the newer of a (may be nil) and d.
+func later(a *time.Time, d time.Time) *time.Time {
+	if a == nil || d.After(*a) {
+		return &d
+	}
+	return a
+}
+
 func (s *Service) seriesCodes(ctx context.Context) ([]string, error) {
-	rows, err := s.db.Query(ctx, `SELECT DISTINCT code FROM market_series ORDER BY code`)
+	rows, err := s.db.Query(ctx, `SELECT DISTINCT code FROM market_series WHERE code = ANY($1::text[]) ORDER BY code`,
+		[]string{niftyCode, vixCode})
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +206,7 @@ func (s *Service) quote(ctx context.Context, code string) (*IndexQuote, error) {
 	if name == "" {
 		name = code
 	}
-	q := &IndexQuote{Code: code, Name: name, Value: vals[0], AsOf: dates[0].Format(time.DateOnly), Source: "import", Unit: "index points"}
+	q := &IndexQuote{Code: code, Name: name, Value: vals[0], AsOf: dates[0].Format(time.DateOnly), Source: "import", Unit: unitOf(code)}
 	if len(vals) < 2 || vals[1] == 0 || !finite(vals[0]) || !finite(vals[1]) {
 		q.ChangeReason = ptr("no_previous_value")
 		return q, nil
@@ -182,6 +216,14 @@ func (s *Service) quote(ctx context.Context, code string) (*IndexQuote, error) {
 	return q, nil
 }
 
+// unitOf: the VIX is an annualised implied volatility (percent), not an index level in points.
+func unitOf(code string) string {
+	if code == vixCode {
+		return "percent (annualised implied volatility)"
+	}
+	return "index points"
+}
+
 func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
 
 func round(v float64, places int) float64 {
@@ -189,59 +231,87 @@ func round(v float64, places int) float64 {
 	return math.Round(v*p) / p
 }
 
-// moversSQL ranks tracked stocks by the day change between the two newest dates that carry bars.
-// Stocks need bars on both dates, a volume above the turnover floor, and no unconfirmed
-// (detected) corporate action in between, because the unadjusted gap would be a false move.
+// moversSQL ranks tracked stocks by the day change between the newest bar date ($3) and the trading
+// day just before it ($4). A stock needs a bar on both dates (never a multi-day gap), a 60-day average
+// traded value of at least $1 crore over its last 60 bars, and no unconfirmed (detected) corporate
+// action in between, because the unadjusted gap would be a false move.
 const moversSQL = `
-WITH d AS (
-  SELECT (SELECT max(p.trade_date) FROM price_daily p JOIN instrument i ON i.id = p.instrument_id
-          WHERE i.is_tracked AND NOT p.suspect) AS last_d
-), d2 AS (
-  SELECT d.last_d, (SELECT max(p.trade_date) FROM price_daily p JOIN instrument i ON i.id = p.instrument_id
-          WHERE i.is_tracked AND NOT p.suspect AND p.trade_date < d.last_d) AS prev_d FROM d
-), chg AS (
-  SELECT i.symbol, i.name, c.close, c.volume, c.trade_date,
+WITH chg AS (
+  SELECT i.id, i.symbol, i.name, c.close, c.volume, c.trade_date,
          (c.adj_close / q.adj_close - 1) * 100 AS pct
-  FROM d2
-  JOIN price_daily c ON c.trade_date = d2.last_d AND NOT c.suspect
-  JOIN price_daily q ON q.instrument_id = c.instrument_id AND q.trade_date = d2.prev_d AND NOT q.suspect
+  FROM price_daily c
+  JOIN price_daily q ON q.instrument_id = c.instrument_id AND q.trade_date = $4::date AND NOT q.suspect AND q.adj_close > 0
   JOIN instrument i ON i.id = c.instrument_id AND i.is_tracked AND i.status = 'active' AND i.instrument_kind = 'equity'
-  WHERE c.volume > 0 AND c.close * c.volume / 1e7 >= $1
+  WHERE c.trade_date = $3::date AND NOT c.suspect AND c.volume > 0
     AND NOT EXISTS (SELECT 1 FROM corporate_action a WHERE a.instrument_id = i.id AND a.status = 'detected'
-                    AND a.ex_date > d2.prev_d AND a.ex_date <= d2.last_d)
+                    AND a.ex_date > $4::date AND a.ex_date <= $3::date)
+), liq AS (
+  SELECT chg.* FROM chg
+  JOIN LATERAL (SELECT count(x.close * x.volume) AS n, avg(x.close * x.volume) / 1e7 AS adv
+                FROM (SELECT p.close, p.volume FROM price_daily p
+                      WHERE p.instrument_id = chg.id AND NOT p.suspect AND p.trade_date <= $3::date
+                      ORDER BY p.trade_date DESC LIMIT 60) x) a ON a.n = 60 AND a.adv >= $1
 )
-(SELECT 'g', symbol, name, close, volume, trade_date, pct FROM chg WHERE pct > 0 ORDER BY pct DESC, symbol LIMIT $2)
+(SELECT 'g', symbol, name, close, volume, trade_date, pct FROM liq WHERE pct > 0 ORDER BY pct DESC, symbol LIMIT $2)
 UNION ALL
-(SELECT 'l', symbol, name, close, volume, trade_date, pct FROM chg WHERE pct < 0 ORDER BY pct ASC, symbol LIMIT $2)`
+(SELECT 'l', symbol, name, close, volume, trade_date, pct FROM liq WHERE pct < 0 ORDER BY pct ASC, symbol LIMIT $2)`
 
-func (s *Service) movers(ctx context.Context, fallback time.Time) (Movers, time.Time, error) {
+// pairCountSQL counts the eligible stocks that have a bar on both movers dates ($1 newest, $2 previous).
+const pairCountSQL = `SELECT count(*) FROM price_daily c
+  JOIN price_daily q ON q.instrument_id = c.instrument_id AND q.trade_date = $2::date AND NOT q.suspect
+  JOIN instrument i ON i.id = c.instrument_id AND i.is_tracked AND i.status = 'active' AND i.instrument_kind = 'equity'
+  WHERE c.trade_date = $1::date AND NOT c.suspect`
+
+// movers returns the lists, the movers_reason (nil when there are movers) and the newest bar date.
+func (s *Service) movers(ctx context.Context, cal instruments.Calendar) (Movers, *string, *time.Time, error) {
 	m := Movers{Gainers: []Mover{}, Losers: []Mover{}}
-	rows, err := s.db.Query(ctx, moversSQL, MinMoverTurnoverCr, MoverLimit)
+	var last pgtype.Date
+	if err := s.db.QueryRow(ctx, `SELECT max(p.trade_date) FROM price_daily p JOIN instrument i ON i.id = p.instrument_id
+		WHERE i.is_tracked AND NOT p.suspect`).Scan(&last); err != nil {
+		return m, nil, nil, err
+	}
+	if !last.Valid {
+		return m, ptr(ReasonNoPrices), nil, nil
+	}
+	lastD := last.Time
+	prev := cal.PreviousTradingDate(lastD)
+	rows, err := s.db.Query(ctx, moversSQL, MinMoverADVCr, MoverLimit, lastD.Format(time.DateOnly), prev.Format(time.DateOnly))
 	if err != nil {
-		return m, fallback, err
+		return m, nil, &lastD, err
 	}
 	defer rows.Close()
-	asOf := fallback
 	for rows.Next() {
 		var side string
 		var mv Mover
 		var d pgtype.Date
 		if err := rows.Scan(&side, &mv.Symbol, &mv.Name, &mv.Close, &mv.Volume, &d, &mv.ChangePct); err != nil {
-			return m, fallback, err
+			return m, nil, &lastD, err
 		}
 		if !finite(mv.ChangePct) {
 			continue
 		}
 		mv.ChangePct = round(mv.ChangePct, 4)
 		mv.AsOf = d.Time.Format(time.DateOnly)
-		asOf = d.Time
 		if side == "g" {
 			m.Gainers = append(m.Gainers, mv)
 		} else {
 			m.Losers = append(m.Losers, mv)
 		}
 	}
-	return m, asOf, rows.Err()
+	if err := rows.Err(); err != nil {
+		return m, nil, &lastD, err
+	}
+	if len(m.Gainers)+len(m.Losers) > 0 {
+		return m, nil, &lastD, nil
+	}
+	var pairs int64
+	if err := s.db.QueryRow(ctx, pairCountSQL, lastD.Format(time.DateOnly), prev.Format(time.DateOnly)).Scan(&pairs); err != nil {
+		return m, nil, &lastD, err
+	}
+	if pairs == 0 {
+		return m, ptr(ReasonNoCommonDates), &lastD, nil
+	}
+	return m, ptr(ReasonNoQualifying), &lastD, nil
 }
 
 // Holiday is one row of GET /market/holidays.
