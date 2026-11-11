@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { DefinitionTip } from "@/components/ui/DefinitionTip";
 import { ExternalLink } from "@/components/ui/ExternalLink";
 import { Gauge, type GaugeBand } from "@/components/ui/Gauge";
+import { RISK_BANDS, TREND_BANDS } from "@/lib/stock/gauge-bands";
 import { Stat } from "@/components/ui/Stat";
 import { Timeline, type TimelineItem } from "@/components/ui/Timeline";
 import { getDefinition } from "@/lib/definitions";
@@ -175,18 +176,6 @@ export function KpiGrid({
 
 // ---- Gauges --------------------------------------------------------------------------------
 
-const TREND_BANDS: GaugeBand[] = [
-  { from: 0, to: 20, label: "Strong down", tone: "down" },
-  { from: 21, to: 40, label: "Down", tone: "warn" },
-  { from: 41, to: 60, label: "Sideways", tone: "info" },
-  { from: 61, to: 80, label: "Up", tone: "up" },
-  { from: 81, to: 100, label: "Strong up", tone: "up" },
-];
-const RISK_BANDS: GaugeBand[] = [
-  { from: 0, to: 33, label: "Low", tone: "up" },
-  { from: 33, to: 66, label: "Medium", tone: "warn" },
-  { from: 66, to: 100, label: "High", tone: "down" },
-];
 const QUALITY_BANDS: GaugeBand[] = [{ from: 0, to: 100, label: "Score", tone: "info" }];
 
 function scoreOf(s: Score | null | undefined): { value: number | null; reason: string } {

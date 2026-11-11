@@ -5,7 +5,24 @@ import {
   formatFraction,
   formatNumber,
 } from "@/lib/format";
-import type { ModelCard, TrackRecord } from "@/lib/stock/prediction";
+import { AsOfChip, SourceChip } from "@/components/ui/chips";
+import {
+  isUnreadable,
+  UNREADABLE_COPY,
+  type ModelCard,
+  type TrackRecord,
+  type Unreadable,
+} from "@/lib/stock/prediction";
+
+/** Source and as-of of one block (every block names both, or says the as-of is not served). */
+export function Provenance({ source, asOf }: { source: string; asOf: string | null }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2" data-testid="pred-provenance">
+      <SourceChip source={source} />
+      <AsOfChip asOf={asOf ?? "not served"} />
+    </div>
+  );
+}
 
 function Row({
   label,
@@ -34,20 +51,31 @@ function brierVerdict(model: number | null | undefined, base: number | null | un
 }
 
 /** Out-of-sample numbers of one run (docs/05 10.5). Numbers live here and in tooltips only. */
-export function ModelCardView({ model }: { model: ModelCard | null }) {
+export function ModelCardView({ model }: { model: ModelCard | null | Unreadable }) {
+  if (isUnreadable(model)) {
+    return (
+      <p data-testid="model-card-unreadable" className="text-body-sm text-text-1">
+        {UNREADABLE_COPY}: the model card could not be read, so nothing is claimed about the model.
+      </p>
+    );
+  }
   if (!model) {
     return (
       <p data-testid="model-card-empty" className="text-body-sm text-text-2">
-        No model card for this horizon: no model has been trained for it.
+        No model card is served for this horizon.
       </p>
     );
   }
   const why = (w: string) => ({ reason: w });
   return (
     <div data-testid="model-card" className="flex flex-col gap-1">
+      <Provenance
+        source="model run (out-of-fold validation)"
+        asOf={model.trained_at ? formatDateTime(model.trained_at).text : null}
+      />
       <dl className="m-0">
         <Row label="Version" testId="model-version">
-          {model.version || "not reported"}
+          {model.version?.trim() || "not reported"}
         </Row>
         <Row label="Trained" testId="model-trained">
           {formatDateTime(model.trained_at, why("training time not reported")).text}
@@ -72,57 +100,74 @@ export function ModelCardView({ model }: { model: ModelCard | null }) {
         </Row>
       </dl>
       <p data-testid="model-limits" className="text-caption text-text-2">
-        Scores are the average over the last 8 test periods the model had not seen. The calibration
-        plot and the AUC for each period are not served by the API yet. The model trains only on
-        stocks you track, so delisted stocks are missing (survivorship bias).
+        Scores are the average over the walk-forward test periods the model had not seen. The
+        calibration plot and the AUC of each test period are not shown yet: that is an open decision
+        for the owner (F09-1 in docs/OPEN_QUESTIONS.md). The model trains only on stocks you track,
+        so delisted stocks are missing (survivorship bias).
       </p>
     </div>
   );
 }
 
 /** Live record of the active model (docs/05 10.7): never a rate without a count. */
-export function TrackRecordView({ track }: { track: TrackRecord | null }) {
+export function TrackRecordView({ track }: { track: TrackRecord | null | Unreadable }) {
+  if (isUnreadable(track)) {
+    return (
+      <p data-testid="track-unreadable" className="text-body-sm text-text-1">
+        {UNREADABLE_COPY}: the live track record could not be read, so no count or rate is shown.
+      </p>
+    );
+  }
   if (!track) {
     return (
       <p data-testid="track-empty" className="text-body-sm text-text-2">
-        No live track record: nothing has been predicted and resolved yet.
+        No live track record is served for this horizon.
       </p>
     );
   }
+  const provenance = (
+    <Provenance source="live predictions resolved against later closes" asOf={null} />
+  );
   if (track.resolved <= 0) {
     return (
-      <p data-testid="track-none" className="text-body-sm text-text-2">
-        No resolved predictions yet
-        {track.since ? ` (tracking since ${formatDate(track.since).text})` : ""}. A forecast
-        resolves when its horizon has passed.
-        {track.reason ? ` Reason: ${track.reason.replaceAll("_", " ")}.` : ""}
-      </p>
+      <div className="flex flex-col gap-1">
+        {provenance}
+        <p data-testid="track-none" className="text-body-sm text-text-2">
+          No resolved predictions yet
+          {track.since ? ` (tracking since ${formatDate(track.since).text})` : ""}. A forecast
+          resolves when its horizon has passed.
+          {track.reason ? ` Reason: ${track.reason.replaceAll("_", " ")}.` : ""}
+        </p>
+      </div>
     );
   }
   return (
-    <dl data-testid="track-record" className="m-0">
-      <Row label="Resolved predictions" testId="track-resolved">
-        {formatCount(track.resolved).text}
-      </Row>
-      <Row label="Direction hit rate" testId="track-hit">
-        {
-          formatFraction(track.direction_hit_rate, {
-            decimals: 1,
-            reason: "no resolved predictions",
-          }).text
-        }
-      </Row>
-      <Row label="80% band coverage (target 80%)" testId="track-coverage">
-        {
-          formatFraction(track.band_coverage_80, {
-            decimals: 1,
-            reason: "no resolved predictions",
-          }).text
-        }
-      </Row>
-      <Row label="Tracking since" testId="track-since">
-        {formatDate(track.since, { reason: "not reported" }).text}
-      </Row>
-    </dl>
+    <div className="flex flex-col gap-1">
+      {provenance}
+      <dl data-testid="track-record" className="m-0">
+        <Row label="Resolved predictions" testId="track-resolved">
+          {formatCount(track.resolved).text}
+        </Row>
+        <Row label="Direction hit rate" testId="track-hit">
+          {
+            formatFraction(track.direction_hit_rate, {
+              decimals: 1,
+              reason: "no resolved predictions",
+            }).text
+          }
+        </Row>
+        <Row label="80% band coverage (target 80%)" testId="track-coverage">
+          {
+            formatFraction(track.band_coverage_80, {
+              decimals: 1,
+              reason: "no resolved predictions",
+            }).text
+          }
+        </Row>
+        <Row label="Tracking since" testId="track-since">
+          {formatDate(track.since, { reason: "not reported" }).text}
+        </Row>
+      </dl>
+    </div>
   );
 }

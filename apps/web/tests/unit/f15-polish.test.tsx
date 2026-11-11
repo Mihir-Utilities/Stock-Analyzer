@@ -29,9 +29,7 @@ const allSrc = walk(join(web, "src"))
   .join("\n");
 
 /** Matrix endpoints of docs/06 section 8 (first column) that the app does not render yet. */
-const NOT_BUILT = new Map<string, string>([
-  ["/prediction", "Prediction tab waits for D07/B14 (F15-5); no response fields are mapped yet"],
-]);
+const NOT_BUILT = new Map<string, string>();
 
 function matrixPaths(): string[] {
   const section = read(join(repo, "docs/06-frontend-spec.md"))
