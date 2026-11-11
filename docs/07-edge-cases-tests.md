@@ -939,7 +939,7 @@ Worker rows (INV-M, INV-S, INV-P, INV-D, INV-H, INV-E, INV-V, INV-L, INV-R) are 
 | INV-S04 | Best and worst calendar month (VS2) | Best = B (median 2.0), worst = A (1.5); C not eligible; fewer than 2 eligible months: both `null` (`too_few_months`) | U |
 | INV-S05 | Year column summary (VS3) | n 4, green 3, 75.00, avg 7.00, median 8.00, best +20.0 (2021), worst -8.0 (2020); partial first year and YTD excluded | U |
 | INV-S06 | All history, not only the displayed 10 years | A 14-year series: `seasonality.months[*].n_years` counts all years while `month_year` and `year_returns` return the last 10 calendar years | U |
-| INV-S07 | Data depth | `first_bar`, `last_bar`, `years_of_history` correct; a 14-month history has `n_years` of at most 1 per month and no share anywhere | U |
+| INV-S07 | Data depth | `first_bar`, `last_bar`, `years_of_history` correct; a 14-month history has `n_years` of at most 2 per month (the first month has no return, so one month appears twice) and no share anywhere (corrected by B16: the earlier text said at most 1) | U |
 | INV-S08 | `analysis` stays strict-JSON safe | No NaN/Infinity in any new block; every null scalar has its sibling `*_reason`; the snapshot grows by less than 20 KB and stays under 200 KB (extends RET-89) | U |
 | INV-P01 | Price position vector (VP1) | Range position 80.0 (band `upper`), distance from the 52-week highest close -6.6667, `pctile_52w` 70.0, `pctile_all` 50.0, distance from the highest close in history -30.0, extension over the average 5.0 | U |
 | INV-P02 | Band edges | Position exactly 100/3 is `middle`, just under is `lower`; exactly 200/3 is `upper` | U |

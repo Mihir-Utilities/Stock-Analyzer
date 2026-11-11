@@ -23,8 +23,10 @@ import numpy as np
 from worker import actions_db
 from worker.analytics import fundamentals as fnd
 from worker.analytics.actions import qty_multiplier
+from worker.analytics.inv_common import SETTING_KEYS, InvContext, InvSettings
 from worker.analytics.scores import RiskInput, risk_scores
 from worker.analytics.snapshot import DEFAULT_RISK_FREE, VERSION, Bars, build_snapshot
+from worker.marketdate import ist_today
 from worker.post_import import HOOKS, Hooks
 
 log = logging.getLogger("worker.analysis")
@@ -85,6 +87,24 @@ async def load_risk_free(pool: asyncpg.Pool) -> float:
     except (TypeError, ValueError):
         return DEFAULT_RISK_FREE
     return rate if 0.0 <= rate < 1.0 else DEFAULT_RISK_FREE
+
+
+async def load_inv_context(pool: asyncpg.Pool, now: datetime | None = None) -> InvContext:
+    """The IST date of this computation, the trading holidays and the ``INV_*`` settings with the
+    documented fallbacks (docs/05 12.0; INV-A06)."""
+    holidays = frozenset(
+        r["holiday_date"]
+        for r in await pool.fetch(
+            "SELECT holiday_date FROM market_holiday WHERE segment = 'trading'"
+        )
+    )
+    rows = await pool.fetch(
+        "SELECT key, value FROM app_setting WHERE key = ANY($1::text[])", list(SETTING_KEYS)
+    )
+    raw = {r["key"]: _loads(r["value"]) for r in rows}
+    return InvContext(
+        today=ist_today(now), holidays=holidays, settings=InvSettings.from_mapping(raw)
+    )
 
 
 async def load_fund_inputs(pool: asyncpg.Pool, iid: int, bars: Bars) -> fnd.FundInputs | None:
@@ -194,6 +214,7 @@ async def compute_analysis(
         await load_benchmark(pool),
         risk_free=await load_risk_free(pool),
         warnings=warnings,
+        inv_ctx=await load_inv_context(pool, now),
     )
     scores: dict[str, Any] = {}
     if snap is not None:

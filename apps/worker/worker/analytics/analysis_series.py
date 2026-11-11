@@ -9,6 +9,7 @@ per series, rounded to ``DIGITS`` decimals. Warm-up positions are ``null`` (neve
 from __future__ import annotations
 
 import math
+from collections.abc import Collection
 from datetime import date
 from typing import Any
 
@@ -16,6 +17,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from worker.analytics import returns as rt
+from worker.analytics.inv_months import MonthModel, month_cells
 
 F64 = NDArray[np.float64]
 
@@ -70,20 +72,20 @@ def histogram(close: F64, bins: int = HIST_BINS) -> dict[str, Any] | None:
     }
 
 
-def month_year(dates: list[date], close: F64) -> list[list[Any]]:
-    """Monthly return = month-end close over the previous month-end close, as ``[year, month,
-    percent]``. The first (partial) month of the history has no base and is omitted."""
-    month_end: dict[tuple[int, int], float] = {}
-    for d, c in zip(dates, close, strict=True):
-        month_end[(d.year, d.month)] = float(c)  # dates ascend, so the last write is month-end
-    keys = sorted(month_end)
-    out: list[list[Any]] = []
-    for prev, cur in zip(keys, keys[1:], strict=False):
-        base = month_end[prev]
-        pct = (month_end[cur] / base - 1.0) * 100.0 if base else math.nan
-        out.append([cur[0], cur[1], num(pct)])
-    cutoff = dates[-1].year - HEATMAP_YEARS
-    return [row for row in out if row[0] > cutoff]
+def month_year(
+    dates: list[date],
+    close: F64,
+    today: date | None = None,
+    holidays: Collection[date] = frozenset(),
+) -> list[list[Any]]:
+    """Monthly return = month-end close over the previous calendar month's close, as ``[year,
+    month, percent|None]`` for the last ``HEATMAP_YEARS`` years (docs/05 12.1). The first month has
+    no base and no cell. A month whose previous calendar month has no bar (or an incomplete one)
+    is ``None``, never paired across the gap (INV-4); a closed month whose prices stop short of
+    its last expected trading day is ``None`` too; the running month shows month to date.
+    ``today`` defaults to the last bar's date (this function never reads the clock)."""
+    model = MonthModel(dates, close, today or dates[-1], holidays)
+    return month_cells(model)[0]
 
 
 def calendar_days(dates: list[date], close: F64) -> dict[str, Any]:

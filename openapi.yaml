@@ -3882,6 +3882,12 @@ components:
               nullable: true
             recovered:
               type: "boolean"
+              nullable: true
+              description: "null when the stock never fell below a high (reason no_drawdown)."
+            reason:
+              type: "string"
+              nullable: true
+              description: "no_drawdown when depth_pct is 0 and the dates are null."
           required:
             - "depth_pct"
             - "recovered"
@@ -3892,6 +3898,10 @@ components:
         avg_underwater_depth_pct:
           type: "number"
           nullable: true
+        avg_underwater_depth_reason:
+          type: "string"
+          nullable: true
+          description: "no_drawdown when no row is below its running maximum."
         episodes_total:
           type: "integer"
         recovery:
@@ -4065,6 +4075,8 @@ components:
         as_of:
           type: "string"
           format: "date"
+        bars:
+          type: "integer"
         window_rows:
           type: "integer"
         current_vol_pct:
@@ -4166,6 +4178,8 @@ components:
         as_of:
           type: "string"
           format: "date"
+        bars:
+          type: "integer"
         amount_per_month_inr:
           type: "integer"
         price_basis:
@@ -4185,6 +4199,8 @@ components:
         as_of:
           type: "string"
           format: "date"
+        bars:
+          type: "integer"
         window:
           type: "string"
           enum:

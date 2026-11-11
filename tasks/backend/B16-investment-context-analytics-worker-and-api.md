@@ -5,7 +5,7 @@
 | Track | backend (worker `apps/worker`, Go API `apps/api`) |
 | Depends on | D05 (analysis snapshot and `analysis_series.py`, done), B04 (`/indicators` and `prices/expand.go`, done), B11 (watchlist service, done), T02 |
 | Size | L (S < 0.5 day, M 0.5-1.5 days, L 1.5-4 days of focused work) |
-| Status | PROPOSED (decision INV, 2026-11-11); do not start before the owner answers or accepts the defaults of `docs/OPEN_QUESTIONS.md` INV-1..INV-28 |
+| Status | BUILT (decision D-INV accepted 2026-11-11; calendar-month closing rule amends INV-5; notes and questions B16-1..B16-9 in `docs/OPEN_QUESTIONS.md`); awaiting review |
 
 ## Read first
 - docs/05-analytics-spec.md sections 1, 3, 4, 8.3 and **12** (every formula and golden vector)

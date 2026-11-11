@@ -1367,11 +1367,16 @@ export interface components {
                 trough_date?: string | null;
                 /** Format: date */
                 recovery_date?: string | null;
-                recovered: boolean;
+                /** @description null when the stock never fell below a high (reason no_drawdown). */
+                recovered: boolean | null;
+                /** @description no_drawdown when depth_pct is 0 and the dates are null. */
+                reason?: string | null;
             };
             underwater_rows?: number;
             time_under_water_pct?: number;
             avg_underwater_depth_pct?: number | null;
+            /** @description no_drawdown when no row is below its running maximum. */
+            avg_underwater_depth_reason?: string | null;
             episodes_total?: number;
             /** @description Thresholds 10 and 20. */
             recovery: {
@@ -1438,6 +1443,7 @@ export interface components {
         InvVolRegime: {
             /** Format: date */
             as_of: string;
+            bars?: number;
             window_rows: number;
             current_vol_pct?: number | null;
             percentile?: number | null;
@@ -1477,6 +1483,7 @@ export interface components {
         InvSipBacktest: {
             /** Format: date */
             as_of: string;
+            bars?: number;
             amount_per_month_inr: number;
             price_basis?: string;
             variants: components["schemas"]["InvSipVariant"][];
@@ -1485,6 +1492,7 @@ export interface components {
         InvRiskAdjusted: {
             /** Format: date */
             as_of: string;
+            bars?: number;
             /** @enum {string} */
             window: "3y";
             cagr_3y_pct?: number | null;

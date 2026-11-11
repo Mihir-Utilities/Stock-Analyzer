@@ -26,6 +26,10 @@ type WatchStock struct {
 	ChangeReason *string   `json:"change_reason"`
 	AddedAt      time.Time `json:"added_at"`
 	Note         string    `json:"note"`
+	// Seasonality is the current IST month's behaviour over past years (INV, docs/03 section 11);
+	// null with SeasonalityReason when no snapshot exists.
+	Seasonality       *WatchSeasonality `json:"seasonality"`
+	SeasonalityReason *string           `json:"seasonality_reason"`
 }
 
 // WatchFund is one watched mutual fund.
@@ -105,12 +109,15 @@ func (s *Service) List(ctx context.Context) (Watchlist, bool, error) {
 	rows, err := s.db.Query(ctx, `SELECT w.id, i.symbol, i.name, coalesce(w.note, ''), w.added_at,
 		b.trade_date, b.close, b.src_adjusted, p.trade_date, p.close,
 		EXISTS (SELECT 1 FROM corporate_action ca WHERE ca.instrument_id = i.id AND ca.status = 'confirmed'
-		  AND ca.action_type IN ('split','bonus') AND ca.ex_date > p.trade_date AND ca.ex_date <= b.trade_date)
+		  AND ca.action_type IN ('split','bonus') AND ca.ex_date > p.trade_date AND ca.ex_date <= b.trade_date),
+		a.as_of IS NOT NULL, a.seas::text
 		FROM watchlist_item w JOIN instrument i ON i.id = w.instrument_id
 		LEFT JOIN LATERAL (SELECT trade_date, close, src_adjusted FROM price_daily
 		  WHERE instrument_id = i.id AND NOT suspect ORDER BY trade_date DESC LIMIT 1) b ON true
 		LEFT JOIN LATERAL (SELECT trade_date, close FROM price_daily
 		  WHERE instrument_id = i.id AND NOT suspect AND trade_date < b.trade_date ORDER BY trade_date DESC LIMIT 1) p ON true
+		LEFT JOIN LATERAL (SELECT as_of, indicators #> '{analysis,seasonality}' AS seas FROM analysis_snapshot
+		  WHERE instrument_id = i.id ORDER BY as_of DESC LIMIT 1) a ON true
 		WHERE w.instrument_id IS NOT NULL ORDER BY w.added_at DESC, w.id DESC`)
 	if err != nil {
 		return out, false, err
@@ -122,10 +129,16 @@ func (s *Service) List(ctx context.Context) (Watchlist, bool, error) {
 		var bd, pd *time.Time
 		var bc, pc *float64
 		var srcAdj *bool
-		var inWindow bool
-		if err := rows.Scan(&ws.ID, &ws.Symbol, &ws.Name, &ws.Note, &ws.AddedAt, &bd, &bc, &srcAdj, &pd, &pc, &inWindow); err != nil {
+		var inWindow, hasSnap bool
+		var seas *string
+		if err := rows.Scan(&ws.ID, &ws.Symbol, &ws.Name, &ws.Note, &ws.AddedAt, &bd, &bc, &srcAdj, &pd, &pc, &inWindow, &hasSnap, &seas); err != nil {
 			return out, false, err
 		}
+		var raw []byte
+		if seas != nil {
+			raw = []byte(*seas)
+		}
+		ws.Seasonality, ws.SeasonalityReason = seasonalityFor(raw, hasSnap, bd != nil, today(now))
 		if bd != nil {
 			ws.LTP, ws.LTPAsOf = bc, strp(ymd(*bd))
 			st := cal.PricesStaleness(now, bd, true)

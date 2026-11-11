@@ -2,6 +2,7 @@ package prices
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -180,5 +181,42 @@ func TestParseParams(t *testing.T) {
 	p, err = ParseParams(map[string][]string{"range": {"MAX"}, "adjusted": {"false"}, "downsample": {"auto"}})
 	if err != nil || p.Range != "MAX" || p.Adjusted {
 		t.Fatalf("%+v %v", p, err)
+	}
+}
+
+// INV-A04: the investment-context blocks carry their own dates and pass through unchanged, while
+// the old arrays are still aligned to series.dates; INV-A01: an old snapshot without them works.
+func TestExpandIndicatorsPassesInvBlocksThrough(t *testing.T) {
+	blocks := `"month_year":[[2023,1,-10.0],[2023,2,null]],"month_year_reasons":[[2023,2,"incomplete_month_data"]],
+	  "year_returns":[{"year":2023,"return_pct":-1.99,"kind":"full"}],
+	  "seasonality":{"as_of":"2026-10-07","months":[{"month":1,"n_years":2}],"running":{"year":2026,"month":10}},
+	  "position":{"as_of":"2026-10-07"},"drawdown_profile":{"as_of":"2026-10-07"},"holding_periods":{"windows":[]},
+	  "entry_study":{"rows":[]},"vol_regime":{"band":"typical"},"sip_backtest":{"variants":[{"day":null}]},
+	  "risk_adjusted":{"window":"3y"}`
+	ind := `{"as_of":"2026-10-07","series":{"format":"columnar","dates":["2026-10-06","2026-10-07"],"sma50":[null,99.5]},
+	  "analysis":{"format":"columnar","drawdown":[0,-1],` + blocks + `}}`
+	got, err := ExpandIndicators([]byte(ind), []byte(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	an := got["analysis"].(map[string]any)
+	if fmt.Sprint(an["drawdown"]) != "[[2026-10-06 0] [2026-10-07 -1]]" {
+		t.Fatalf("drawdown not aligned: %v", an["drawdown"])
+	}
+	var want map[string]any
+	if err := json.Unmarshal([]byte("{"+blocks+"}"), &want); err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range want {
+		if !reflect.DeepEqual(an[k], v) {
+			t.Errorf("%s changed: %v != %v", k, an[k], v)
+		}
+	}
+	old, err := ExpandIndicators([]byte(`{"analysis":{"format":"columnar","drawdown":[0]}}`), []byte(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := old["analysis"].(map[string]any)["seasonality"]; ok {
+		t.Fatal("an old snapshot must not gain blocks")
 	}
 }

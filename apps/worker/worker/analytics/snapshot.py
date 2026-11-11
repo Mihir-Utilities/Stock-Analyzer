@@ -16,7 +16,11 @@ from numpy.typing import NDArray
 
 from worker.analytics import analysis_series as ser
 from worker.analytics import indicators as ind
+from worker.analytics import inv_months as inm
+from worker.analytics import investing as inv
 from worker.analytics import returns as rt
+from worker.analytics import sip
+from worker.analytics.inv_common import InvContext
 
 F64 = NDArray[np.float64]
 
@@ -94,6 +98,7 @@ def build_snapshot(
     *,
     risk_free: float = DEFAULT_RISK_FREE,
     warnings: list[str] | None = None,
+    inv_ctx: InvContext | None = None,
 ) -> dict[str, Any] | None:
     """The ``indicators`` jsonb of one stock, or ``None`` below ``MIN_BARS`` valid bars."""
     bars, dropped = _drop_invalid_prices(bars)
@@ -111,7 +116,7 @@ def build_snapshot(
     with np.errstate(all="ignore"):  # unknown stays null with a reason, never NaN/inf/raise
         technicals, series = _technicals(bars, hi, lo, col)
         returns = _returns(bars, bench, risk_free, col)
-        analysis = _analysis(bars, bench)
+        analysis = _analysis(bars, bench, inv_ctx or InvContext(today=bars.dates[-1]))
     return {
         "version": VERSION,
         "as_of": bars.dates[-1].isoformat(),
@@ -266,14 +271,18 @@ def _returns(
     return {"trading": trading, "calendar": calendar, "risk": risk}
 
 
-def _analysis(bars: Bars, bench: dict[date, float]) -> dict[str, Any]:
+def _analysis(bars: Bars, bench: dict[date, float], ctx: InvContext) -> dict[str, Any]:
     c, d = bars.adj_close, bars.dates
     window = ser.SERIES_ROWS
     beta_by_date = dict(rt.rolling_beta(d, c, bench))
+    vol21 = ser.rolling_vol(c, 21)
+    model = inm.MonthModel(d, c, ctx.today, ctx.holidays)
+    cells, cell_reasons = inm.month_cells(model)
+    st = ctx.settings
     return {
         "format": "columnar",  # drawdown/rolling_* align to `series.dates` (the last 750 rows)
         "drawdown": ser.drawdown_column(c),
-        "rolling_vol_21": ser.column(ser.rolling_vol(c, 21)[-window:]),
+        "rolling_vol_21": ser.column(vol21[-window:]),
         "rolling_vol_63": ser.column(ser.rolling_vol(c, 63)[-window:]),
         "rolling_beta_252": [
             None
@@ -282,8 +291,19 @@ def _analysis(bars: Bars, bench: dict[date, float]) -> dict[str, Any]:
             for day in d[-window:]
         ],
         "return_histogram": ser.histogram(c),
-        "month_year": ser.month_year(d, c),
+        "month_year": cells,
+        "month_year_reasons": cell_reasons,
         "calendar": ser.calendar_days(d, c),
+        # Investment-context blocks (docs/05 section 12, docs/03 4a): descriptions of past prices.
+        "year_returns": inm.year_returns(model),
+        "seasonality": inm.seasonality(model, len(d), st),
+        "position": inv.position(d, c),
+        "drawdown_profile": inv.drawdown_profile(d, c, st),
+        "holding_periods": inv.holding_periods(d, c, st),
+        "entry_study": inv.entry_study(d, c, st),
+        "vol_regime": inv.vol_regime(d, vol21, st),
+        "sip_backtest": sip.sip_backtest(d, c, st),
+        "risk_adjusted": inv.risk_adjusted(d, c),
     }
 
 
