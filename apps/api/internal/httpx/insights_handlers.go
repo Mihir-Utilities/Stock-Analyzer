@@ -46,7 +46,7 @@ func insightsHandler(rt route, d Deps) http.Handler {
 				if err != nil {
 					return err
 				}
-				WriteData(w, http.StatusOK, o, WithMeta(NewMeta(o.AsOf, "import", false, 0)))
+				WriteData(w, http.StatusOK, o, WithMeta(metaAsOf(o.AsOf, "import", o.Stale, o.StaleAgeHours)))
 				return nil
 			})
 		}
@@ -86,14 +86,26 @@ func stockPrediction(svc PredictService, w http.ResponseWriter, r *http.Request)
 		WriteData(w, http.StatusOK, map[string]any{"redirect_symbol": res.Redirect})
 		return nil
 	}
-	asOf := res.Now
+	var asOf *time.Time
 	if res.AsOf != nil {
 		if t, perr := time.Parse(time.DateOnly, *res.AsOf); perr == nil {
-			asOf = t
+			asOf = &t
 		}
 	}
-	WriteData(w, http.StatusOK, res, WithMeta(NewMeta(asOf, "model_run", false, 0)))
+	WriteData(w, http.StatusOK, res, WithMeta(metaAsOf(asOf, "model_run", res.Stale, res.StaleAgeHours)))
 	return nil
+}
+
+// metaAsOf builds the meta block from the data's own date, never from the clock. With no data the
+// as_of is null and as_of_reason says why (every value carries a date or a reason).
+func metaAsOf(asOf *time.Time, source string, stale bool, staleAgeHours float64) Meta {
+	if asOf == nil {
+		m := NewMeta(time.Time{}, source, false, 0)
+		m["as_of"] = nil
+		m["as_of_reason"] = "no_data"
+		return m
+	}
+	return NewMeta(*asOf, source, stale, staleAgeHours)
 }
 
 func marketHolidays(svc MarketService, w http.ResponseWriter, r *http.Request) error {

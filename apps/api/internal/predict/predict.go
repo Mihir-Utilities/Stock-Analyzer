@@ -31,8 +31,14 @@ const (
 	ReasonNearAction = "near_corporate_action"
 	ReasonNoModel    = "no_model"
 	ReasonStale      = "stale_data"
+	// API-only reasons (B14-11): the worker never writes them. awaiting_predictions: a model is active
+	// but the predict job has stored no row for this stock yet. not_tracked: the stock is not tracked,
+	// not active or not an equity, so the worker never predicts it.
+	ReasonAwaiting   = "awaiting_predictions"
+	ReasonNotTracked = "not_tracked"
 
 	freshTradingDays = 3 // docs/05 10.6: last bar within 3 trading days
+	actionWindowDays = 5 // docs/05 10.6: corporate action within 5 trading days either side
 )
 
 var reasons = map[string]bool{
@@ -123,8 +129,17 @@ type Result struct {
 	Model        *ModelCard   `json:"model"`
 	TrackRecord  *TrackRecord `json:"track_record"`
 
-	Redirect string    `json:"-"`
-	Now      time.Time `json:"-"`
+	Redirect      string    `json:"-"`
+	Now           time.Time `json:"-"`
+	Stale         bool      `json:"-"` // as_of is behind the expected last trading date
+	StaleAgeHours float64   `json:"-"`
+}
+
+type instInfo struct {
+	id       int32
+	symbol   string
+	viaAlias bool
+	eligible bool // tracked, active equity: the worker predicts it
 }
 
 type runRow struct {
@@ -149,20 +164,47 @@ type predRow struct {
 
 // Get builds the prediction response for a symbol.
 func (s *Service) Get(ctx context.Context, symbol string) (Result, error) {
-	id, canonical, viaAlias, err := s.resolve(ctx, symbol)
+	inst, err := s.resolve(ctx, symbol)
 	if err != nil {
 		return Result{}, err
 	}
-	if viaAlias {
-		return Result{Redirect: canonical}, nil
+	if inst.viaAlias {
+		return Result{Redirect: inst.symbol}, nil
 	}
+	id := inst.id
 	now := s.Now()
 	res := Result{Experimental: true, Disclaimer: Disclaimer, Horizons: []Horizon{}, Now: now}
+	cal, loaded, err := instruments.LoadCalendar(ctx, s.db, now)
+	if err != nil {
+		return Result{}, err
+	}
+
+	// One round trip per kind: the active run of every horizon, then one track-record aggregation.
+	actives := map[int]*runRow{}
+	var runIDs []int64
+	for _, h := range Horizons {
+		a, err := s.run(ctx, `model_name = $1 AND status = 'active' ORDER BY id DESC LIMIT 1`, "dir_"+strconv.Itoa(h)+"d")
+		if err != nil {
+			return Result{}, err
+		}
+		if a != nil {
+			actives[h] = a
+			runIDs = append(runIDs, a.id)
+		}
+	}
+	records, err := s.trackRecords(ctx, runIDs)
+	if err != nil {
+		return Result{}, err
+	}
 
 	anyActive := false
 	var newest *predRow
 	for _, h := range Horizons {
-		hz, pr, active, err := s.horizon(ctx, id, h, now)
+		var tr *TrackRecord
+		if a := actives[h]; a != nil {
+			tr = records[a.id]
+		}
+		hz, pr, active, err := s.horizon(ctx, inst, h, now, cal, actives[h], tr)
 		if err != nil {
 			return Result{}, err
 		}
@@ -178,6 +220,8 @@ func (s *Service) Get(ctx context.Context, symbol string) (Result, error) {
 	if newest != nil {
 		d := newest.asOf.Format(time.DateOnly)
 		res.AsOf, res.RefClose = &d, ptr(newest.refClose)
+		st := cal.PricesStaleness(now, &newest.asOf, loaded)
+		res.Stale, res.StaleAgeHours = st.Stale, st.AgeHours
 	} else {
 		res.RefReason = ptr("no_prediction")
 	}
@@ -192,22 +236,24 @@ func (s *Service) Get(ctx context.Context, symbol string) (Result, error) {
 
 func ptr[T any](v T) *T { return &v }
 
-func (s *Service) resolve(ctx context.Context, symbol string) (id int32, canonical string, viaAlias bool, err error) {
+func (s *Service) resolve(ctx context.Context, symbol string) (instInfo, error) {
+	var in instInfo
 	if !symbolPattern.MatchString(symbol) {
-		return 0, "", false, &NotFoundError{Symbol: symbol}
+		return in, &NotFoundError{Symbol: symbol}
 	}
-	err = s.db.QueryRow(ctx, `SELECT id, symbol FROM instrument WHERE upper(symbol) = upper($1::text)
-		ORDER BY (symbol = $1::text) DESC, id LIMIT 1`, symbol).Scan(&id, &canonical)
+	err := s.db.QueryRow(ctx, `SELECT id, symbol, (is_tracked AND status = 'active' AND instrument_kind = 'equity')
+		FROM instrument WHERE upper(symbol) = upper($1::text)
+		ORDER BY (symbol = $1::text) DESC, id LIMIT 1`, symbol).Scan(&in.id, &in.symbol, &in.eligible)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = s.db.QueryRow(ctx, `SELECT i.id, i.symbol FROM symbol_alias a JOIN instrument i ON i.id = a.instrument_id
 			WHERE upper(a.old_symbol) = upper($1::text) ORDER BY a.changed_on DESC NULLS LAST, a.instrument_id LIMIT 1`,
-			symbol).Scan(&id, &canonical)
-		viaAlias = err == nil
+			symbol).Scan(&in.id, &in.symbol)
+		in.viaAlias = err == nil
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, "", false, &NotFoundError{Symbol: symbol}
+		return instInfo{}, &NotFoundError{Symbol: symbol}
 	}
-	return id, canonical, viaAlias, err
+	return in, err
 }
 
 func (s *Service) run(ctx context.Context, where string, args ...any) (*runRow, error) {
@@ -231,12 +277,10 @@ func hidden(days int, reason string) Horizon {
 }
 
 // horizon builds one horizon. active reports whether an active direction model exists.
-func (s *Service) horizon(ctx context.Context, instID int32, h int, now time.Time) (Horizon, *predRow, bool, error) {
+func (s *Service) horizon(ctx context.Context, inst instInfo, h int, now time.Time, cal instruments.Calendar,
+	active *runRow, tr *TrackRecord) (Horizon, *predRow, bool, error) {
 	name := "dir_" + strconv.Itoa(h) + "d"
-	active, err := s.run(ctx, `model_name = $1 AND status = 'active' ORDER BY id DESC LIMIT 1`, name)
-	if err != nil {
-		return Horizon{}, nil, false, err
-	}
+	instID := inst.id
 	if active == nil {
 		latest, err := s.run(ctx, `model_name = $1 ORDER BY id DESC LIMIT 1`, name)
 		if err != nil {
@@ -253,19 +297,24 @@ func (s *Service) horizon(ctx context.Context, instID int32, h int, now time.Tim
 		return hidden(h, ReasonNoModel), nil, false, nil
 	}
 
-	tr, err := s.trackRecord(ctx, active.id)
-	if err != nil {
-		return Horizon{}, nil, true, err
+	if tr == nil { // the run has no stored prediction at all
+		tr = &TrackRecord{Reason: ptr("no_resolved_predictions")}
 	}
 	hz := Horizon{Days: h, Model: modelCard(active), TrackRecord: tr}
+	if !inst.eligible { // untracked, delisted or non-equity: the worker never predicts it
+		hz.HiddenReason = ptr(ReasonNotTracked)
+		return hz, nil, true, nil
+	}
 	var p predRow
 	var asOf pgtype.Date
-	err = s.db.QueryRow(ctx, `SELECT as_of, p_up, ret_q10, ret_q50, ret_q90, ref_close, shown, hidden_reason
+	err := s.db.QueryRow(ctx, `SELECT as_of, p_up, ret_q10, ret_q50, ret_q90, ref_close, shown, hidden_reason
 		FROM prediction WHERE instrument_id = $1 AND horizon_days = $2 AND model_run_id = $3
 		ORDER BY as_of DESC, id DESC LIMIT 1`, instID, h, active.id).
 		Scan(&asOf, &p.pUp, &p.q10, &p.q50, &p.q90, &p.refClose, &p.shown, &p.reason)
 	if errors.Is(err, pgx.ErrNoRows) {
-		hz.HiddenReason = ptr(ReasonHistory) // no stored prediction: untracked stock or too few bars
+		// An active model but no stored row: the predict job has not covered this stock yet. It is not
+		// a history problem (the worker writes insufficient_history itself when bars are missing).
+		hz.HiddenReason = ptr(ReasonAwaiting)
 		return hz, nil, true, nil
 	}
 	if err != nil {
@@ -282,15 +331,19 @@ func (s *Service) horizon(ctx context.Context, instID int32, h int, now time.Tim
 		}
 	case !active.guardrail: // the live gate switched the horizon off after the row was stored (ML-07)
 		reason = ReasonNotBetter
-	case p.pUp == nil || p.q10 == nil || p.q50 == nil || p.q90 == nil:
+	case !validNumbers(p):
 		reason = ReasonStale
 	}
 	if reason == "" {
-		stale, err := s.isStale(ctx, p.asOf, now)
+		// docs/05 10.6 is re-applied at read time: the row may be days old and an action may have
+		// appeared (or been detected) since the worker stored it.
+		near, err := s.nearAction(ctx, instID, p.asOf, now, cal)
 		if err != nil {
 			return Horizon{}, nil, true, err
 		}
-		if stale {
+		if near {
+			reason = ReasonNearAction
+		} else if daysBehind(cal, p.asOf, now) > freshTradingDays {
 			reason = ReasonStale
 		}
 	}
@@ -372,82 +425,105 @@ func modelCard(r *runRow) *ModelCard {
 	return c
 }
 
-func (s *Service) trackRecord(ctx context.Context, runID int64) (*TrackRecord, error) {
-	var resolved, dirN, dirHit, bandN, bandHit int
-	var since pgtype.Date
-	err := s.db.QueryRow(ctx, `SELECT count(o.prediction_id), count(o.direction_correct),
-		count(*) FILTER (WHERE o.direction_correct), count(o.in_band), count(*) FILTER (WHERE o.in_band), min(p.as_of)
-		FROM prediction p LEFT JOIN prediction_outcome o ON o.prediction_id = p.id
-		WHERE p.model_run_id = $1 AND p.p_up IS NOT NULL`, runID).Scan(&resolved, &dirN, &dirHit, &bandN, &bandHit, &since)
+// trackRecords aggregates the live record of several runs in one query (docs/05 10.7); it uses the
+// prediction(model_run_id) index of migration 0013. Runs without any stored prediction are absent.
+func (s *Service) trackRecords(ctx context.Context, runIDs []int64) (map[int64]*TrackRecord, error) {
+	out := map[int64]*TrackRecord{}
+	if len(runIDs) == 0 {
+		return out, nil
+	}
+	rows, err := s.db.Query(ctx, trackRecordSQL, runIDs)
 	if err != nil {
 		return nil, err
 	}
-	tr := &TrackRecord{Resolved: resolved}
-	if since.Valid {
-		tr.Since = ptr(since.Time.Format(time.DateOnly))
+	defer rows.Close()
+	for rows.Next() {
+		var runID int64
+		var resolved, dirN, dirHit, bandN, bandHit int
+		var since pgtype.Date
+		if err := rows.Scan(&runID, &resolved, &dirN, &dirHit, &bandN, &bandHit, &since); err != nil {
+			return nil, err
+		}
+		tr := &TrackRecord{Resolved: resolved}
+		if since.Valid {
+			tr.Since = ptr(since.Time.Format(time.DateOnly))
+		}
+		if dirN > 0 {
+			tr.DirectionHitRate = ptr(float64(dirHit) / float64(dirN))
+		}
+		if bandN > 0 {
+			tr.BandCoverage80 = ptr(float64(bandHit) / float64(bandN))
+		}
+		if resolved == 0 {
+			tr.Reason = ptr("no_resolved_predictions")
+		}
+		out[runID] = tr
 	}
-	if dirN > 0 {
-		tr.DirectionHitRate = ptr(float64(dirHit) / float64(dirN))
-	}
-	if bandN > 0 {
-		tr.BandCoverage80 = ptr(float64(bandHit) / float64(bandN))
-	}
-	if resolved == 0 {
-		tr.Reason = ptr("no_resolved_predictions")
-	}
-	return tr, nil
+	return out, rows.Err()
 }
 
-// isStale applies docs/05 10.6: the data used is older than 3 trading days.
-func (s *Service) isStale(ctx context.Context, asOf, now time.Time) (bool, error) {
-	from := asOf.AddDate(0, 0, -1)
-	to := now.In(instruments.IST).AddDate(0, 0, 1)
-	rows, err := s.db.Query(ctx, `SELECT holiday_date FROM market_holiday WHERE segment = 'trading'
-		AND holiday_date >= $1::date AND holiday_date <= $2::date`, from.Format(time.DateOnly), to.Format(time.DateOnly))
-	if err != nil {
-		return false, err
+const trackRecordSQL = `SELECT p.model_run_id, count(o.prediction_id), count(o.direction_correct),
+	count(*) FILTER (WHERE o.direction_correct), count(o.in_band), count(*) FILTER (WHERE o.in_band), min(p.as_of)
+	FROM prediction p LEFT JOIN prediction_outcome o ON o.prediction_id = p.id
+	WHERE p.model_run_id = ANY($1::bigint[]) AND p.p_up IS NOT NULL
+	GROUP BY p.model_run_id`
+
+// validNumbers is false when a stored row cannot be shown: a missing value, a non-finite value, a
+// probability outside [0, 1] or quantiles that are not ordered q10 <= q50 <= q90.
+func validNumbers(p predRow) bool {
+	if p.pUp == nil || p.q10 == nil || p.q50 == nil || p.q90 == nil {
+		return false
 	}
-	defer rows.Close()
-	var hs []time.Time
-	for rows.Next() {
-		var d pgtype.Date
-		if err := rows.Scan(&d); err != nil {
-			return false, err
+	for _, v := range []float32{*p.pUp, *p.q10, *p.q50, *p.q90} {
+		if f := float64(v); math.IsNaN(f) || math.IsInf(f, 0) {
+			return false
 		}
-		hs = append(hs, d.Time)
 	}
-	if err := rows.Err(); err != nil {
-		return false, err
+	return *p.pUp >= 0 && *p.pUp <= 1 && *p.q10 <= *p.q50 && *p.q50 <= *p.q90
+}
+
+// nearAction applies the corporate-action rule of docs/05 10.6 at read time: an unconfirmed
+// (detected) action of any date, or a non-rejected action with an ex-date within 5 trading days of the
+// prediction date or of today (the union of both windows, the safe side).
+func (s *Service) nearAction(ctx context.Context, instID int32, asOf, now time.Time, cal instruments.Calendar) (bool, error) {
+	ist := now.In(instruments.IST)
+	today := time.Date(ist.Year(), ist.Month(), ist.Day(), 0, 0, 0, 0, time.UTC)
+	lo := cal.AddTradingDays(asOf, -actionWindowDays)
+	hi := cal.AddTradingDays(today, actionWindowDays)
+	if asOf.After(today) {
+		hi = cal.AddTradingDays(asOf, actionWindowDays)
 	}
-	return TradingDaysBehind(asOf, now, hs) > freshTradingDays, nil
+	var near bool
+	err := s.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM corporate_action
+		WHERE instrument_id = $1 AND (status = 'detected' OR (status <> 'rejected' AND ex_date BETWEEN $2::date AND $3::date)))`,
+		instID, lo.Format(time.DateOnly), hi.Format(time.DateOnly)).Scan(&near)
+	return near, err
+}
+
+// daysBehind counts trading days after asOf up to the expected last trading date at now. The API
+// expects the day's bar only after the 18:00 IST end-of-day cutoff; the worker's predict job counts to
+// today as soon as it is a trading day, so the two can differ by one day before 18:00 (B14-12).
+func daysBehind(cal instruments.Calendar, asOf, now time.Time) int {
+	return cal.TradingDaysBetween(asOf, cal.ExpectedLastTradingDate(now))
 }
 
 // TradingDaysBehind counts trading days after asOf up to the expected last trading date at now
 // (weekends and the given holidays are not trading days).
 func TradingDaysBehind(asOf, now time.Time, holidays []time.Time) int {
-	exp := instruments.NewCalendar(holidays).ExpectedLastTradingDate(now)
-	hs := map[string]bool{}
-	for _, h := range holidays {
-		hs[h.Format(time.DateOnly)] = true
-	}
-	a := time.Date(asOf.Year(), asOf.Month(), asOf.Day(), 0, 0, 0, 0, time.UTC)
-	n := 0
-	for d := a.AddDate(0, 0, 1); !d.After(exp) && n < 10000; d = d.AddDate(0, 0, 1) {
-		if d.Weekday() != time.Saturday && d.Weekday() != time.Sunday && !hs[d.Format(time.DateOnly)] {
-			n++
-		}
-	}
-	return n
+	return daysBehind(instruments.NewCalendar(holidays), asOf, now)
 }
 
-// state explains why no forecast exists when no horizon has an active model (ML-04).
+// state explains why no forecast exists when no horizon has an active model (ML-04). Only finished
+// train_models runs that stored a details.status and ended ok or partial count: a skipped run
+// (already_running) or a failed one says nothing about the model.
 func (s *Service) state(ctx context.Context, anyActive bool, hz []Horizon) (string, *string, error) {
 	if anyActive {
 		return "ok", nil, nil
 	}
 	var status *string
 	err := s.db.QueryRow(ctx, `SELECT details->>'status' FROM ingestion_run
-		WHERE job = 'train_models' AND status <> 'running' ORDER BY started_at DESC, id DESC LIMIT 1`).Scan(&status)
+		WHERE job = 'train_models' AND status IN ('ok','partial') AND details ? 'status'
+		ORDER BY started_at DESC, id DESC LIMIT 1`).Scan(&status)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return "", nil, err
 	}
@@ -460,6 +536,10 @@ func (s *Service) state(ctx context.Context, anyActive bool, hz []Horizon) (stri
 		return st, ptr("Fewer than 20 stocks have enough price history for the experimental model; forecasts stay hidden."), nil
 	case "insufficient_history":
 		return st, ptr("Not enough price history for the walk-forward validation; forecasts stay hidden."), nil
+	case "aborted_timeout":
+		return "training_aborted", ptr("The last training run hit its time limit and stored nothing; no model is active yet."), nil
+	case "dry_run":
+		return "no_model", ptr("The last training run was a dry run and stored nothing; no model has been trained yet."), nil
 	}
 	for _, h := range hz {
 		if h.HiddenReason != nil && *h.HiddenReason == ReasonNotBetter {

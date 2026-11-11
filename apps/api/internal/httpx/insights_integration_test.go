@@ -35,6 +35,13 @@ func newInsEnv(t *testing.T) *insEnv {
 	return &insEnv{&stockEnv{authEnv: e, cookie: e.login(ownerPassword)}}
 }
 
+// stock adds a tracked active equity (the worker predicts it).
+func (e *insEnv) stock(symbol, name string) {
+	e.t.Helper()
+	e.addStock(symbol, name)
+	e.exec(`UPDATE instrument SET is_tracked = true, tracked_reason = 'imported' WHERE symbol = $1`, symbol)
+}
+
 func (e *insEnv) getJSON(path string) (int, map[string]any) {
 	e.t.Helper()
 	r := e.get(path)
@@ -121,7 +128,7 @@ func assertNoTargetPrice(t *testing.T, v any) {
 // hidden with no_model, no number anywhere, experimental flag and disclaimer present.
 func TestPredictionInsufficientUniverse(t *testing.T) {
 	e := newInsEnv(t)
-	e.addStock("TCS", "Tata Consultancy")
+	e.stock("TCS", "Tata Consultancy")
 	e.exec(`INSERT INTO ingestion_run (job, started_at, finished_at, status, details)
 	        VALUES ('train_models', '2026-10-17T05:00:00Z', '2026-10-17T05:01:00Z', 'ok', '{"status":"insufficient_universe","eligible":3}')`)
 	d := e.data("/api/v1/stocks/TCS/prediction")
@@ -154,7 +161,7 @@ func TestPredictionInsufficientUniverse(t *testing.T) {
 // PRD-01b: without any train run the state is plain no_model.
 func TestPredictionNoModelState(t *testing.T) {
 	e := newInsEnv(t)
-	e.addStock("TCS", "Tata Consultancy")
+	e.stock("TCS", "Tata Consultancy")
 	d := e.data("/api/v1/stocks/TCS/prediction")
 	if d["state"] != "no_model" || hz(d, 5)["hidden_reason"] != "no_model" {
 		t.Fatalf("%v", d)
@@ -168,7 +175,7 @@ func TestPredictionNoModelState(t *testing.T) {
 // lack of folds reports insufficient_history; a live-gated active model hides stored shown rows.
 func TestPredictionGuardrailFails(t *testing.T) {
 	e := newInsEnv(t)
-	e.addStock("TCS", "Tata Consultancy")
+	e.stock("TCS", "Tata Consultancy")
 	e.run("dir_5d", "candidate", false, `{"guardrail":{"passed":false,"reason":"auc_mean","summary":{}}}`, `{}`)
 	e.run("dir_21d", "candidate", false, `{"guardrail":{"passed":false,"reason":"insufficient_folds","summary":{}}}`, `{}`)
 	d := e.data("/api/v1/stocks/TCS/prediction")
@@ -205,7 +212,7 @@ func TestPredictionHiddenReasons(t *testing.T) {
 	for sym, reason := range map[string]string{
 		"ILLIQ": "low_liquidity", "ACTN": "near_corporate_action", "NEWCO": "insufficient_history", "OLD": "stale_data",
 	} {
-		e.addStock(sym, sym+" Ltd")
+		e.stock(sym, sym+" Ltd")
 		e.pred(sym, 5, run, "2026-10-19", nil, nil, nil, nil, false, reason)
 	}
 	for sym, reason := range map[string]string{
@@ -220,20 +227,20 @@ func TestPredictionHiddenReasons(t *testing.T) {
 		}
 	}
 	// A row stored as shown but older than 3 trading days at read time is hidden as stale_data.
-	e.addStock("AGED", "Aged Ltd")
+	e.stock("AGED", "Aged Ltd")
 	e.pred("AGED", 5, run, "2026-10-09", 0.55, -0.04, 0.0, 0.05, true, nil)
 	if h := hz(e.data("/api/v1/stocks/AGED/prediction"), 5); h["shown"] != false || h["hidden_reason"] != "stale_data" {
 		t.Fatalf("aged = %v", h)
 	}
 	// An unknown reason text never reaches the client.
-	e.addStock("ODD", "Odd Ltd")
+	e.stock("ODD", "Odd Ltd")
 	e.pred("ODD", 5, run, "2026-10-19", nil, nil, nil, nil, false, "something_else")
 	if h := hz(e.data("/api/v1/stocks/ODD/prediction"), 5); h["hidden_reason"] != "model_not_better_than_baseline" {
 		t.Fatalf("odd = %v", h)
 	}
 	// An active model but no stored row for the stock.
-	e.addStock("BARE", "Bare Ltd")
-	if h := hz(e.data("/api/v1/stocks/BARE/prediction"), 5); h["hidden_reason"] != "insufficient_history" {
+	e.stock("BARE", "Bare Ltd")
+	if h := hz(e.data("/api/v1/stocks/BARE/prediction"), 5); h["hidden_reason"] != "awaiting_predictions" {
 		t.Fatalf("bare = %v", h)
 	}
 	// The other horizon has no model at all.
@@ -246,7 +253,7 @@ func TestPredictionHiddenReasons(t *testing.T) {
 // there is no single target price.
 func TestPredictionShown(t *testing.T) {
 	e := newInsEnv(t)
-	e.addStock("TCS", "Tata Consultancy")
+	e.stock("TCS", "Tata Consultancy")
 	run := e.run("dir_5d", "active", true, goodValid, goodBase)
 	cur := e.pred("TCS", 5, run, "2026-10-19", 0.54, -0.041, 0.002, 0.046, true, nil)
 	_ = cur
@@ -376,7 +383,16 @@ func TestMarketOverviewData(t *testing.T) {
 		}
 		bar(s, "2026-10-16", prev, vol)
 		bar(s, "2026-10-19", cur, vol)
+		// 58 older bars complete the 60-bar window of the 60-day average traded value.
+		e.exec(`INSERT INTO price_daily (instrument_id, trade_date, open, high, low, close, adj_close, volume, source)
+		        SELECT i.id, d::date, $2, $2, $2, $2, $2, $3, 'import' FROM instrument i,
+		        generate_series('2026-08-01'::date, '2026-08-01'::date + 57, '1 day') d WHERE i.symbol = $1`, s, prev, vol)
 	}
+	// A liquid stock with only the two newest bars has no 60-day average: not a mover.
+	e.addStock("NEWBIE", "Newbie Ltd")
+	e.exec(`UPDATE instrument SET is_tracked = true, tracked_reason = 'imported' WHERE symbol = 'NEWBIE'`)
+	bar("NEWBIE", "2026-10-16", 100, 1_000_000)
+	bar("NEWBIE", "2026-10-19", 190, 1_000_000)
 	e.exec(`INSERT INTO corporate_action (instrument_id, ex_date, action_type, status, source)
 	        SELECT id, '2026-10-19', 'split', 'detected', 'detected' FROM instrument WHERE symbol = 'SPLIT'`)
 
@@ -403,6 +419,15 @@ func TestMarketOverviewData(t *testing.T) {
 	}
 	if _, ok := d["movers_reason"]; ok {
 		t.Fatal("movers_reason only when empty")
+	}
+	if n["unit"] != "index points" || v["unit"] == "index points" {
+		t.Fatalf("units: nifty %v, vix %v (the VIX is not an index level in points)", n["unit"], v["unit"])
+	}
+	// Meta as-of is the newest data date (never the clock) and stale comes from the calendar.
+	_, m := e.getJSON("/api/v1/market/overview")
+	meta := m["meta"].(map[string]any)
+	if meta["as_of"] != "2026-10-19T00:00:00Z" || meta["stale"] != false {
+		t.Fatalf("meta = %v", meta)
 	}
 }
 
@@ -540,7 +565,7 @@ func TestAdminStatus(t *testing.T) {
 		t.Fatalf("db = %v", db)
 	}
 	tb := db["tables"].([]any)[0].(map[string]any)
-	if tb["name"] == "" || tb["mb"] == nil || tb["rows"] == nil {
+	if tb["name"] == "" || tb["mb"] == nil {
 		t.Fatalf("table = %v", tb)
 	}
 	if d["version"] != "abc1234" {

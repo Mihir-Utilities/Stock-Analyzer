@@ -1,0 +1,155 @@
+{
+  "fail": {
+    "baseline_metrics": {
+      "b1_brier_mean": 0.24969172222222225,
+      "b2_auc_mean": 0.500161110851692
+    },
+    "passed": false,
+    "valid_metrics": {
+      "folds": [],
+      "guardrail": {
+        "checks": [
+          {
+            "name": "auc_mean",
+            "ok": false,
+            "threshold": ">= 0.53",
+            "value": 0.5019464939571423
+          },
+          {
+            "name": "auc_bootstrap_lower",
+            "ok": false,
+            "threshold": "> 0.5",
+            "value": 0.49297799495518296
+          },
+          {
+            "name": "brier_vs_b1",
+            "ok": false,
+            "threshold": "beats B1 by 0.0005 in >= 6 of 8 folds",
+            "value": 0.0
+          },
+          {
+            "name": "ece_pooled",
+            "ok": false,
+            "threshold": "<= 0.03",
+            "value": 0.09618686570464383
+          },
+          {
+            "name": "band_coverage",
+            "ok": true,
+            "threshold": "[0.76, 0.84] pooled over the last 4 folds",
+            "value": 0.7943333333333333
+          },
+          {
+            "name": "auc_vs_b2",
+            "ok": true,
+            "threshold": ">= -0.005 (model AUC minus B2 AUC)",
+            "value": 0.0017853831054502889
+          }
+        ],
+        "passed": false,
+        "reason": "auc_mean",
+        "summary": {
+          "auc_lower_95": 0.49297799495518296,
+          "auc_mean": 0.5019464939571423,
+          "b2_auc_mean": 0.500161110851692,
+          "band_coverage_last_folds": 0.7943333333333333,
+          "baseline_brier_b1_mean": 0.24969172222222225,
+          "brier_mean": 0.2628875603535622,
+          "ece_pooled": 0.09618686570464383,
+          "eval_folds": 8,
+          "folds": 13
+        }
+      },
+      "meta": {
+        "folds_run": 13,
+        "horizon": 5
+      }
+    }
+  },
+  "insufficient_folds": {
+    "baseline_metrics": {},
+    "passed": false,
+    "valid_metrics": {
+      "folds": [],
+      "guardrail": {
+        "checks": [],
+        "passed": false,
+        "reason": "insufficient_folds",
+        "summary": {
+          "folds": 5,
+          "needed": 12
+        }
+      },
+      "meta": {
+        "horizon": 5
+      }
+    }
+  },
+  "pass": {
+    "baseline_metrics": {
+      "b1_brier_mean": 0.24984894444444444,
+      "b2_auc_mean": 0.507632095395867
+    },
+    "passed": true,
+    "valid_metrics": {
+      "folds": [],
+      "guardrail": {
+        "checks": [
+          {
+            "name": "auc_mean",
+            "ok": true,
+            "threshold": ">= 0.53",
+            "value": 0.627740419765771
+          },
+          {
+            "name": "auc_bootstrap_lower",
+            "ok": true,
+            "threshold": "> 0.5",
+            "value": 0.6174300603182628
+          },
+          {
+            "name": "brier_vs_b1",
+            "ok": true,
+            "threshold": "beats B1 by 0.0005 in >= 6 of 8 folds",
+            "value": 8.0
+          },
+          {
+            "name": "ece_pooled",
+            "ok": true,
+            "threshold": "<= 0.03",
+            "value": 0.007173737560906757
+          },
+          {
+            "name": "band_coverage",
+            "ok": true,
+            "threshold": "[0.76, 0.84] pooled over the last 4 folds",
+            "value": 0.8051666666666667
+          },
+          {
+            "name": "auc_vs_b2",
+            "ok": true,
+            "threshold": ">= -0.005 (model AUC minus B2 AUC)",
+            "value": 0.12010832436990404
+          }
+        ],
+        "passed": true,
+        "reason": null,
+        "summary": {
+          "auc_lower_95": 0.6174300603182628,
+          "auc_mean": 0.627740419765771,
+          "b2_auc_mean": 0.507632095395867,
+          "band_coverage_last_folds": 0.8051666666666667,
+          "baseline_brier_b1_mean": 0.24984894444444444,
+          "brier_mean": 0.2377592231310412,
+          "ece_pooled": 0.007173737560906757,
+          "eval_folds": 8,
+          "folds": 13
+        }
+      },
+      "meta": {
+        "folds_run": 13,
+        "horizon": 5
+      }
+    }
+  }
+}

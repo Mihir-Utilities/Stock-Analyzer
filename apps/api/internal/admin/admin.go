@@ -13,6 +13,7 @@ import (
 
 	"github.com/india-analyzer/api/internal/dbq"
 	"github.com/india-analyzer/api/internal/instruments"
+	"github.com/india-analyzer/api/internal/logx"
 )
 
 const (
@@ -27,6 +28,9 @@ type Service struct {
 	limitMB int
 	version string
 	Now     func() time.Time
+	// Scrub redacts secrets from free text read from the database (source_health.note,
+	// ingestion_run.error) at read time; main wires the log scrubber. Never nil.
+	Scrub func(string) string
 }
 
 // New builds a Service. limitMB is DB_SOFT_LIMIT_MB; version is the build's git sha ("" = unknown).
@@ -34,7 +38,7 @@ func New(db dbq.DBTX, limitMB int, version string) *Service {
 	if version == "" {
 		version = "unknown"
 	}
-	return &Service{db: db, limitMB: limitMB, version: version, Now: time.Now}
+	return &Service{db: db, limitMB: limitMB, version: version, Now: time.Now, Scrub: logx.NewScrubber().Scrub}
 }
 
 // Source is a source_health row (the broker is dormant in manual price mode and is not listed).
@@ -58,6 +62,9 @@ type Job struct {
 	ItemsTotal  *int32  `json:"items_total"`
 	ItemsFailed int32   `json:"items_failed"`
 	Error       *string `json:"error"`
+	// LastSkippedAt is set on jobs[] only: a later run of the job that was skipped (already running).
+	// A skipped run never replaces the last real result.
+	LastSkippedAt *string `json:"last_skipped_at,omitempty"`
 }
 
 // Coverage counts instruments with data.
@@ -73,16 +80,16 @@ type Coverage struct {
 type Table struct {
 	Name string  `json:"name"`
 	MB   float64 `json:"mb"`
-	Rows int64   `json:"rows"`
+	Rows *int64  `json:"rows"` // planner estimate; null when the table was never analyzed (reltuples < 0)
 }
 
 // DB is the database size block. warn_level is "ok", "70", "85", "95" or "limit".
 type DB struct {
-	SizeMB    float64 `json:"size_mb"`
-	LimitMB   int     `json:"limit_mb"`
-	UsedPct   float64 `json:"used_pct"`
-	Tables    []Table `json:"tables"`
-	WarnLevel string  `json:"warn_level"`
+	SizeMB    float64  `json:"size_mb"`
+	LimitMB   int      `json:"limit_mb"`
+	UsedPct   *float64 `json:"used_pct"` // null when no limit is configured
+	Tables    []Table  `json:"tables"`
+	WarnLevel string   `json:"warn_level"`
 }
 
 // Status is data of GET /admin/status.
@@ -134,8 +141,9 @@ func (s *Service) Status(ctx context.Context) (Status, error) {
 	if st.Sources, err = s.sources(ctx); err != nil {
 		return st, err
 	}
-	if st.Jobs, err = s.jobs(ctx, `SELECT DISTINCT ON (job) job, started_at, finished_at, status, rows_written, items_total, items_failed, error
-		FROM ingestion_run ORDER BY job, started_at DESC, id DESC`, nil); err != nil {
+	if st.Jobs, err = s.jobs(ctx, `SELECT DISTINCT ON (r.job) r.job, r.started_at, r.finished_at, r.status, r.rows_written, r.items_total, r.items_failed, r.error,
+		(SELECT max(k.started_at) FROM ingestion_run k WHERE k.job = r.job AND k.status = 'skipped' AND k.started_at > r.started_at)
+		FROM ingestion_run r WHERE r.status <> 'skipped' ORDER BY r.job, r.started_at DESC, r.id DESC`, nil); err != nil {
 		return st, err
 	}
 	if st.RecentErrors, err = s.jobs(ctx, `SELECT job, started_at, finished_at, status, rows_written, items_total, items_failed, error
@@ -182,12 +190,23 @@ func (s *Service) sources(ctx context.Context) ([]Source, error) {
 		if err := rows.Scan(&r.Source, &checked, &r.OK, &r.LatencyMS, &r.ConsecutiveFailures, &disabled, &r.Note); err != nil {
 			return nil, err
 		}
+		r.Note = s.scrubbed(r.Note)
 		r.CheckedAt, r.DisabledUntil = ts(checked), optTS(disabled)
 		out = append(out, r)
 	}
 	return out, rows.Err()
 }
 
+func (s *Service) scrubbed(v *string) *string {
+	if v == nil || s.Scrub == nil {
+		return v
+	}
+	out := s.Scrub(*v)
+	return &out
+}
+
+// jobs runs a query that selects the eight job columns, plus an optional ninth (last skipped start)
+// when the query is the latest-run-per-job one.
 func (s *Service) jobs(ctx context.Context, q string, args []any) ([]Job, error) {
 	rows, err := s.db.Query(ctx, q, args...)
 	if err != nil {
@@ -197,11 +216,16 @@ func (s *Service) jobs(ctx context.Context, q string, args []any) ([]Job, error)
 	out := []Job{}
 	for rows.Next() {
 		var j Job
-		var started, finished pgtype.Timestamptz
-		if err := rows.Scan(&j.Job, &started, &finished, &j.Status, &j.RowsWritten, &j.ItemsTotal, &j.ItemsFailed, &j.Error); err != nil {
+		var started, finished, skipped pgtype.Timestamptz
+		dest := []any{&j.Job, &started, &finished, &j.Status, &j.RowsWritten, &j.ItemsTotal, &j.ItemsFailed, &j.Error}
+		if len(rows.FieldDescriptions()) > len(dest) {
+			dest = append(dest, &skipped)
+		}
+		if err := rows.Scan(dest...); err != nil {
 			return nil, err
 		}
-		j.StartedAt, j.FinishedAt = ts(started), optTS(finished)
+		j.StartedAt, j.FinishedAt, j.LastSkippedAt = ts(started), optTS(finished), optTS(skipped)
+		j.Error = s.scrubbed(j.Error)
 		out = append(out, j)
 	}
 	return out, rows.Err()
@@ -215,9 +239,10 @@ func (s *Service) dbSize(ctx context.Context) (DB, error) {
 	out := DB{LimitMB: s.limitMB, Tables: []Table{}, WarnLevel: WarnLevel(size, s.limitMB)}
 	out.SizeMB = round(float64(size)/mib, 2)
 	if s.limitMB > 0 {
-		out.UsedPct = round(float64(size)/float64(int64(s.limitMB)*mib)*100, 1)
+		out.UsedPct = ptr(round(float64(size)/float64(int64(s.limitMB)*mib)*100, 1))
 	}
-	rows, err := s.db.Query(ctx, `SELECT c.relname, pg_total_relation_size(c.oid), greatest(c.reltuples, 0)::bigint
+	rows, err := s.db.Query(ctx, `SELECT c.relname, pg_total_relation_size(c.oid),
+		CASE WHEN c.reltuples < 0 THEN NULL ELSE c.reltuples::bigint END
 		FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 		WHERE n.nspname = 'public' AND c.relkind = 'r' ORDER BY pg_total_relation_size(c.oid) DESC, c.relname`)
 	if err != nil {
@@ -262,6 +287,8 @@ func (s *Service) missingHolidayYears(ctx context.Context) ([]int, error) {
 	sort.Ints(out)
 	return out, nil
 }
+
+func ptr[T any](v T) *T { return &v }
 
 func round(v float64, places int) float64 {
 	p := math.Pow(10, float64(places))
