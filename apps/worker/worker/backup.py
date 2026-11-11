@@ -4,7 +4,9 @@ Exports the owner's own data as JSON lines, encrypts it with ``age`` to the owne
 key and writes only the ciphertext. The plaintext goes to ``age`` over stdin and never touches
 the disk. What is never exported: ``broker_session``, ``broker_oauth_state``, ``session``,
 ``password_hash``, login counters, any ``app_setting`` whose key looks like a secret, prices and
-every derived table. Restore needs the private key, which only the owner holds.
+every derived table. Restore needs the private key, which only the owner holds, and refuses to run
+into a database that already holds owner data (ids are preserved, so a merge could attach rows to
+the wrong instrument).
 
 File format (one JSON object per line, UTF-8):
   line 1  ``{"format": 1, "created_at": ..., "counts": {table: n}, "tables": [...]}``
@@ -31,6 +33,7 @@ from typing import Any
 import asyncpg
 
 from worker.db import create_pool
+from worker.logs import scrub
 from worker.runner import JobContext
 
 log = logging.getLogger("worker.backup")
@@ -41,9 +44,25 @@ BATCH = 2000
 
 # An age X25519 public recipient. A private key ("AGE-SECRET-KEY-1...") is refused on purpose.
 _AGE_PUBLIC = re.compile(r"^age1[02-9ac-hj-np-z]{58}$")
-# app_setting keys that must never leave the database (defence in depth: none is expected).
-_SECRET_KEY = re.compile(r"(token|secret|password|passwd|credential|private|hmac|key)", re.I)
-_DERIVED_SETTINGS = ("DB_WARN_LEVEL", "DB_WARN_NOTIFIED")  # recomputed by housekeeping
+# The ONLY app_setting keys that are backed up (allow-list: an unknown or secret-looking key, such
+# as DB_WARN_NOTIFIED or anything with token/secret/password/key in its name, never leaves the
+# database). These are the seed defaults (MASTER_PLAN section 5) plus the two owner-written ones.
+BACKUP_SETTING_KEYS: tuple[str, ...] = (
+    "PRICE_HISTORY_YEARS_TRACKED",
+    "LAZY_BACKFILL_MAX_YEARS",
+    "OPENED_STOCKS_LRU_CAP",
+    "BROKER_ENABLED",
+    "MFAPI_MIN_INTERVAL_SEC",
+    "REFRESH_COOLDOWN_MIN",
+    "REFRESH_GLOBAL_PER_HOUR",
+    "RISK_FREE_RATE",
+    "SESSION_DAYS",
+    "LOGIN_MAX_FAILS",
+    "DB_SOFT_LIMIT_MB",
+    "PRICES_ALREADY_ADJUSTED",
+    "saved_screens",
+)
+_SECRET_LOOKING = re.compile(r"(token|secret|password|passwd|credential|private|hmac|key)", re.I)
 # Column names that must never be exported (asserted over the table spec).
 FORBIDDEN_COLUMNS = frozenset(
     {"password_hash", "token_enc", "token_hash", "state_hash", "code_hash", "broker_key"}
@@ -57,10 +76,20 @@ class TableSpec:
     columns: tuple[str, ...]
     where: str = "true"
     order_by: str = "1"
-    conflict: str = "ON CONFLICT DO NOTHING"
+    conflict: str = ""  # empty = plain INSERT: any collision aborts and rolls back the restore
     identity: bool = False  # has a GENERATED ALWAYS identity column to override on restore
     pk: str | None = None  # identity column to re-sync after restore
+    seeded: bool = False  # the seed fills it before a restore: upserted, not required empty
+    verify: tuple[str, ...] | None = None  # columns compared per row after restore (default: all)
+    exprs: tuple[tuple[str, str], ...] = ()  # export-time SQL for a column: (column, expression)
 
+
+# A prices batch is not exported, so a reference to one is exported as NULL (the FK would dangle).
+_BATCH_REF = (
+    "import_batch_id",
+    "CASE WHEN import_batch_id IN (SELECT id FROM import_batch WHERE kind <> 'prices') "
+    "THEN import_batch_id END",
+)
 
 _REFERENCED_INSTRUMENTS = (
     "SELECT instrument_id FROM watchlist_item WHERE instrument_id IS NOT NULL "
@@ -147,10 +176,8 @@ TABLES: tuple[TableSpec, ...] = (
     TableSpec(
         "app_setting",
         ("key", "value", "updated_at"),
-        where=(
-            "key !~* '(token|secret|password|passwd|credential|private|hmac|key)' "
-            "AND key NOT IN ('DB_WARN_LEVEL','DB_WARN_NOTIFIED')"
-        ),
+        where="key IN (" + ", ".join(f"'{k}'" for k in BACKUP_SETTING_KEYS) + ")",
+        seeded=True,
         conflict=(
             "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, "
             "updated_at = EXCLUDED.updated_at"  # the owner's value wins over the seed default
@@ -163,6 +190,8 @@ TABLES: tuple[TableSpec, ...] = (
             "ON CONFLICT (id) DO UPDATE SET telegram_chat_id = EXCLUDED.telegram_chat_id, "
             "quiet_hours = EXCLUDED.quiet_hours, display_prefs = EXCLUDED.display_prefs"
         ),  # password_hash, failed_logins and locked_until of an existing row are not touched
+        seeded=True,
+        verify=("id", "telegram_chat_id", "quiet_hours", "display_prefs"),
     ),
     TableSpec(
         "watchlist_item",
@@ -207,6 +236,7 @@ TABLES: tuple[TableSpec, ...] = (
         where="NOT (source = 'detected' AND status = 'detected')",
         identity=True,
         pk="id",
+        exprs=(_BATCH_REF,),
     ),
     TableSpec(
         "portfolio_adjustment",
@@ -257,6 +287,7 @@ TABLES: tuple[TableSpec, ...] = (
             "fetched_at",
         ),
         where="source IN ('manual','csv_import','screener_import')",
+        exprs=(_BATCH_REF,),
     ),
     TableSpec(
         "shareholding",
@@ -279,6 +310,7 @@ TABLES: tuple[TableSpec, ...] = (
             "import_batch_id",
             "fetched_at",
         ),
+        exprs=(_BATCH_REF,),
     ),
 )
 _SPEC = {t.name: t for t in TABLES}
@@ -297,8 +329,14 @@ def assert_no_secret_columns() -> None:
             raise RuntimeError(f"backup exports forbidden columns {sorted(bad)} in {spec.name}")
 
 
-def is_secret_setting_key(key: str) -> bool:
-    return bool(_SECRET_KEY.search(key)) or key in _DERIVED_SETTINGS
+def is_backed_up_setting_key(key: str) -> bool:
+    return key in BACKUP_SETTING_KEYS
+
+
+def assert_setting_allow_list_is_safe() -> None:
+    bad = [k for k in BACKUP_SETTING_KEYS if _SECRET_LOOKING.search(k)]
+    if bad:
+        raise RuntimeError(f"secret-looking keys in the backup allow-list: {bad}")
 
 
 def valid_age_recipient(value: str) -> bool:
@@ -306,7 +344,8 @@ def valid_age_recipient(value: str) -> bool:
 
 
 def _select(spec: TableSpec) -> str:
-    cols = ", ".join(spec.columns)
+    exprs = dict(spec.exprs)
+    cols = ", ".join(f"{exprs[c]} AS {c}" if c in exprs else c for c in spec.columns)
     return (
         f"SELECT to_jsonb(t)::text AS j FROM (SELECT {cols} FROM {spec.name} "  # noqa: S608
         f"WHERE {spec.where}) t ORDER BY j"
@@ -321,6 +360,7 @@ class Dump:
 
 async def build_dump(pool: asyncpg.Pool, *, now: datetime | None = None) -> Dump:
     assert_no_secret_columns()
+    assert_setting_allow_list_is_safe()
     lines: list[str] = []
     counts: dict[str, int] = {}
     async with pool.acquire() as conn, conn.transaction(isolation="repeatable_read", readonly=True):
@@ -350,8 +390,12 @@ def run_age(args: list[str], data: bytes) -> bytes:
         [exe, *args], input=data, capture_output=True, check=False, timeout=120
     )
     if proc.returncode != 0:
-        # age error text never contains key material, but keep the message short anyway
-        raise RuntimeError(f"age failed with exit code {proc.returncode}")
+        # age error text never contains key material; keep only a scrubbed, short first line
+        lines = proc.stderr.decode("utf-8", "replace").strip().splitlines()
+        first = scrub(lines[0])[:200] if lines else ""
+        raise RuntimeError(
+            f"age failed with exit code {proc.returncode}" + (f": {first}" if first else "")
+        )
     return proc.stdout
 
 
@@ -381,7 +425,14 @@ def parse_dump(text: str) -> tuple[dict[str, Any], dict[str, list[str]]]:
     header = json.loads(lines[0])
     if header.get("format") != FORMAT_VERSION:
         raise ValueError(f"unsupported backup format {header.get('format')!r}")
-    rows: dict[str, list[str]] = {name: [] for name in header["tables"]}
+    tables = list(header.get("tables", []))
+    unknown = [t for t in tables if t not in _SPEC]
+    if unknown:
+        raise ValueError(f"unknown table(s) {unknown} in the backup header")
+    missing = [t.name for t in TABLES if t.name not in tables]
+    if missing:
+        raise ValueError(f"backup header lacks table(s) {missing}: refusing a partial restore")
+    rows: dict[str, list[str]] = {name: [] for name in tables}
     for line in lines[1:]:
         cut = line.index(',"row":')
         table = json.loads(line[:cut] + "}")["table"]
@@ -411,34 +462,109 @@ def _insert_sql(spec: TableSpec) -> str:
     return sql
 
 
-async def restore_dump(pool: asyncpg.Pool, text: str, *, dry_run: bool = False) -> RestoreReport:
-    """Restore into a database that has the schema (and ideally the seed): one transaction,
-    ``ON CONFLICT`` per table, then counts are verified against the file header (SYS-08)."""
+class _RestoreFailed(Exception):
+    """Raised inside the restore transaction so that it rolls back."""
+
+    def __init__(self, problems: list[str]) -> None:
+        super().__init__("; ".join(problems))
+        self.problems = problems
+
+
+def _verify_sql(spec: TableSpec) -> str:
+    """Counts the file rows that exist in the table with the very same values (per row)."""
+    cols = spec.verify or spec.columns
+    left = ", ".join(f"t.{c}" for c in cols)
+    right = ", ".join(f"f.{c}" for c in cols)
+    return (
+        f"SELECT count(*) FROM jsonb_populate_recordset(null::{spec.name}, $1::jsonb) f "  # noqa: S608
+        f"WHERE EXISTS (SELECT 1 FROM {spec.name} t WHERE ({left}) IS NOT DISTINCT FROM ({right}))"
+    )
+
+
+async def nonempty_owner_tables(conn: asyncpg.Connection) -> list[str]:
+    """Owner-data tables that already hold rows (seeded ``app_user``/``app_setting`` excepted)."""
+    out: list[str] = []
+    for spec in TABLES:
+        if spec.seeded:
+            continue
+        if await conn.fetchval(f"SELECT EXISTS (SELECT 1 FROM {spec.name})"):  # noqa: S608
+            out.append(spec.name)
+    return out
+
+
+async def restore_dump(
+    pool: asyncpg.Pool,
+    text: str,
+    *,
+    dry_run: bool = False,
+    require_empty: bool = True,
+) -> RestoreReport:
+    """Restore into a database that has the schema and the seed, in one transaction (SYS-08).
+
+    The target must hold no owner data yet: ids are preserved, so rows restored beside existing
+    ones could attach to the wrong instrument. Every table is inserted with a plain ``INSERT``
+    (a collision aborts and rolls back), then **each** file row is looked up in the table with the
+    same values and the table count must equal the file count; anything else rolls back.
+    ``require_empty=False`` exists only for tests of the collision and verification paths."""
     header, rows = parse_dump(text)
     counts_in_file = {name: len(r) for name, r in rows.items()}
     inserted: dict[str, int] = {}
     present: dict[str, int] = {}
-    problems: list[str] = []
     if dry_run:
-        return RestoreReport(counts_in_file, {}, {}, True, [])
-    async with pool.acquire() as conn, conn.transaction():
-        for name in header["tables"]:
-            spec = _SPEC[name]
-            before = int(await conn.fetchval(f"SELECT count(*) FROM {name}"))  # noqa: S608
-            for i in range(0, len(rows[name]), BATCH):
-                payload = "[" + ",".join(rows[name][i : i + BATCH]) + "]"
-                await conn.execute(_insert_sql(spec), payload)
-            after = int(await conn.fetchval(f"SELECT count(*) FROM {name}"))  # noqa: S608
-            inserted[name] = after - before
-            present[name] = after
-            if after < counts_in_file[name]:
-                problems.append(f"{name}: {after} rows present, file has {counts_in_file[name]}")
-            if spec.pk is not None:
-                await conn.execute(
-                    f"SELECT setval(pg_get_serial_sequence('{name}', '{spec.pk}'), "  # noqa: S608
-                    f"GREATEST((SELECT COALESCE(max({spec.pk}), 1) FROM {name}), 1))"
+        async with pool.acquire() as conn:
+            busy = await nonempty_owner_tables(conn) if require_empty else []
+        problems = (
+            [f"target database already holds owner data in: {', '.join(busy)}"] if busy else []
+        )
+        return RestoreReport(counts_in_file, {}, {}, not problems, problems)
+    try:
+        async with pool.acquire() as conn, conn.transaction():
+            busy = await nonempty_owner_tables(conn) if require_empty else []
+            if busy:
+                raise _RestoreFailed(
+                    [
+                        "refused: the target already holds owner data in "
+                        f"{', '.join(busy)}; restore into a freshly migrated and seeded database"
+                    ]
                 )
-    return RestoreReport(counts_in_file, inserted, present, not problems, problems)
+            problems = []
+            for name in header["tables"]:
+                spec = _SPEC[name]
+                before = int(await conn.fetchval(f"SELECT count(*) FROM {name}"))  # noqa: S608
+                for i in range(0, len(rows[name]), BATCH):
+                    payload = "[" + ",".join(rows[name][i : i + BATCH]) + "]"
+                    await conn.execute(_insert_sql(spec), payload)
+                after = int(await conn.fetchval(f"SELECT count(*) FROM {name}"))  # noqa: S608
+                inserted[name] = after - before
+                present[name] = after
+                matched = 0
+                for i in range(0, len(rows[name]), BATCH):
+                    payload = "[" + ",".join(rows[name][i : i + BATCH]) + "]"
+                    matched += int(await conn.fetchval(_verify_sql(spec), payload))
+                if matched != len(rows[name]):
+                    problems.append(
+                        f"{name}: {matched} of {len(rows[name])} file rows found unchanged"
+                    )
+                if not spec.seeded and (
+                    inserted[name] != len(rows[name]) or after != len(rows[name])
+                ):
+                    problems.append(
+                        f"{name}: inserted {inserted[name]} rows, file has {len(rows[name])}"
+                    )
+                if spec.pk is not None:
+                    seq = await conn.fetchval(
+                        "SELECT pg_get_serial_sequence($1, $2)", name, spec.pk
+                    )
+                    await conn.execute(  # never lower the sequence below its current value
+                        f"SELECT setval('{seq}', GREATEST("  # noqa: S608
+                        f"(SELECT COALESCE(max({spec.pk}), 1) FROM {name}), "
+                        f"(SELECT last_value FROM {seq}), 1))"
+                    )
+            if problems:
+                raise _RestoreFailed(problems)
+    except _RestoreFailed as exc:
+        return RestoreReport(counts_in_file, {}, {}, False, exc.problems)
+    return RestoreReport(counts_in_file, inserted, present, True, [])
 
 
 def decrypt(blob: bytes, identity_file: str, runner: AgeRunner = run_age) -> str:
@@ -497,7 +623,15 @@ async def _restore_cli(args: argparse.Namespace) -> int:
     path = Path(args.file)
     if args.identity:
         text = decrypt(path.read_bytes(), args.identity)
+    elif path.suffix == ".age":
+        print("error: an .age file needs --identity <private key file>", file=sys.stderr)
+        return 2
     else:
+        print(
+            "WARNING: restoring from a PLAINTEXT file. It holds your portfolio and alerts: keep it "
+            "off shared disks and delete it (securely) after the restore.",
+            file=sys.stderr,
+        )
         text = path.read_text(encoding="utf-8")
     pool = await create_pool()
     try:
