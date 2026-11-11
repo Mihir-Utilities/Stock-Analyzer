@@ -77,9 +77,12 @@ const GO = readFileSync(join(__dirname, "../../../api/internal/predict/predict.g
 const goStates = (() => {
   const fn = GO.slice(GO.indexOf("func (s *Service) state("));
   const body = fn.slice(0, fn.indexOf("\nfunc ", 5));
-  return [...new Set([...body.matchAll(/(?:return|case)\s+"([a-z_]+)"/g)].map((m) => m[1]!))]
-    .filter((s) => s !== "ok")
-    .sort();
+  return (
+    [...new Set([...body.matchAll(/(?:return|case)\s+"([a-z_]+)"/g)].map((m) => m[1]!))]
+      // worker run statuses the API translates (aborted_timeout becomes training_aborted, dry_run becomes no_model)
+      .filter((s) => !["ok", "partial", "aborted_timeout", "dry_run"].includes(s))
+      .sort()
+  );
 })();
 const goReasons = [...GO.matchAll(/Reason\w+\s*=\s*"([a-z_]+)"/g)].map((m) => m[1]!).sort();
 
