@@ -208,17 +208,17 @@ export const definitions = {
   "mf_total_return": {
     label: "Mutual fund total return",
     section: "1",
-    text: "Mutual fund holdings are the one place where dividends/payouts ARE included (decision D-MF 4). Stocks keep the price-return rule above. For the portfolio's mutual fund sleeve (section 8.5): a Growth plan's NAV already reflects reinvested income, so units x NAV is a total-return value and needs no special handling; an IDCW plan's NAV drops by every payout, so the owner's return must be total return: payouts are cash inflows in XIRR (idcw_payout) or extra units (idcw_reinvest). The scheme-level returns of section 9 (NAV only) stay price-only for IDCW schemes and keep the \"not comparable\" warning. The UI labels portfolio MF figures \"total return (includes IDCW payouts)\" and stock figures \"price return (excludes dividends)\"; the combined view shows both labels (docs/06 6.7).",
+    text: "For mutual funds the return includes dividend (IDCW) payouts you received, so a fund that pays out is not made to look worse. Growth plans already include reinvested income in their value. Stock figures leave dividends out.",
   },
   "xirr_pooled": {
     label: "XIRR across stocks and mutual funds",
     section: "8.5.4",
-    text: "8.5.4 Cash flows for XIRR (exact rules). Per view, from its ledger entries up to as_of (entries dated after as_of are ignored):",
+    text: "Your yearly rate of return across your stocks and mutual funds together, counting every purchase, sale and payout on the date it happened. It cannot be added up or averaged from the separate stock and fund figures.",
   },
   "absolute_return": {
     label: "Absolute return (under one year)",
     section: "8.5.6",
-    text: "8.5.6 Under one year: absolute return instead of XIRR/CAGR (D-MF 2, MFH-3). For a view or a holding, span_days = (the valuation date as_of while any holding of it is open, else the date of its last flow) - the date of its first flow; a fully exited position has no terminal value, so its span ends at its last flow, the same convention as section 8.3 (B15 review S3, decision B15R-4). A position opened and closed within 60 days therefore shows under_one_year and its absolute return even when it is viewed years later. If span_days < 365: xirr_pct = null, xirr_reason = \"under_one_year\", and absolute_return_pct is shown (MFH-18: (market_value + redemption_proceeds + idcw_cash - purchase_cash) / purchase_cash x 100, with MF purchase_cash = sum of amount + stamp_duty of purchase and sip rows (MFH-6 correction); for equity purchase_cash = buys incl. fees and proceeds are net of fees; absolute_return_basis says so). If span_days >= 365: XIRR is shown and the absolute return is also returned (labelled \"simple, not annualised\"). A SIP holding whose first instalment is over a year old is annualised even though its latest instalments are recent (the flows carry the dates); the UI footnote says \"XIRR weights each instalment by how long it was invested\". Return null with the existing reasons when no sign change (no_sign_change), fewer than one outflow and one inflow (insufficient_flows), or purchase_cash = 0 (no_purchases). span_days < 30 also keeps the reason period_too_short only when the absolute return cannot be computed.",
+    text: "The simple percentage gain on the money you put in, not turned into a yearly rate. It is shown instead of XIRR until your first purchase is a year old.",
   },
 } as const satisfies Record<string, Definition>;
 

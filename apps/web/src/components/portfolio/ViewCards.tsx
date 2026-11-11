@@ -5,13 +5,14 @@ import { Card } from "@/components/ui/Card";
 import { Stat } from "@/components/ui/Stat";
 import { getDefinition } from "@/lib/definitions";
 import { asOfText } from "@/lib/dashboard/state";
-import { DASH, formatDate, type Formatted } from "@/lib/format";
+import { DASH, formatCount, formatDate, type Formatted } from "@/lib/format";
 import type { BreakdownRow, ReadView, ViewSummary } from "@/lib/portfolio/mf-schemas";
 import type { PortfolioView } from "@/lib/portfolio/view";
 import {
   ALL_VIEW_SOURCE,
   BASIS_LINE,
   benchmarkDeltaText,
+  dayPartsText,
   inr,
   MF_NAV_SOURCE,
   MF_VIEW_SOURCE,
@@ -33,16 +34,24 @@ const SOURCE: Record<PortfolioView, string> = {
   mf: MF_VIEW_SOURCE,
 };
 
-/** Dash plus tooltip reason for an unknown cell; the known text otherwise. */
+/**
+ * Dash plus its reason for an unknown cell; the known text otherwise. The reason is a tooltip for
+ * the mouse and visually hidden text for screen readers, so no reason lives in a tooltip only.
+ */
 export function Cell({ f }: { f: Formatted }) {
   return f.reason === null ? (
     <>{f.text}</>
   ) : (
     <span title={f.reason} data-testid="cell-unknown">
-      {f.text}
+      <span aria-hidden="true">{f.text}</span>
+      <span className="sr-only" data-testid="cell-reason">
+        {`Not available: ${f.reason}`}
+      </span>
     </span>
   );
 }
+
+const ABSOLUTE_NOT_AVAILABLE = "absolute return not available";
 
 const CLASS_LABEL: Record<string, string> = {
   equity: `Stocks (${PRICE_RETURN_LABEL})`,
@@ -56,8 +65,10 @@ function returnCell(r: {
   absolute_return_pct?: number | null | undefined;
 }): { f: Formatted; label: string; under: boolean } {
   if (r.xirr_reason === "under_one_year") {
+    // A missing absolute return gets a generic reason: 'XIRR is shown after the first year' explains
+    // why XIRR is not shown, not why this figure is missing (it is said once in the card note).
     return {
-      f: pct(r.absolute_return_pct, true, reasonText(r.xirr_reason)),
+      f: pct(r.absolute_return_pct, true, ABSOLUTE_NOT_AVAILABLE),
       label: "Absolute return",
       under: true,
     };
@@ -79,7 +90,12 @@ function BreakdownTable({ rows }: { rows: BreakdownRow[] }) {
       <h2 id="pf-breakdown-h" className="text-lead font-semibold">
         Breakdown by asset class
       </h2>
-      <div className="overflow-x-auto" role="region" aria-label="Breakdown table" tabIndex={0}>
+      <div
+        className="relative overflow-x-auto"
+        role="region"
+        aria-label="Breakdown table"
+        tabIndex={0}
+      >
         <table className="w-full min-w-[40rem] text-body-sm" data-testid="pf-breakdown-table">
           <caption className="sr-only">Equity and mutual funds, each with its own figures</caption>
           <thead>
@@ -149,13 +165,23 @@ function BreakdownTable({ rows }: { rows: BreakdownRow[] }) {
                     {rc.under ? (
                       <span
                         data-testid={`pf-breakdown-under-year-${r.asset_class}`}
-                        className="ml-1 rounded-chip border border-border px-1 text-micro text-text-2"
+                        className="ml-1 rounded-chip border border-border px-1 text-caption text-text-2"
                       >
                         absolute return, under 1 year
                       </span>
                     ) : null}
                   </td>
-                  <td className="p-2">{asOfText(r.as_of) ?? "unknown"}</td>
+                  <td className="p-2">
+                    {asOfText(r.as_of) ?? "unknown"}
+                    {r.stale === true ? (
+                      <span
+                        data-testid={`pf-breakdown-stale-${r.asset_class}`}
+                        className="ml-1 rounded-chip border border-warn px-1 text-caption text-text-1"
+                      >
+                        stale
+                      </span>
+                    ) : null}
+                  </td>
                 </tr>
               );
             })}
@@ -210,25 +236,16 @@ export function ViewCards({ s, read, view, asOf, stale, staleNavDate }: ViewCard
     .filter(Boolean)
     .join(" ");
   const bd = read.breakdown;
-  const dayParts =
-    view === "all" && bd.length > 0
-      ? bd
-          .map(
-            (r) =>
-              `${r.asset_class === "mf" ? "Mutual funds (NAV)" : "Stocks (close)"} as of ${asOfText(r.as_of) ?? "unknown"}`,
-          )
-          .join("; ")
-      : null;
+  const dayParts = view === "all" ? dayPartsText(bd) : null;
   const staleChip =
     hasMf && staleNavDate !== null ? (
       <span
         data-testid="pf-nav-stale-chip"
-        className="inline-flex items-center rounded-chip border border-warn bg-surface-2 px-2 py-0.5 text-micro text-text-1"
+        className="inline-flex items-center rounded-chip border border-warn bg-surface-2 px-2 py-0.5 text-caption text-text-1"
       >
         NAV as of {formatDate(staleNavDate).text} (stale)
       </span>
     ) : null;
-  const total = t.total_pnl;
 
   return (
     <>
@@ -320,14 +337,17 @@ export function ViewCards({ s, read, view, asOf, stale, staleNavDate }: ViewCard
               <Stat
                 label="Absolute return"
                 value={rc.f.reason === null ? rc.f.text : null}
-                nullReason={rc.f.reason ?? "not available"}
+                nullReason={rc.f.reason ?? ABSOLUTE_NOT_AVAILABLE}
                 definition={getDefinition("absolute_return").text}
                 {...common}
               />
-              <p className="mt-1 text-micro text-text-2" data-testid="pf-card-absolute-return-note">
+              <p
+                className="mt-1 text-caption text-text-2"
+                data-testid="pf-card-absolute-return-note"
+              >
                 {UNDER_ONE_YEAR_COPY}
                 {s.returns.span_days !== null && s.returns.span_days !== undefined
-                  ? ` (${s.returns.span_days} days since ${formatDate(s.returns.first_flow_date).text}.)`
+                  ? ` (${formatCount(s.returns.span_days).text} days since ${formatDate(s.returns.first_flow_date).text}.)`
                   : ""}
               </p>
             </div>
@@ -348,10 +368,10 @@ export function ViewCards({ s, read, view, asOf, stale, staleNavDate }: ViewCard
                 {...common}
               />
               {rc.f.reason === null && absLine.reason === null ? (
-                <p className="mt-1 text-micro text-text-2" data-testid="pf-card-xirr-abs">
+                <p className="mt-1 text-caption text-text-2" data-testid="pf-card-xirr-abs">
                   Absolute return {absLine.text} (simple, not annualised)
                   {s.returns.span_days !== null && s.returns.span_days !== undefined
-                    ? `, over ${s.returns.span_days} days since ${formatDate(s.returns.first_flow_date).text}`
+                    ? `, over ${formatCount(s.returns.span_days).text} days since ${formatDate(s.returns.first_flow_date).text}`
                     : ""}
                   .
                 </p>
@@ -383,19 +403,6 @@ export function ViewCards({ s, read, view, asOf, stale, staleNavDate }: ViewCard
             </p>
           ) : null
         ) : null}
-        {total !== null && total !== undefined ? (
-          <p className="mt-3 text-caption text-text-2" data-testid="pf-card-total-pnl">
-            For reference only, unrealized + realized{hasMf ? " + IDCW income" : ""} added up:{" "}
-            {inr(total, { signed: true }).text}. Each part has its own card above.
-          </p>
-        ) : (
-          <p className="mt-3 text-caption text-text-2" data-testid="pf-card-total-pnl">
-            Total P&amp;L: {DASH}{" "}
-            {t.total_pnl_reason
-              ? valueUnavailable(t.total_pnl_reason)
-              : "Needs a price or NAV for every holding."}
-          </p>
-        )}
         <p className="mt-1 text-caption text-text-2" data-testid="pf-purchase-cash">
           Money put in (purchases including charges, the base of the absolute return):{" "}
           {t.purchase_cash ? inr(t.purchase_cash).text : DASH}.

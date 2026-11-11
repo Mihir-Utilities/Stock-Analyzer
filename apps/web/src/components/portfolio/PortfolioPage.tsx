@@ -4,12 +4,13 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
+import { cx } from "@/components/ui/cx";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Tabs, ToastProvider } from "@/components/ui/overlays";
 import { describeError, asOfText } from "@/lib/dashboard/state";
 import { usePortfolioView } from "@/lib/portfolio/mf-api";
 import { readView, type ReadView, type ViewSummary } from "@/lib/portfolio/mf-schemas";
-import { useViewParam, type PortfolioView } from "@/lib/portfolio/view";
+import { useViewParam, VIEW_LABEL, type PortfolioView } from "@/lib/portfolio/view";
 import { WarningBanners } from "./SummarySection";
 import { ViewCards } from "./ViewCards";
 import { ViewSwitcher } from "./ViewSwitcher";
@@ -151,18 +152,34 @@ function ViewBody({
   asOf,
   stale,
   warnings,
-  showExited,
-  onShowExited,
+  stockExited,
+  onStockExited,
+  mfExited,
+  onMfExited,
 }: {
   s: ViewSummary;
   view: PortfolioView;
   asOf: string | null;
   stale: boolean;
   warnings: ReadonlyArray<{ code: string; message: string }>;
-  showExited: boolean;
-  onShowExited: (v: boolean) => void;
+  stockExited: boolean;
+  onStockExited: (v: boolean) => void;
+  mfExited: boolean;
+  onMfExited: (v: boolean) => void;
 }) {
-  const read = useMemo(() => readView(s), [s]);
+  const full = useMemo(() => readView(s, view), [s, view]);
+  // One request flag decides what the server sends; each table then shows or hides its own exited rows.
+  const read = useMemo(
+    () => ({
+      ...full,
+      legacy: {
+        ...full.legacy,
+        holdings: full.legacy.holdings.filter((h) => stockExited || !h.exited),
+      },
+      mfHoldings: full.mfHoldings.filter((h) => mfExited || !h.exited),
+    }),
+    [full, stockExited, mfExited],
+  );
   const present = s.asset_classes_present ?? null;
   const hasEq = present === null ? read.legacy.holdings.length > 0 : present.includes("equity");
   const hasMf = present === null ? read.mfHoldings.length > 0 : present.includes("mf");
@@ -223,8 +240,8 @@ function ViewBody({
             s={read.legacy}
             asOf={asOf}
             stale={stale}
-            showExited={showExited}
-            onShowExited={onShowExited}
+            showExited={stockExited}
+            onShowExited={onStockExited}
           />
           {view === "all" ? <Totals label="stocks" row={eqRow} /> : null}
         </>
@@ -234,12 +251,14 @@ function ViewBody({
           rows={read.mfHoldings}
           totals={mfTotals}
           asOf={asOf}
-          includeExited={showExited}
-          onIncludeExited={onShowExited}
+          includeExited={mfExited}
+          onIncludeExited={onMfExited}
           badRows={read.badRows}
         />
       ) : null}
-      {showStockSections ? <ChartsSection s={read.legacy} asOf={asOf} /> : null}
+      {showStockSections ? (
+        <ChartsSection s={read.legacy} asOf={asOf} view={view === "all" ? "all" : "equity"} />
+      ) : null}
       {showMf && hasMf ? (
         <MfChartsSection
           view={view}
@@ -256,8 +275,12 @@ function ViewBody({
 }
 
 function Body({ view }: { view: PortfolioView }) {
-  const [showExited, setShowExited] = useState(false);
-  const q = usePortfolioView(view, showExited);
+  const [stockExited, setStockExited] = useState(false);
+  const [mfExited, setMfExited] = useState(false);
+  // The server takes one flag; in All it asks for exited rows when either table wants them.
+  const includeExited =
+    view === "equity" ? stockExited : view === "mf" ? mfExited : stockExited || mfExited;
+  const q = usePortfolioView(view, includeExited);
 
   let top;
   if (q.isPending) {
@@ -280,23 +303,26 @@ function Body({ view }: { view: PortfolioView }) {
     const env = q.data;
     const s = env.data;
     const asOf = asOfText(env.meta?.as_of ?? s.as_of);
-    // While the next view loads, the previous view's data stays (no blank flash); say so.
-    const shownView = (s.view ?? view) as PortfolioView;
+    // While the next view loads the previous answer stays (no blank flash), dimmed, and it is
+    // labelled with the view it is for, never with the one being loaded.
+    const shownView = env.forView;
     top = (
       <div
-        className="flex flex-col gap-4"
+        className={cx("flex flex-col gap-4", q.isPlaceholderData && "opacity-60")}
         data-testid="pf-view-body"
         data-view={shownView}
         aria-busy={q.isPlaceholderData}
       >
         <ViewBody
           s={s}
-          view={q.isPlaceholderData ? shownView : view}
+          view={shownView}
           asOf={asOf}
           stale={env.meta?.stale === true}
           warnings={env.warnings}
-          showExited={showExited}
-          onShowExited={setShowExited}
+          stockExited={stockExited}
+          onStockExited={setStockExited}
+          mfExited={mfExited}
+          onMfExited={setMfExited}
         />
       </div>
     );
@@ -308,6 +334,14 @@ function Body({ view }: { view: PortfolioView }) {
   const mfTxns = <MfTxnSection schemes={mfSchemas} />;
   return (
     <>
+      <div
+        role="status"
+        aria-live="polite"
+        data-testid="pf-updating"
+        className={q.isPlaceholderData ? "text-body-sm text-text-2" : "sr-only"}
+      >
+        {q.isPlaceholderData ? `Updating ${VIEW_LABEL[view]}...` : ""}
+      </div>
       {top}
       {view === "all" ? (
         <Tabs

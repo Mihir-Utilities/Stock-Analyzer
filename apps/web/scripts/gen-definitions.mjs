@@ -52,9 +52,16 @@ export const ENTRIES = [
   ["avg_cost", "Average cost", "8.1", "Average-cost basis for open holdings"],
   ["xirr", "XIRR", "8.3", "Cash flows: buy"],
   ["day_change", "Day change", "8.4", "Day change ="],
-  ["mf_total_return", "Mutual fund total return", "1", "**Mutual fund holdings are the one place"],
-  ["xirr_pooled", "XIRR across stocks and mutual funds", "8.5.4", "**8.5.4 Cash flows for XIRR"],
-  ["absolute_return", "Absolute return (under one year)", "8.5.6", "**8.5.6 Under one year"],
+  // These three are shown to the owner as short plain-English text: the anchor is the marker line
+  // "- **Owner text (key):** ..." of docs/05 8.5.6a and only the text after the marker is used.
+  ["mf_total_return", "Mutual fund total return", "1", "**Owner text (mf_total_return):**"],
+  ["xirr_pooled", "XIRR across stocks and mutual funds", "8.5.4", "**Owner text (xirr_pooled):**"],
+  [
+    "absolute_return",
+    "Absolute return (under one year)",
+    "8.5.6",
+    "**Owner text (absolute_return):**",
+  ],
 ];
 
 function strip(md) {
@@ -67,7 +74,9 @@ export function buildDefinitions(spec) {
   for (const [key, label, section, anchor] of ENTRIES) {
     const line = lines.find((l) => l.replace(/^- /, "").startsWith(anchor));
     if (!line) throw new Error(`definitions: anchor for "${key}" not found in docs/05: ${anchor}`);
-    out.push({ key, label, section, text: strip(line.replace(/^- /, "")) });
+    const body = line.replace(/^- /, "");
+    const text = anchor.startsWith("**Owner text (") ? body.slice(anchor.length) : body;
+    out.push({ key, label, section, text: strip(text) });
   }
   const body = out
     .map(

@@ -10,7 +10,7 @@ import { cx } from "@/components/ui/cx";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiRequest } from "@/lib/api/client";
-import { DASH, formatDate, formatNumber, type Formatted } from "@/lib/format";
+import { DASH, formatCount, formatDate, formatNumber, type Formatted } from "@/lib/format";
 import { displayNumber, qtyDecimals } from "@/lib/portfolio/decimal";
 import {
   mfHoldingSchema,
@@ -32,7 +32,7 @@ import {
 
 // MF holdings table (docs/06 6.7a). Everything shown comes from the API; sorting only reorders.
 
-type SortKey = "name" | "invested" | "value" | "unrealized_pct" | "weight" | "return";
+type SortKey = "name" | "invested" | "value" | "unrealized" | "weight" | "xirr" | "absolute";
 
 const nullLast = (a: number | null, b: number | null, dir: number): number => {
   if (a === null && b === null) return 0;
@@ -47,12 +47,14 @@ function sortValue(h: MfHolding, k: Exclude<SortKey, "name">): number | null {
       return displayNumber(h.invested);
     case "value":
       return displayNumber(h.market_value);
-    case "unrealized_pct":
-      return h.unrealized_pct ?? null;
+    case "unrealized":
+      return displayNumber(h.unrealized_pnl);
     case "weight":
       return h.weight_pct ?? null;
-    case "return":
-      return (h.xirr_reason === "under_one_year" ? h.absolute_return_pct : h.xirr_pct) ?? null;
+    case "xirr":
+      return h.xirr_pct ?? null;
+    case "absolute":
+      return h.absolute_return_pct ?? null;
   }
 }
 
@@ -69,7 +71,7 @@ function Chip({
     <span
       data-testid={testId}
       className={cx(
-        "inline-flex items-center rounded-chip border bg-surface-2 px-1.5 py-0.5 text-micro",
+        "inline-flex items-center rounded-chip border bg-surface-2 px-1.5 py-0.5 text-caption",
         warn ? "border-warn text-text-1" : "border-border text-text-2",
       )}
     >
@@ -80,10 +82,9 @@ function Chip({
 
 function returnOf(h: MfHolding): { f: Formatted; under: boolean } {
   if (h.xirr_reason === "under_one_year") {
-    return {
-      f: pct(h.absolute_return_pct, true, reasonText(h.xirr_reason)),
-      under: true,
-    };
+    // The reason for a missing absolute return is generic: 'XIRR is shown after the first year'
+    // explains why XIRR is not shown (the chip says it), not why this figure is missing.
+    return { f: pct(h.absolute_return_pct, true, "absolute return not available"), under: true };
   }
   return { f: pct(h.xirr_pct, false, reasonText(h.xirr_reason) ?? "not available"), under: false };
 }
@@ -98,9 +99,19 @@ function Row({ h, testId }: { h: MfHolding; testId: string }) {
   const noNav = h.market_value === null || h.market_value === undefined;
   const navReason = reasonText(h.nav_reason) ?? "No NAV for this fund yet";
   const folios = h.folio ? [h.folio] : (h.folios ?? []);
+  const subtitle = [h.fund_house, h.category, h.isin ? `ISIN ${h.isin}` : null]
+    .filter((x): x is string => typeof x === "string" && x !== "")
+    .join(" | ");
+  const underText =
+    h.span_days !== null && h.span_days !== undefined
+      ? `under 1 year: ${formatCount(h.span_days).text} days${h.first_txn_date ? ` since ${formatDate(h.first_txn_date).text}` : ""}`
+      : "under 1 year";
   return (
     <tr data-testid={testId} className="border-t border-border align-top">
-      <th scope="row" className="min-w-[14rem] p-2 text-left font-normal">
+      <th
+        scope="row"
+        className="sticky left-0 z-10 min-w-[14rem] bg-surface-1 p-2 text-left font-normal"
+      >
         <Link
           href={`/mf/${h.scheme_code}`}
           data-testid={`pf-mf-link-${h.scheme_code}`}
@@ -128,8 +139,13 @@ function Row({ h, testId }: { h: MfHolding; testId: string }) {
           ) : null}
           {h.exited ? <Chip testId="pf-mf-exited-chip">Exited</Chip> : null}
         </div>
+        {subtitle ? (
+          <div className="mt-1 text-caption text-text-2" data-testid="pf-mf-subtitle">
+            {subtitle}
+          </div>
+        ) : null}
         {folios.length > 0 ? (
-          <div className="mt-1 text-micro text-text-2" data-testid="pf-mf-folios">
+          <div className="mt-1 text-caption text-text-2" data-testid="pf-mf-folios">
             {folios.length === 1 ? "Folio" : "Folios"}: {folios.join(", ")}
           </div>
         ) : null}
@@ -143,13 +159,18 @@ function Row({ h, testId }: { h: MfHolding; testId: string }) {
       </td>
       <td className="num p-2">
         <Cell f={inr(h.nav, { reason: navReason })} />
-        <div className="text-micro text-text-2" data-testid="pf-mf-nav-date">
+        <div className="text-caption text-text-2" data-testid="pf-mf-nav-date">
           {h.nav_date ? `NAV as of ${formatDate(h.nav_date).text}` : DASH}
         </div>
+        {noNav ? (
+          <div className="text-caption text-text-2" data-testid="pf-mf-nav-reason">
+            {navReason}
+          </div>
+        ) : null}
         {h.nav_stale ? (
           <span
             data-testid="pf-mf-stale-chip"
-            className="mt-1 inline-flex items-center rounded-chip border border-warn bg-surface-2 px-1.5 py-0.5 text-micro text-text-1"
+            className="mt-1 inline-flex items-center rounded-chip border border-warn bg-surface-2 px-1.5 py-0.5 text-caption text-text-1"
           >
             NAV as of {formatDate(h.nav_date).text} (stale)
           </span>
@@ -160,7 +181,7 @@ function Row({ h, testId }: { h: MfHolding; testId: string }) {
       </td>
       <td className="num p-2">
         <Cell f={inr(h.unrealized_pnl, { signed: true, reason: navReason })} />
-        <div className="text-micro text-text-2">
+        <div className="text-caption text-text-2">
           <Cell
             f={pct(
               h.unrealized_pct,
@@ -193,7 +214,7 @@ function Row({ h, testId }: { h: MfHolding; testId: string }) {
         <Cell f={r.f} />
         {r.under ? (
           <div>
-            <Chip testId="pf-mf-under-year-chip">under 1 year</Chip>
+            <Chip testId="pf-mf-under-year-chip">{underText}</Chip>
           </div>
         ) : null}
       </td>
@@ -201,19 +222,32 @@ function Row({ h, testId }: { h: MfHolding; testId: string }) {
   );
 }
 
-const HEADERS: Array<{ label: string; sort?: SortKey; num?: boolean }> = [
+const HEADERS: Array<{
+  label: string;
+  sort?: SortKey;
+  /** A column whose cell can be ordered by more than one figure: one button each. */
+  sorts?: Array<{ key: SortKey; label: string }>;
+  num?: boolean;
+}> = [
   { label: "Scheme", sort: "name" },
   { label: "Units", num: true },
   { label: "Avg cost", num: true },
   { label: "Invested", sort: "invested", num: true },
   { label: "NAV", num: true },
   { label: "Value", sort: "value", num: true },
-  { label: "Unrealized P&L", sort: "unrealized_pct", num: true },
+  { label: "Unrealized P&L", sort: "unrealized", num: true },
   { label: "Realized P&L", num: true },
   { label: "IDCW income", num: true },
   { label: "Day change", num: true },
   { label: "Weight", sort: "weight", num: true },
-  { label: "XIRR or absolute return", sort: "return", num: true },
+  {
+    label: "XIRR or absolute return",
+    sorts: [
+      { key: "xirr", label: "Sort by XIRR" },
+      { key: "absolute", label: "Sort by absolute return" },
+    ],
+    num: true,
+  },
 ];
 
 export interface MfTotals {
@@ -355,7 +389,7 @@ export function MfHoldingsSection({
         />
       ) : (
         <div
-          className="overflow-x-auto"
+          className="relative overflow-x-auto"
           role="region"
           aria-label="Mutual fund holdings table"
           tabIndex={0}
@@ -377,7 +411,11 @@ export function MfHoldingsSection({
                           : "descending"
                         : undefined
                     }
-                    className={cx("p-2 font-medium", h.num ? "text-right" : "")}
+                    className={cx(
+                      "p-2 font-medium",
+                      h.num ? "text-right" : "",
+                      h.label === "Scheme" ? "sticky left-0 z-10 bg-surface-1" : "",
+                    )}
                   >
                     {h.sort ? (
                       <button
@@ -388,6 +426,27 @@ export function MfHoldingsSection({
                       >
                         {h.label}
                       </button>
+                    ) : h.sorts ? (
+                      <div className="flex flex-col items-end">
+                        <span>{h.label}</span>
+                        {h.sorts.map((x) => (
+                          <button
+                            key={x.key}
+                            type="button"
+                            data-testid={`pf-mf-sort-${x.key}`}
+                            aria-pressed={sort?.key === x.key}
+                            onClick={() => toggleSort(x.key)}
+                            className="touch-target inline-flex items-center text-caption underline underline-offset-2"
+                          >
+                            {x.label}
+                            {sort?.key === x.key
+                              ? sort.dir === 1
+                                ? " (ascending)"
+                                : " (descending)"
+                              : ""}
+                          </button>
+                        ))}
+                      </div>
                     ) : (
                       h.label
                     )}
@@ -410,7 +469,7 @@ export function MfHoldingsSection({
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-border font-medium" data-testid="pf-mf-totals-row">
-                <th scope="row" className="p-2 text-left">
+                <th scope="row" className="sticky left-0 z-10 bg-surface-1 p-2 text-left">
                   Total, mutual funds
                 </th>
                 <td />
@@ -444,7 +503,7 @@ export function MfHoldingsSection({
           </table>
         </div>
       )}
-      <p className="text-micro text-text-2">
+      <p className="text-caption text-text-2">
         As of {asOf ?? "unknown"}. Sort order is for reading only; totals are computed by the
         server.
       </p>

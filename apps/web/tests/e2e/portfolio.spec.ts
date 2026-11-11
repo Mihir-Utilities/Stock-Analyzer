@@ -89,7 +89,7 @@ async function mockApi(page: Page, oversell = false): Promise<Seen> {
 test("PF-01 E2E: an oversell is refused with the server's detail", async ({ page }) => {
   await signIn(page);
   const seen = await mockApi(page, true);
-  await page.goto("/portfolio");
+  await page.goto("/portfolio?view=equity");
   await expect(page.getByTestId("pf-summary")).toContainText("+₹5,000.00");
   await page.getByTestId("txn-add").click();
   await page.getByTestId("txn-symbol").fill("TCS");
@@ -112,7 +112,7 @@ test("PF-01 E2E: an oversell is refused with the server's detail", async ({ page
 test("PF-06 E2E: a weekend date warns and the transaction can still be saved", async ({ page }) => {
   await signIn(page);
   const seen = await mockApi(page);
-  await page.goto("/portfolio");
+  await page.goto("/portfolio?view=equity");
   await page.getByTestId("txn-add").click();
   await page.getByTestId("txn-symbol").fill("TCS");
   await page.getByTestId("txn-qty").fill("5");
@@ -129,7 +129,7 @@ test("PF-09 E2E: a split/bonus adjustment is shown, value is invariant, review i
 }) => {
   await signIn(page);
   await mockApi(page);
-  await page.goto("/portfolio");
+  await page.goto("/portfolio?view=equity");
   const row = page
     .getByRole("grid", { name: "Holdings" })
     .getByRole("row")
@@ -144,7 +144,7 @@ test("PF-09 E2E: a split/bonus adjustment is shown, value is invariant, review i
 
 test.describe("axe and touch targets on portfolio and watchlist", () => {
   test.use({ bypassCSP: true });
-  for (const path of ["/portfolio", "/watchlist"]) {
+  for (const path of ["/portfolio?view=equity", "/watchlist"]) {
     for (const theme of ["dark", "light"] as const) {
       for (const width of [375, 1440]) {
         test(`${path} ${theme} at ${width}`, async ({ page }) => {
@@ -154,7 +154,7 @@ test.describe("axe and touch targets on portfolio and watchlist", () => {
           await page.emulateMedia({ reducedMotion: "reduce" });
           await page.goto(path);
           await setTheme(page, theme);
-          if (path === "/portfolio") {
+          if (path.startsWith("/portfolio")) {
             await page.getByTestId("pf-chart-breakdown").waitFor();
             await page.getByTestId("txn-table").waitFor();
             await page.getByTestId("adj-list").waitFor();
@@ -221,7 +221,7 @@ test.describe("axe and touch targets on the portfolio edit, delete and error sta
           }
           await page.setViewportSize({ width, height: 900 });
           await page.emulateMedia({ reducedMotion: "reduce" });
-          await page.goto("/portfolio");
+          await page.goto("/portfolio?view=equity");
           await setTheme(page, theme);
           await page.getByTestId("adj-list").waitFor();
           if (state === "edit-form") {

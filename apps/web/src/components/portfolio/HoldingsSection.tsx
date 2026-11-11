@@ -139,7 +139,8 @@ export function HoldingsSection({
   showExited: boolean;
   onShowExited: (v: boolean) => void;
 }) {
-  const realized = formatInr(displayNumber(s.totals.realized_pnl), { signed: true }).text;
+  const realizedF = formatInr(displayNumber(s.totals.realized_pnl), { signed: true });
+  const realized = realizedF.reason === null ? ` (${realizedF.text})` : "";
   const [showAllLinks, setShowAllLinks] = useState(false);
   return (
     <section
@@ -163,8 +164,8 @@ export function HoldingsSection({
       </div>
       <p className="text-caption text-text-2" data-testid="pf-ltp-note">
         LTP is the latest valid close from your imported price files (manual price mode), not a live
-        quote. Fully sold positions are hidden by default; their realized P&amp;L ({realized}) stays
-        in the totals.
+        quote. Fully sold positions are hidden by default; their realized P&amp;L{realized} stays in
+        the stock totals.
       </p>
       <DataTable
         label="Holdings"
