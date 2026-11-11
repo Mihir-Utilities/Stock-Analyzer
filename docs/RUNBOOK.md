@@ -528,3 +528,13 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
   5. Both themes at 320 / 375 / 768 / 1024 / 1440 px: nothing overlaps; touch targets >= 44 px.
   Last run: not yet run (F15-8).
 - **Tests:** `cd apps/web && npx vitest run tests/unit/admin-status.test.tsx tests/unit/f15-polish.test.tsx tests/unit/bundle-budget.test.ts` and, after `npm run build:e2e && npm run build-storybook`, `PW_PORT=3515 PW_STORY_PORT=6515 npx playwright test tests/e2e/f15.spec.ts --workers=2`.
+
+## ML-1 Experimental ML pipeline (D07)
+
+- **State:** forecasts are deferred (D-4). `python -m worker run train_models` records `insufficient_universe` (in `ingestion_run.details`: `eligible`, `excluded`) and writes nothing while fewer than 20 tracked stocks have >= 750 valid bars and no unconfirmed action. `predict` then finds no model and stores nothing; the API reports `no_model`.
+- **Jobs:** `train_models` (Sat 11:00 IST once D08 schedules it, 90 min limit) and `predict` (also run by `process_queued_jobs` when an active model exists). Both support `--dry-run`. Training is CPU only (LightGBM, one thread, deterministic); on the runner timeout it stops before the next fit, stores nothing and the run is `partial` with `status: aborted_timeout` (no partial model is ever activated).
+- **Statuses in `details.status`:** `ok`, `insufficient_universe`, `insufficient_history` (fewer than 12 walk-forward folds, needs about 6 years of prices, D07-2), `aborted_timeout`, `no_model` (predict).
+- **Reading a result:** `model_run.valid_metrics.guardrail` lists every check with value and threshold; `.folds` has per-fold AUC, Brier, log loss, accuracy, ECE and band coverage for the model and B1-B3; `.meta` has the feature hash, parameters, seed and library versions. `model_run.status`: `active` (guardrail passed), `candidate` (failed, no artifact), `retired`.
+- **Live gate:** after 100 resolved live predictions of a horizon, live AUC < 0.50 or band coverage outside [0.70, 0.90] sets `guardrail_pass=false` on that horizon's active runs (`valid_metrics.live_gate` has the numbers). Forecasts for the horizon stay hidden until a newer training run passes.
+- **Failure modes:** a training window with a single class (extreme sample) fails the run: check the prices; the previous active model stays. A model whose feature list differs from today's (for example the VIX rows were removed) is not used and the horizon is hidden as `no_model`; retrain.
+- **Tests:** `cd apps/worker && uv run pytest tests/test_ml_*.py` (about 2 minutes; `test_ml_db.py` needs `TEST_DATABASE_URL`). Open points: D07-1..D07-16 in `docs/OPEN_QUESTIONS.md`.

@@ -149,6 +149,15 @@ source = { registry = "https://pypi.org/simple" }
     assert [e.name for e in ls.violations(list(entries.values()))] == ["newpkg"]
 
 
+def test_reviewed_override_applies_only_when_the_probe_found_nothing() -> None:
+    (entry,) = ls.python_entries_from([("scipy", "1.17.1")], {}, {})
+    assert entry.license == "BSD-3-Clause" and not ls.violations([entry])
+    (probed,) = ls.python_entries_from(
+        [("scipy", "1.17.1")], {("scipy", "1.17.1"): "GPL-3.0-only"}, {}
+    )
+    assert [e.name for e in ls.violations([probed])] == ["scipy"]  # a real probe result wins
+
+
 def test_locked_package_with_a_gpl_licence_fails() -> None:
     entries = ls.python_entries_from([("x", "1")], {("x", "1"): "GPL-3.0-only"}, {})
     assert [e.name for e in ls.violations(entries)] == ["x"]

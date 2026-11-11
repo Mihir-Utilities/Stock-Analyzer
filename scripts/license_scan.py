@@ -204,6 +204,12 @@ def previous_python_licenses(notices: str) -> dict[tuple[str, str], str]:
     return rows
 
 
+# Packages whose wheel metadata carries only a long licence text (no SPDX field, no classifier), so
+# the probe cannot read a licence. Reviewed by hand; used only when the probe found nothing.
+# scipy (pulled in by lightgbm, D07): BSD-3-Clause per https://github.com/scipy/scipy/blob/main/LICENSE.txt
+PY_LICENSE_OVERRIDES = {"scipy": "BSD-3-Clause"}
+
+
 def python_entries_from(
     locked: list[tuple[str, str]],
     installed: dict[tuple[str, str], str],
@@ -211,7 +217,8 @@ def python_entries_from(
 ) -> list[Entry]:
     entries = []
     for name, version in locked:
-        lic = installed.get((name, version)) or previous.get((name, version)) or "UNKNOWN"
+        lic = installed.get((name, version)) or previous.get((name, version))
+        lic = lic or PY_LICENSE_OVERRIDES.get(name) or "UNKNOWN"
         entries.append(Entry("python", name, version, lic, "runtime/dev"))
     return entries
 

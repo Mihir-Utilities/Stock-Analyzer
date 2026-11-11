@@ -351,6 +351,15 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | ML-10 | Quantile crossing | Sorted monotonic | U |
 | ML-11 | Determinism | Same data/seed -> same metrics | U |
 | ML-12 | No single target price anywhere in UI | Component test | E |
+| ML-13 | Cross-sectional rank at `t` uses only stocks on date `t`; a date with one stock drops the row | Per-date ranks unchanged when other dates change | U |
+| ML-14 | Random-noise data (guardrail function over 150 seeds and three full LightGBM runs) | Never passes the guardrail | U |
+| ML-15 | Each guardrail condition alone; fewer than 12 folds; only the last 8 folds count; deterministic verdict | Fails with the named check / `insufficient_folds` | U |
+| ML-16 | Conformal band calibration | Coverage 80% on fresh data, small-sample coverage at least 80%, median stays inside the band | U |
+| ML-17 | Outcome resolution | `realized`, `direction_correct`, `in_band` per docs/05 10.7; flat return is not "up"; unknown inputs give null | U |
+| ML-18 | `predict` twice for the same `as_of`; gated model | Stored rows are never rewritten; gated values stored with `shown=false` | I |
+| ML-19 | Activation rule | Passing horizon -> active and previous retired; failing -> candidate without artifact, older active kept; newer passing run replaces a gated one | I |
+| ML-20 | Universe selection | Stock with < 750 bars or an unconfirmed action is excluded with a reason; a model trained on other features is not used | I/U |
+| ML-21 | Market series gaps | Filled forward by at most one row, longer gaps drop the row | U |
 
 ## SEC/API: security and API
 | ID | Scenario | Required behavior | Test |
