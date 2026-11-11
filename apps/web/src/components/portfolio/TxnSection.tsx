@@ -130,7 +130,12 @@ export function TxnSection({ symbols }: { symbols: ReadonlyArray<string> }) {
     );
   } else {
     body = (
-      <div className="overflow-x-auto" role="region" aria-label="Transactions table" tabIndex={0}>
+      <div
+        className="relative overflow-x-auto"
+        role="region"
+        aria-label="Transactions table"
+        tabIndex={0}
+      >
         <table className="w-full min-w-[44rem] text-body-sm" data-testid="txn-table">
           <caption className="sr-only">Transactions, newest first</caption>
           <thead>

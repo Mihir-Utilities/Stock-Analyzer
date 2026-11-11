@@ -10,6 +10,7 @@ import { Stat } from "@/components/ui/Stat";
 import {
   ALL_VIEW_SOURCE,
   BASIS_LINE,
+  dayPartsText,
   MF_VIEW_SOURCE,
   NO_MF_TXNS_COPY,
   reasonText,
@@ -178,6 +179,7 @@ export function PortfolioCard() {
     .filter(Boolean)
     .join(" ");
   const source = SOURCE_BY_VIEW[shown];
+  const dayParts = shown === "all" ? dayPartsText(p.breakdown ?? []) : null;
   const under = p.returns.xirr_reason === "under_one_year";
   const alloc = allocationOf(p, shown);
   return (
@@ -220,7 +222,7 @@ export function PortfolioCard() {
                 ? null
                 : formatPercent(p.returns.absolute_return_pct, { signed: true }).text
             }
-            nullReason={UNDER_ONE_YEAR_COPY}
+            nullReason="absolute return not available"
             definition={UNDER_ONE_YEAR_COPY}
             source={source}
             asOf={asOf}
@@ -243,6 +245,11 @@ export function PortfolioCard() {
       {shown === "all" ? (
         <p className="mt-2 text-caption text-text-2" data-testid="dash-basis-line">
           {BASIS_LINE}
+        </p>
+      ) : null}
+      {dayParts ? (
+        <p className="mt-1 text-caption text-text-2" data-testid="dash-day-parts">
+          Day change parts: {dayParts}.
         </p>
       ) : null}
       <div className="mt-4">

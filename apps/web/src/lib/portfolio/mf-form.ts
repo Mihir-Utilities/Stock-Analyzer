@@ -141,31 +141,52 @@ export function unitsTimesNav(units: string, nav: string): string | null {
     : money4(u.times(v).toDecimalPlaces(4, Decimal.ROUND_HALF_UP));
 }
 
+/**
+ * Why a stored row cannot be edited, or null when it can. A type this form does not offer, or a
+ * folio or stamp duty the app could not read, is never guessed (it would be saved back as a
+ * purchase, an empty folio or a zero charge): the row stays as it is.
+ */
+export function uneditableReason(t: {
+  txn_type: string;
+  folio?: string | null | undefined;
+  stamp_duty?: string | null | undefined;
+}): string | null {
+  if (!(MF_TXN_TYPES as readonly string[]).includes(t.txn_type)) {
+    return `${typeLabel(t.txn_type)} entries cannot be edited here. ${SWITCH_NOT_SUPPORTED_COPY}`;
+  }
+  if (t.folio === null || t.folio === undefined || t.folio === "") {
+    return "its folio could not be read";
+  }
+  if (t.stamp_duty === null || t.stamp_duty === undefined) {
+    return "its stamp duty could not be read";
+  }
+  return null;
+}
+
+/** The form values of a stored row; null when the row cannot be edited (see `uneditableReason`). */
 export function draftFromTxn(t: {
   scheme_code: number;
   scheme_name: string;
-  folio: string;
+  folio?: string | null | undefined;
   txn_type: string;
   txn_date: string;
   units: string;
   nav: string;
   amount: string;
-  stamp_duty: string;
+  stamp_duty?: string | null | undefined;
   note?: string | null | undefined;
-}): MfDraft {
-  const type = (MF_TXN_TYPES as readonly string[]).includes(t.txn_type)
-    ? (t.txn_type as MfTxnType)
-    : "purchase";
+}): MfDraft | null {
+  if (uneditableReason(t) !== null) return null;
   return {
     schemeCode: String(t.scheme_code),
     schemeName: t.scheme_name,
-    folio: t.folio,
-    type,
+    folio: t.folio ?? "",
+    type: t.txn_type as MfTxnType,
     date: t.txn_date,
     units: plainString(t.units),
     nav: plainString(t.nav),
     amount: plainString(t.amount),
-    stampDuty: plainString(t.stamp_duty),
+    stampDuty: plainString(t.stamp_duty ?? "0"),
     note: t.note ?? "",
   };
 }

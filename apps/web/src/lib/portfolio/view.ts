@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // The All / Equity / Mutual funds switcher state (docs/06 6.7a). The view is a filter: the UI sends
 // `view` explicitly (MFH-14: the API default is equity, the UI default is All) and never computes
@@ -43,14 +43,36 @@ export function useViewParam(): [PortfolioView, (v: PortfolioView) => void] {
     sp ? sp.get("view") : new URLSearchParams(locationSearch()).get("view"),
   );
   const [view, setView] = useState<PortfolioView>(fromUrl);
-  // Follow a changed URL (back/forward) by adjusting state during render, not in an effect.
-  const [seen, setSeen] = useState<PortfolioView>(fromUrl);
-  if (seen !== fromUrl) {
-    setSeen(fromUrl);
+  // Next reports our own history.replaceState a moment later. Rapid arrow presses write several
+  // views before the first report arrives, so the views we wrote are remembered and a report of one
+  // of them is ignored; any other change of the URL (back/forward) is followed.
+  const pending = useRef<PortfolioView[]>([]);
+  const lastUrl = useRef<PortfolioView>(fromUrl);
+  const clear = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (lastUrl.current === fromUrl) return;
+    lastUrl.current = fromUrl;
+    const i = pending.current.indexOf(fromUrl);
+    if (i >= 0) {
+      pending.current = pending.current.slice(i + 1);
+      return;
+    }
+    pending.current = [];
     setView(fromUrl);
-  }
+  }, [fromUrl]);
+  useEffect(
+    () => () => {
+      if (clear.current !== null) clearTimeout(clear.current);
+    },
+    [],
+  );
   const change = useCallback((v: PortfolioView) => {
     setView(v);
+    pending.current = [...pending.current, v];
+    if (clear.current !== null) clearTimeout(clear.current);
+    clear.current = setTimeout(() => {
+      pending.current = [];
+    }, 1500);
     if (typeof window !== "undefined") {
       const url = `${window.location.pathname}?${withView(window.location.search, v)}${window.location.hash}`;
       window.history.replaceState(window.history.state, "", url);

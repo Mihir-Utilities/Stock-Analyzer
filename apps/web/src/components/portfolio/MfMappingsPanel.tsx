@@ -15,7 +15,15 @@ import { optionLabel, planLabel } from "./text";
 const BUTTON =
   "h-9 touch-target rounded-control border border-border px-3 text-body-sm hover:bg-surface-3 disabled:opacity-50";
 
-function RemapForm({ mapping, onClose }: { mapping: MfMapping; onClose: () => void }) {
+function RemapForm({
+  mapping,
+  onClose,
+  onSaved,
+}: {
+  mapping: MfMapping;
+  onClose: () => void;
+  onSaved: (text: string) => void;
+}) {
   const qc = useQueryClient();
   const [pick, setPick] = useState<{
     code: number;
@@ -26,12 +34,12 @@ function RemapForm({ mapping, onClose }: { mapping: MfMapping; onClose: () => vo
   const [needsRemap, setNeedsRemap] = useState<number | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
   const save = useMutation({
     mutationFn: (remap: boolean) =>
       putMapping({ fund_name: mapping.fund_name, scheme_code: pick?.code ?? 0, remap }),
-    onSuccess: () => {
-      setDone(true);
+    onSuccess: (saved) => {
+      // Say what changed (old -> new) in the panel and close this form.
+      onSaved(`${mapping.fund_name}: ${mapping.scheme_name} -> ${saved.scheme_name}.`);
       void qc.invalidateQueries({ queryKey: mfKeys.mappings });
       invalidatePortfolio(qc);
     },
@@ -58,11 +66,6 @@ function RemapForm({ mapping, onClose }: { mapping: MfMapping; onClose: () => vo
       <p className="text-body-sm text-text-1">
         Statement name: <strong>{mapping.fund_name}</strong>. Pick the scheme it belongs to.
       </p>
-      {done ? (
-        <Banner tone="info" testId="pf-mf-mapping-saved">
-          Mapping saved.
-        </Banner>
-      ) : null}
       {error ? (
         <Banner tone="error" testId="pf-mf-mapping-error">
           {error}
@@ -122,8 +125,10 @@ function RemapForm({ mapping, onClose }: { mapping: MfMapping; onClose: () => vo
 
 /** Remembered fund-name -> scheme choices, with an explicit change/re-map action (MFH-23). */
 export function MfMappingsPanel() {
-  const q = useMfMappings();
   const [open, setOpen] = useState(false);
+  // The list is fetched only once the panel is opened.
+  const q = useMfMappings(open);
+  const [savedText, setSavedText] = useState<string | null>(null);
   const [changing, setChanging] = useState<string | null>(null);
   const parsed = useMemo(
     () => (q.data ? readRows(mfMappingSchema, q.data.data.items) : null),
@@ -152,6 +157,11 @@ export function MfMappingsPanel() {
             Your statement has only a fund name. The scheme you picked for each name is remembered
             here and used by later imports.
           </p>
+          {savedText ? (
+            <Banner tone="info" testId="pf-mf-mapping-saved">
+              Mapping saved: {savedText}
+            </Banner>
+          ) : null}
           {q.isPending ? <Skeleton className="h-16 w-full" label="Loading mappings" /> : null}
           {q.isError ? (
             <Banner tone="error" testId="pf-mf-mappings-error">
@@ -200,7 +210,14 @@ export function MfMappingsPanel() {
                     Change scheme
                   </button>
                   {changing === m.fund_name ? (
-                    <RemapForm mapping={m} onClose={() => setChanging(null)} />
+                    <RemapForm
+                      mapping={m}
+                      onClose={() => setChanging(null)}
+                      onSaved={(t) => {
+                        setSavedText(t);
+                        setChanging(null);
+                      }}
+                    />
                   ) : null}
                 </li>
               ))}

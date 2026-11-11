@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Banner } from "@/components/ui/banners";
 import { FormField, inputClass } from "@/components/ui/FormField";
 import { useToast } from "@/components/ui/overlays";
@@ -18,6 +18,7 @@ import {
   MF_WARNING_LABEL,
   nextMfAttempt,
   typeLabel,
+  uneditableReason,
   unitsTimesNav,
   validateMfDraft,
   type MfAttempt,
@@ -32,6 +33,7 @@ import {
   MF_STATEMENT_SOURCE,
   optionLabel,
   planLabel,
+  qty,
   SWITCH_NOT_SUPPORTED_COPY,
 } from "./text";
 import { SchemePicker } from "./SchemePicker";
@@ -53,14 +55,53 @@ export function MfTxnForm({
   editing: MfTxn | null;
   onDone: (reason: "saved" | "cancelled") => void;
 }) {
+  const why = editing ? uneditableReason(editing) : null;
+  if (editing && why !== null) {
+    return (
+      <div
+        data-testid="pf-mf-txn-uneditable"
+        role="alert"
+        className="flex flex-col items-start gap-2 rounded-card border border-border bg-surface-1 p-4"
+      >
+        <p className="text-body-sm text-text-1">This transaction cannot be edited: {why}</p>
+        <button
+          type="button"
+          data-testid="pf-mf-txn-cancel"
+          onClick={() => onDone("cancelled")}
+          className={BUTTON}
+        >
+          Close
+        </button>
+      </div>
+    );
+  }
+  return <MfTxnFormInner editing={editing} onDone={onDone} />;
+}
+
+function MfTxnFormInner({
+  editing,
+  onDone,
+}: {
+  editing: MfTxn | null;
+  onDone: (reason: "saved" | "cancelled") => void;
+}) {
   const toast = useToast();
   const qc = useQueryClient();
   const create = useCreateMfTxn();
   const patch = usePatchMfTxn();
   const single = useSingleFlight();
   const attempt = useRef<MfAttempt | null>(null);
+  // True after a failure whose outcome is unknown (timeout, network, server error): only then can an
+  // earlier try still have been saved, so only then does a changed body need the duplicate warning.
+  const lostRef = useRef(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
   const summaryRef = useRef<HTMLDivElement>(null);
-  const [draft, setDraft] = useState<MfDraft>(editing ? draftFromTxn(editing) : EMPTY_MF_DRAFT);
+  const [draft, setDraft] = useState<MfDraft>(
+    (editing ? draftFromTxn(editing) : null) ?? EMPTY_MF_DRAFT,
+  );
   const [errors, setErrors] = useState<MfFieldErrors>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -87,7 +128,8 @@ export function MfTxnForm({
   const changed = useMemo<Partial<MfTxnBody> | null>(() => {
     if (!editing) return null;
     const next = validateMfDraft(draft, istDate(new Date())).body;
-    return next === null ? null : changedMfFields(draftFromTxn(editing), next);
+    const orig = draftFromTxn(editing);
+    return next === null || orig === null ? null : changedMfFields(orig, next);
   }, [editing, draft]);
   const unchanged = changed !== null && Object.keys(changed).length === 0;
 
@@ -112,13 +154,14 @@ export function MfTxnForm({
       } else {
         const prev = attempt.current;
         const a = nextMfAttempt(prev, body);
-        const newKeyAfterFailure = prev !== null && a !== prev;
+        const newKeyAfterFailure = prev !== null && a !== prev && lostRef.current;
         attempt.current = a;
         setNotice(newKeyAfterFailure ? NEW_KEY_WARNING : null);
         const r = await create.mutateAsync({ body, attempt: a });
         attempt.current = null;
+        lostRef.current = false;
         toast(
-          `Transaction saved: ${typeLabel(body.txn_type).toLowerCase()} of ${body.units} units.`,
+          `Transaction saved: ${typeLabel(body.txn_type).toLowerCase()} of ${qty(body.units)} units.`,
         );
         setWarnings(r.warnings);
         setNotice(newKeyAfterFailure ? NEW_KEY_WARNING : null);
@@ -133,6 +176,7 @@ export function MfTxnForm({
     } catch (err) {
       const view = describeMfError(err);
       if (view.conflict) attempt.current = null;
+      lostRef.current = view.lost;
       if (view.lost) void qc.invalidateQueries({ queryKey: mfKeys.txnsAll });
       setErrors(view.fields);
       setServerError(view.message);
@@ -155,7 +199,12 @@ export function MfTxnForm({
       aria-label={editing ? "Edit mutual fund transaction" : "Add mutual fund transaction"}
       className="flex flex-col gap-3 rounded-card border border-border bg-surface-1 p-4"
     >
-      <h3 className="text-lead font-semibold">
+      <h3
+        ref={headingRef}
+        tabIndex={-1}
+        data-testid="pf-mf-txn-form-heading"
+        className="text-lead font-semibold outline-none focus-visible:outline-2 focus-visible:outline-accent"
+      >
         {editing ? "Edit mutual fund transaction" : "Add mutual fund transaction"}
       </h3>
       <div ref={summaryRef} tabIndex={-1} aria-live="polite" className="outline-none">
@@ -285,7 +334,7 @@ export function MfTxnForm({
           required
           error={errors.amount ?? null}
           unit="INR"
-          hint="Units x NAV, without stamp duty (for a redemption: the net amount credited)"
+          hint="Units x NAV, without stamp duty"
         >
           {(p) => (
             <input

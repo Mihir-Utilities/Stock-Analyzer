@@ -19,6 +19,7 @@ import {
   putMapping,
   readMfPreview,
   revalidateMfStatement,
+  rowCountText,
   rowsToImport,
   TYPE_ORDER,
   validateMfStatement,
@@ -46,12 +47,26 @@ const COLUMNS: Array<{ key: string; label: string }> = [
   { key: "stamp_duty", label: "Stamp duty" },
 ];
 
+/** A failed save of one fund-name mapping, with the names already saved in the same step. */
+class MappingSaveError extends Error {
+  constructor(
+    readonly original: unknown,
+    readonly saved: string[],
+    readonly failed: string,
+  ) {
+    super("mapping not saved");
+  }
+}
+
 const COMMIT_WARNING_TEXT: Record<string, string> = {
   AMOUNT_MISMATCH:
     "Some amounts differ from units x NAV by more than the tolerance. Rows were kept as in your file.",
   NON_BUSINESS_DAY:
     "Some rows are dated on a weekend or market holiday. Rows were kept as in your file.",
 };
+
+/** The preview shows the first 20 normalised rows (docs/03 section 14), whatever the API sends. */
+export const PREVIEW_ROWS = 20;
 
 const headingClass =
   "text-lead font-semibold text-text-1 outline-none focus-visible:outline-2 focus-visible:outline-accent";
@@ -95,11 +110,22 @@ export function MfStatementImport() {
       setStep(1);
     },
   });
+  // Leaving the wizard (unmount) resets the validate mutation so no late answer or error lingers.
+  const resetValidate = validate.reset;
+  useEffect(() => () => resetValidate(), [resetValidate]);
 
   const saveMappings = useMutation({
     mutationFn: async (pending: Array<[string, Choice]>) => {
+      // Each mapping is saved on its own; the names saved before a failure stay saved (the server
+      // keeps them), so a failure reports which ones went through.
+      const saved: string[] = [];
       for (const [fundName, c] of pending) {
-        await putMapping({ fund_name: fundName, scheme_code: c.code, remap: false });
+        try {
+          await putMapping({ fund_name: fundName, scheme_code: c.code, remap: false });
+          saved.push(fundName);
+        } catch (e) {
+          throw new MappingSaveError(e, saved, fundName);
+        }
       }
       if (!validation) throw new Error("no upload");
       return revalidateMfStatement(validation.upload_id);
@@ -110,13 +136,31 @@ export function MfStatementImport() {
       setChoices({});
       invalidatePortfolio(qc);
     },
-    onError: (e) => {
-      if (isApiError(e, "NOT_FOUND")) setMapError("This upload expired. Upload the file again.");
+    onError: (err) => {
+      const e = err instanceof MappingSaveError ? err.original : err;
+      const saved = err instanceof MappingSaveError ? err.saved : [];
+      let text: string;
+      if (isApiError(e, "NOT_FOUND")) text = "This upload expired. Upload the file again.";
       else if (isApiError(e, "FUND_MAPPING_IN_USE"))
-        setMapError(
-          "A stored transaction already depends on a different scheme for this name. Change it in the fund-name mappings list on the Portfolio page.",
-        );
-      else setMapError(describeMfError(e));
+        text =
+          "A stored transaction already depends on a different scheme for this name. Change it in the fund-name mappings list on the Portfolio page.";
+      else text = describeMfError(e);
+      if (err instanceof MappingSaveError) {
+        text = `${err.failed} was not saved. ${text}`;
+      }
+      if (saved.length > 0) {
+        text = `${text} Saved before the failure: ${saved.join(", ")}.`;
+        // Re-read the upload so the saved names show as matched and are not asked for again.
+        setChoices((prev) => {
+          const next = { ...prev };
+          for (const n of saved) delete next[n];
+          return next;
+        });
+        if (validation) {
+          void revalidateMfStatement(validation.upload_id).then(setValidation, () => undefined);
+        }
+      }
+      setMapError(text);
     },
   });
 
@@ -207,7 +251,7 @@ export function MfStatementImport() {
           </p>
           <FormField
             label="Statement file"
-            hint="CSV is supported now; Excel (.xlsx) files are not enabled yet, so save the statement as CSV. Only the normalised rows are shown back to you."
+            hint="Only the normalised rows are shown back to you."
             required
           >
             {(p) => (
@@ -406,7 +450,7 @@ export function MfStatementImport() {
                       </tr>
                     </thead>
                     <tbody>
-                      {validation.preview.map((r, i) => {
+                      {validation.preview.slice(0, PREVIEW_ROWS).map((r, i) => {
                         const line = typeof r.row === "number" ? r.row : null;
                         return (
                           <tr
@@ -457,15 +501,16 @@ export function MfStatementImport() {
             Commit
           </h2>
           <p className="text-body-sm text-text-2" data-testid="mf-import-commit-note">
-            <Fmt f={formatCount(importing)} /> rows will be added as one batch, in one transaction
+            This will add {rowCountText(importing)} as one batch, in one transaction
             {excluded.size > 0
               ? `, leaving out ${formatCount(excluded.size).text} unticked rows`
               : ""}
             {validation && validation.mf.duplicates_in_db > 0
               ? ` and skipping ${formatCount(validation.mf.duplicates_in_db).text} that are already stored`
               : ""}
-            . You can undo the batch for 30 days on the Batches tab. A redemption that would exceed
-            the units held in its scheme and folio stops the whole import and nothing is saved.
+            . This is an estimate: the server counts the final rows when you commit. You can undo
+            the batch for 30 days on the Batches tab. A redemption that would exceed the units held
+            in its scheme and folio stops the whole import and nothing is saved.
           </p>
           {commitError ? (
             <Banner tone="error" testId="mf-import-commit-error">
@@ -614,7 +659,7 @@ export function MfStatementImport() {
       />
       <ConfirmDialog
         open={confirmOpen}
-        title={`Commit ${formatCount(importing).text} rows?`}
+        title={`Commit ${rowCountText(importing)}?`}
         message="The rows are added to your mutual fund ledger. You can undo the batch for 30 days."
         confirmLabel="Commit"
         busy={commit.isPending}

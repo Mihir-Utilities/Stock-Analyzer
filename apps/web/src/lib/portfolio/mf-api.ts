@@ -10,6 +10,7 @@ import {
 import { apiRequest } from "@/lib/api/client";
 import { invalidatePortfolio } from "./api";
 import {
+  mfHoldingsResponseSchema,
   mfMappingListSchema,
   mfMappingSchema,
   mfTxnDeletedSchema,
@@ -35,12 +36,16 @@ export const mfKeys = {
 export function usePortfolioView(view: PortfolioView, includeExited: boolean) {
   return useQuery({
     queryKey: mfKeys.view(view, includeExited),
-    queryFn: ({ signal }) =>
-      apiRequest("/portfolio/summary", {
+    // `forView` is the view this answer was asked for. While the next view loads the previous
+    // answer stays on screen, and it must never be labelled with the new view.
+    queryFn: async ({ signal }) => {
+      const r = await apiRequest("/portfolio/summary", {
         schema: viewSummarySchema,
         query: { view, include_exited: includeExited },
         signal,
-      }),
+      });
+      return { ...r, forView: view };
+    },
     staleTime: 60_000,
     // Switching views keeps the previous view's data on screen while the next one loads (6.7a).
     placeholderData: keepPreviousData,
@@ -139,6 +144,20 @@ export function useMfMappings(enabled = true) {
     enabled,
     queryFn: ({ signal }) =>
       apiRequest("/portfolio/mf/fund-mappings", { schema: mfMappingListSchema, signal }),
+    staleTime: 60_000,
+  });
+}
+
+/** Every scheme ever held (exited ones too), for the scheme filter of the transaction list. */
+export function useMfSchemeOptions() {
+  return useQuery({
+    queryKey: ["portfolio", "mf-holdings", "scheme-options"],
+    queryFn: ({ signal }) =>
+      apiRequest("/portfolio/mf/holdings", {
+        schema: mfHoldingsResponseSchema,
+        query: { include_exited: true },
+        signal,
+      }),
     staleTime: 60_000,
   });
 }

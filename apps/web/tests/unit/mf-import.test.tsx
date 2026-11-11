@@ -89,9 +89,10 @@ describe("MFH-U76 upload and preview", () => {
     expect(document.body.textContent).not.toMatch(/NaN|Infinity|undefined/);
   });
 
-  it("the file input says CSV is supported now and .xlsx is not enabled yet", () => {
+  it("MFHW-S10: the file input does not claim .xlsx is not enabled (only a server answer says so)", () => {
     mount({});
-    expect(screen.getByText(/CSV is supported now/)).toBeInTheDocument();
+    expect(screen.queryByText(/not enabled/)).toBeNull();
+    expect(screen.queryByText(/CSV is supported now/)).toBeNull();
   });
 
   it("an .xlsx refused by the server gets plain copy, and the API text is shown escaped", async () => {
@@ -206,7 +207,9 @@ describe("MFH-U76 repeated rows, unticking, commit and undo", () => {
     await user.click(screen.getByTestId("mf-row-include-4"));
     expect(screen.getByTestId("mf-import-excluded")).toHaveTextContent("1 rows are unticked");
     await user.click(screen.getByTestId("wizard-next"));
-    expect(screen.getByTestId("mf-import-commit-note")).toHaveTextContent("2 rows will be added");
+    expect(screen.getByTestId("mf-import-commit-note")).toHaveTextContent(
+      "This will add about 2 rows",
+    );
     await user.type(screen.getByTestId("mf-import-note"), "synthetic");
     await user.click(screen.getByTestId("wizard-commit"));
     await user.click(screen.getByTestId("confirm-ok"));
@@ -354,8 +357,14 @@ describe("mf import helpers", () => {
   });
 
   it("rowsToImport never goes negative or NaN", () => {
-    expect(rowsToImport(10, 2, 3)).toBe(5);
+    // an unticked row may be one that is already stored, so the count is a range (F16R-N10)
+    expect(rowsToImport(10, 2, 3)).toEqual({ min: 5, max: 7 });
+    expect(rowsToImport(10, 0, 3)).toEqual({ min: 7, max: 7 });
+    expect(rowsToImport(10, 2, 0)).toEqual({ min: 8, max: 8 });
     expect(rowsToImport(2, 2, 3)).toBeNull();
+    expect(rowsToImport(3, 3, 0)).toEqual({ min: 0, max: 0 });
+    expect(rowsToImport(2, 5, 0)).toBeNull();
+    expect(rowsToImport(Number.NaN, 0, 0)).toBeNull();
   });
 
   it("scheme_code filter is an int32 of at least 1, anything else is not sent", () => {

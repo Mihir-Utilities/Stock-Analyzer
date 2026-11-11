@@ -608,3 +608,11 @@ Import failures: a row error names the row and column (`code` is stable: `UNMAPP
 - `/imports?kind=mf_statement` opens the statement wizard: upload, review (pick the scheme for every fund name; nothing is auto-picked), untick rows (repeated rows and errored rows), commit, undo. Fund-name mappings are listed and can be re-mapped (explicit confirmation) under MF transactions.
 - If a statement upload says 'Excel files are not enabled yet', the API runs without `MF_XLSX_ENABLED`; export the statement as CSV (RUNBOOK 131).
 - A stale NAV (older than 4 days) shows an amber 'NAV as of {date}' chip; the value is still used. A fund without any NAV shows a dash and blocks the total ('Value unavailable: ... have no NAV yet').
+
+## 133. Portfolio views, review follow-ups (F16 review)
+- In **All** the stock tables and charts use the stock row of the server's `breakdown`, never the combined totals; the P&L breakdown chart has two bars (Unrealized, Realized) and the page adds nothing up in the browser. An unpriced fund does not blank the stock chart.
+- The 'added up' total (`totals.total_pnl`) is deliberately not shown until the owner decides F16-1 (OPEN_QUESTIONS F16R-2).
+- The tooltip texts for XIRR across stocks and funds, absolute return and MF total return are the owner-facing lines in `docs/05` 8.5.6a, read by `npm run gen:definitions`. After editing them run `npm run gen:definitions`; a unit test fails when the generated file is stale or when a text contains ids or section numbers.
+- 'Updating {view}...' with a dimmed body means the next view is loading; the body is labelled with the view its data is for.
+- A transaction with a type the form does not offer (for example a switch), or with an unreadable folio or stamp duty, is listed and cannot be edited; nothing is written back as a guess.
+- Playwright: `tests/e2e/portfolio-views.spec.ts` (axe on each view, the MF form and the import wizard, keyboard use of the switcher, a 375 px layout). Run it alone with its own ports, for example `PW_PORT=3140 PW_STORY_PORT=6140 npx playwright test portfolio-views`, one run at a time.

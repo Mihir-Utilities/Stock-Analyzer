@@ -140,7 +140,10 @@ describe("PF-01/PF-09 summary, honesty and warnings", () => {
       .getAllByTestId("stat-null")
       .map((n) => n.textContent ?? "");
     expect(nulls.some((t) => /no valid close has been imported/.test(t))).toBe(true);
-    expect(nulls.some((t) => /XIRR is shown after the first year/.test(t))).toBe(true);
+    // F16R-S3: a missing absolute return says it is not available; 'XIRR is shown after the first
+    // year' explains why XIRR is absent and lives in the note, not in the dash reason.
+    expect(nulls.some((t) => /absolute return not available/.test(t))).toBe(true);
+    expect(nulls.some((t) => /XIRR is shown after the first year/.test(t))).toBe(false);
     expect(nulls.some((t) => /no Nifty 50 series/.test(t))).toBe(true);
     expect(card.textContent).not.toMatch(/NaN|Infinity/);
     expect(screen.getByTestId("pf-warning-MISSING_PRICE")).toBeInTheDocument();

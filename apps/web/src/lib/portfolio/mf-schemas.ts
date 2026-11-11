@@ -201,13 +201,14 @@ export const mfTxnSchema = z.object({
   isin: s,
   plan: z.string().catch("unknown"),
   option: z.string().catch("unknown"),
-  folio: z.string().catch(""),
+  // An unreadable folio or stamp duty is null (shown as a dash), never an empty text or 0.
+  folio: s,
   txn_type: z.string(),
   txn_date: z.string(),
   units: z.string(),
   nav: z.string(),
   amount: z.string(),
-  stamp_duty: z.string().catch("0"),
+  stamp_duty: s,
   external_ref: s,
   source: z.string().catch("manual"),
   import_batch_id: n,
@@ -275,7 +276,12 @@ export interface ReadView {
   badRows: number;
 }
 
-export function readView(v: ViewSummary): ReadView {
+/**
+ * `view` decides what the stock components get as their totals. In `all` the API totals are the
+ * stocks plus the funds, so the stock sleeve takes its own row of `breakdown` (an unknown figure is
+ * null, never a combined one); in `equity` the totals are the stock totals already.
+ */
+export function readView(v: ViewSummary, view: "all" | "equity" | "mf" = "equity"): ReadView {
   const unreadable: string[] = [];
   let badRows = 0;
   const rows = <T extends z.ZodType>(name: string, schema: T, raw: unknown): z.infer<T>[] => {
@@ -296,7 +302,20 @@ export function readView(v: ViewSummary): ReadView {
   if (v.estimated_dividends !== undefined && v.estimated_dividends !== null && divRaw === null) {
     unreadable.push("estimated dividends");
   }
-  const t = v.totals;
+  const eq = breakdown.find((r) => r.asset_class === "equity");
+  const t =
+    view === "all"
+      ? {
+          invested: eq?.invested ?? null,
+          market_value: eq?.market_value ?? null,
+          market_value_reason: eq?.market_value_reason ?? null,
+          unrealized_pnl: eq?.unrealized_pnl ?? null,
+          unrealized_pct: null,
+          realized_pnl: eq?.realized_pnl ?? null,
+          day_change: null,
+          day_change_reason: null,
+        }
+      : v.totals;
   // Without a readable realised figure the stock components must not sum, so unrealised goes null too.
   const realizedKnown = typeof t.realized_pnl === "string";
   const legacy: PortfolioSummary = {
@@ -328,7 +347,13 @@ export function readView(v: ViewSummary): ReadView {
     },
     allocation_by_stock: allocStock,
     allocation_by_sector: allocSector,
-    allocation_excludes_unpriced: v.allocation_excludes_unpriced ?? null,
+    // In All the flag also covers unpriced funds; the stock sections only care about stocks.
+    allocation_excludes_unpriced:
+      view === "all"
+        ? holdings.some(
+            (h) => !h.exited && (h.market_value === null || h.market_value === undefined),
+          )
+        : (v.allocation_excludes_unpriced ?? null),
     estimated_dividends: {
       amount: divRaw?.amount ?? null,
       label: divRaw?.label ?? null,

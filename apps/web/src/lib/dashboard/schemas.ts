@@ -62,6 +62,11 @@ export const portfolioSummarySchema = z.object({
   view: str,
   asset_classes_present: z.array(z.string()).nullish().catch(null),
   mf_holdings: z.array(z.unknown()).nullish().catch(null),
+  /** Only the as-of of each class is read here (the per-part day-change dates line in All). */
+  breakdown: z
+    .array(z.object({ asset_class: z.string(), as_of: str }))
+    .nullish()
+    .catch(null),
   allocation_by_asset_class: z.array(share).nullish().catch(null),
   allocation_by_category: z.array(share).nullish().catch(null),
   holdings: z.array(z.object({ symbol: z.string() })),

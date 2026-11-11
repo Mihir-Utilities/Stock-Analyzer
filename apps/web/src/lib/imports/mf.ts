@@ -1,4 +1,5 @@
 import { ApiError, apiRequest } from "@/lib/api/client";
+import { DASH, formatCount } from "@/lib/format";
 import { describeError } from "./errors";
 import {
   mfCandidateSchema,
@@ -133,22 +134,43 @@ export function canCommit(v: MfValidateResult | null, excluded: ReadonlySet<numb
   return blockingErrors(v.errors, excluded).length === 0;
 }
 
-/** Plain copy for a failed call; the not-enabled .xlsx answer (B15R-1) gets its own sentence. */
+/**
+ * Plain copy for a failed call. The not-enabled .xlsx answer (B15R-1) gets its own sentence, but
+ * only for a 422: the API sends no dedicated error code for it, only the message (F16R-3).
+ */
+export function isXlsxNotEnabled(e: unknown): boolean {
+  return e instanceof ApiError && e.status === 422 && /xlsx not enabled/i.test(e.message);
+}
+
 export function describeMfError(e: unknown): string {
-  if (e instanceof ApiError && /xlsx not enabled/i.test(e.message)) {
+  if (isXlsxNotEnabled(e)) {
     return "Excel files are not enabled yet; save the statement as CSV.";
   }
   return describeError(e);
 }
 
-/** Rows that will be written: file rows minus unticked ones minus the ones already stored. */
+/**
+ * Rows that will be written, as a range. The server tells how many rows are already stored but not
+ * which, so an unticked row may be one of them: the count is between "rows minus both" and "rows
+ * minus the larger of the two". Null when the numbers do not add up.
+ */
 export function rowsToImport(
   rows: number,
   excluded: number,
   duplicatesInDb: number,
-): number | null {
-  const n = rows - excluded - duplicatesInDb;
-  return Number.isFinite(n) && n >= 0 ? n : null;
+): { min: number; max: number } | null {
+  const min = rows - excluded - duplicatesInDb;
+  const max = rows - Math.max(excluded, duplicatesInDb);
+  if (![rows, excluded, duplicatesInDb].every(Number.isFinite) || max < 0) return null;
+  return { min: Math.max(0, min), max };
+}
+
+/** "about 5 rows", or "between 4 and 5 rows" when an unticked row may already be stored. */
+export function rowCountText(r: { min: number; max: number } | null): string {
+  if (r === null) return `${DASH} rows`;
+  return r.min === r.max
+    ? `about ${formatCount(r.max).text} rows`
+    : `between ${formatCount(r.min).text} and ${formatCount(r.max).text} rows`;
 }
 
 /** Plain-English text for the rows-by-type counts, in a fixed order. */

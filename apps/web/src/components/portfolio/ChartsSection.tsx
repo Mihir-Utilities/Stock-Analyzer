@@ -4,7 +4,7 @@ import { ChartFrame } from "@/components/charts/ChartFrame";
 import type { ChartDataset } from "@/components/charts/chart-data";
 import { Card } from "@/components/ui/Card";
 import { formatInr, formatPercent } from "@/lib/format";
-import { displayNumber, sumMoney } from "@/lib/portfolio/decimal";
+import { displayNumber } from "@/lib/portfolio/decimal";
 import type { PortfolioSummary } from "@/lib/portfolio/schemas";
 import { PORTFOLIO_SOURCE } from "./text";
 
@@ -35,7 +35,15 @@ function allocation(
 const inrText = (v: number) => formatInr(v, { signed: true }).text;
 
 /** Allocation, contribution and P&L breakdown. All values come from the summary response. */
-export function ChartsSection({ s, asOf }: { s: PortfolioSummary; asOf: string | null }) {
+export function ChartsSection({
+  s,
+  asOf,
+  view = "equity",
+}: {
+  s: PortfolioSummary;
+  asOf: string | null;
+  view?: "all" | "equity";
+}) {
   const priced = s.holdings.filter((h) => !h.exited);
   const partial = s.allocation_excludes_unpriced === true;
   const empty = priced.length === 0;
@@ -63,22 +71,20 @@ export function ChartsSection({ s, asOf }: { s: PortfolioSummary; asOf: string |
     asOf,
   };
 
+  // The stock totals come from the server (in All: the stock row of the breakdown). Nothing is
+  // added up here, and a missing part never blocks the other.
   const unrealized = s.totals.unrealized_pnl ?? null;
-  const total = unrealized === null ? null : sumMoney([unrealized, s.totals.realized_pnl]).sum;
+  const realized = displayNumber(s.totals.realized_pnl);
   const breakdown: ChartDataset = {
     xName: "Component",
-    x: ["Unrealized", "Realized", "Total"],
+    x: ["Unrealized", "Realized"],
     series: [
       {
         id: "pnl",
         name: "P&L",
         unit: "INR",
         kind: "bar",
-        values: [
-          displayNumber(unrealized),
-          displayNumber(s.totals.realized_pnl),
-          displayNumber(total),
-        ],
+        values: [displayNumber(unrealized), realized],
         format: inrText,
         nullReason: "needs a valid close",
       },
@@ -126,15 +132,23 @@ export function ChartsSection({ s, asOf }: { s: PortfolioSummary; asOf: string |
           dataset={breakdown}
           height={240}
           filename="pnl-breakdown"
-          state={unrealized === null ? "partial" : "ready"}
-          {...(unrealized === null
-            ? { message: "Unrealized and total are unknown until every holding has a price." }
-            : {})}
+          state={
+            unrealized === null && realized === null
+              ? "empty"
+              : unrealized === null
+                ? "partial"
+                : "ready"
+          }
+          {...(unrealized === null && realized === null
+            ? { message: "The stock P&L figures are not available." }
+            : unrealized === null
+              ? { message: "Unrealized P&L is unknown until every stock has a price." }
+              : {})}
         />
         <Card
           title="Growth vs Nifty 50 and drawdown"
           state="empty"
-          message="Not available yet: the server has no portfolio value history to chart. The XIRR and benchmark cards above use your dated cash flows."
+          message={`Not available yet: the server has no portfolio value history to chart. ${view === "equity" ? "The XIRR and benchmark cards above use" : "The XIRR card above uses"} your dated cash flows.`}
           source={PORTFOLIO_SOURCE}
           asOf={asOf}
           testId="pf-chart-growth-unavailable"

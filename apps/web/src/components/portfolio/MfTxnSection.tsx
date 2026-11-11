@@ -7,23 +7,43 @@ import { Card } from "@/components/ui/Card";
 import { ConfirmDialog, useToast } from "@/components/ui/overlays";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { describeError } from "@/lib/dashboard/state";
-import { formatDate } from "@/lib/format";
+import { DASH, formatDate, type Formatted } from "@/lib/format";
 import {
   EMPTY_FILTERS,
   useDeleteMfTxn,
+  useMfSchemeOptions,
   useMfTxns,
   type MfTxnFilters,
 } from "@/lib/portfolio/mf-api";
-import { describeMfError, MF_TXN_TYPES, typeLabel } from "@/lib/portfolio/mf-form";
-import { mfTxnSchema, readRows, type MfHolding, type MfTxn } from "@/lib/portfolio/mf-schemas";
-import { inr, MF_STATEMENT_SOURCE, optionLabel, planLabel } from "./text";
+import {
+  describeMfError,
+  MF_TXN_TYPES,
+  typeLabel,
+  uneditableReason,
+} from "@/lib/portfolio/mf-form";
+import {
+  mfHoldingSchema,
+  mfTxnSchema,
+  readRows,
+  type MfHolding,
+  type MfTxn,
+} from "@/lib/portfolio/mf-schemas";
+import { inr, MF_STATEMENT_SOURCE, optionLabel, planLabel, qty } from "./text";
+import { Cell } from "./ViewCards";
 import { MfMappingsPanel } from "./MfMappingsPanel";
 import { MfTxnForm } from "./MfTxnForm";
+
+/** A text value, or a dash with its reason when it could not be read. */
+function textOrDash(v: string | null | undefined, reason: string): Formatted {
+  return v === null || v === undefined || v === ""
+    ? { text: DASH, reason, direction: "flat" }
+    : { text: v, reason: null, direction: "flat" };
+}
 
 const BUTTON =
   "h-9 touch-target rounded-control border border-border px-3 text-body-sm hover:bg-surface-3 disabled:opacity-50";
 const FIELD =
-  "h-9 touch-target min-w-0 rounded-control border border-border bg-surface-1 px-2 text-body-sm text-text-1";
+  "h-9 touch-target min-w-0 max-w-full rounded-control border border-border bg-surface-1 px-2 text-body-sm text-text-1";
 
 /** MF transactions: list with filters, add/edit/delete, the statement import entry (docs/06 6.7a). */
 export function MfTxnSection({ schemes }: { schemes: ReadonlyArray<MfHolding> }) {
@@ -37,6 +57,35 @@ export function MfTxnSection({ schemes }: { schemes: ReadonlyArray<MfHolding> })
   const focusBack = useRef<"add" | number | null>(null);
   const q = useMfTxns(filters);
   const del = useDeleteMfTxn();
+  const addRef = useRef<HTMLButtonElement>(null);
+  const focusAfterDelete = useRef(false);
+  // The folio box is typed into: the list is asked only when typing pauses.
+  const [folioText, setFolioText] = useState("");
+  useEffect(() => {
+    const t = setTimeout(
+      () => setFilters((f) => (f.folio === folioText ? f : { ...f, folio: folioText })),
+      350,
+    );
+    return () => clearTimeout(t);
+  }, [folioText]);
+
+  // Every scheme ever held, exited ones too, so an exited scheme's transactions stay reachable.
+  const options = useMfSchemeOptions();
+  const schemeOptions = useMemo(() => {
+    const byCode = new Map<number, MfHolding>();
+    for (const h of readRows(mfHoldingSchema, options.data?.data.items).rows) {
+      byCode.set(h.scheme_code, h);
+    }
+    for (const h of schemes) byCode.set(h.scheme_code, h);
+    return [...byCode.values()].sort((a, b) => a.scheme_name.localeCompare(b.scheme_name));
+  }, [options.data, schemes]);
+
+  // After a delete the row that had focus is gone: focus goes to the Add button.
+  useEffect(() => {
+    if (!focusAfterDelete.current || deleting !== null) return;
+    addRef.current?.focus();
+    focusAfterDelete.current = false;
+  }, [deleting]);
 
   // Focus returns to the control that opened the form once it has closed.
   useEffect(() => {
@@ -80,6 +129,7 @@ export function MfTxnSection({ schemes }: { schemes: ReadonlyArray<MfHolding> })
       );
       setDeleting(null);
       setDeleteError(null);
+      focusAfterDelete.current = true;
     } catch (err) {
       setDeleteError(describeMfError(err).message);
       setDeleting(null);
@@ -131,7 +181,7 @@ export function MfTxnSection({ schemes }: { schemes: ReadonlyArray<MfHolding> })
   } else {
     body = (
       <div
-        className="overflow-x-auto"
+        className="relative overflow-x-auto"
         role="region"
         aria-label="Mutual fund transactions table"
         tabIndex={0}
@@ -173,16 +223,44 @@ export function MfTxnSection({ schemes }: { schemes: ReadonlyArray<MfHolding> })
                 <td className="p-2">{formatDate(t.txn_date).text}</td>
                 <td className="p-2">
                   {t.scheme_name}
-                  <div className="text-micro text-text-2">
+                  <div className="text-caption text-text-2">
                     {planLabel(t.plan)}, {optionLabel(t.option)}
                   </div>
+                  {t.isin ? (
+                    <div
+                      className="text-caption text-text-2"
+                      data-testid={`pf-mf-txn-isin-${t.id}`}
+                    >
+                      ISIN {t.isin}
+                    </div>
+                  ) : null}
+                  {t.note ? (
+                    <div
+                      className="text-caption text-text-2"
+                      data-testid={`pf-mf-txn-note-${t.id}`}
+                    >
+                      Note: {t.note}
+                    </div>
+                  ) : null}
+                  {uneditableReason(t) ? (
+                    <div
+                      className="text-caption text-text-2"
+                      data-testid={`pf-mf-txn-locked-${t.id}`}
+                    >
+                      Cannot be edited: {uneditableReason(t)}
+                    </div>
+                  ) : null}
                 </td>
-                <td className="p-2">{t.folio}</td>
+                <td className="p-2">
+                  <Cell f={textOrDash(t.folio, "the folio could not be read")} />
+                </td>
                 <td className="p-2">{typeLabel(t.txn_type)}</td>
-                <td className="num p-2">{t.units}</td>
+                <td className="num p-2">{qty(t.units)}</td>
                 <td className="num p-2">{inr(t.nav).text}</td>
                 <td className="num p-2">{inr(t.amount).text}</td>
-                <td className="num p-2">{inr(t.stamp_duty).text}</td>
+                <td className="num p-2">
+                  <Cell f={inr(t.stamp_duty, { reason: "the stamp duty could not be read" })} />
+                </td>
                 <td className="p-2">
                   {t.source === "import" ? "statement import" : "your entry"}
                   {t.import_batch_id ? ` (batch ${t.import_batch_id})` : ""}
@@ -191,6 +269,7 @@ export function MfTxnSection({ schemes }: { schemes: ReadonlyArray<MfHolding> })
                   <button
                     type="button"
                     data-testid={`pf-mf-txn-edit-${t.id}`}
+                    disabled={uneditableReason(t) !== null}
                     onClick={() => {
                       setAdding(false);
                       setEditing(t);
@@ -198,7 +277,7 @@ export function MfTxnSection({ schemes }: { schemes: ReadonlyArray<MfHolding> })
                     className={BUTTON}
                   >
                     Edit
-                    <span className="sr-only">{` ${typeLabel(t.txn_type)} on ${t.txn_date}`}</span>
+                    <span className="sr-only">{` ${typeLabel(t.txn_type)} on ${formatDate(t.txn_date).text}`}</span>
                   </button>{" "}
                   <button
                     type="button"
@@ -210,7 +289,7 @@ export function MfTxnSection({ schemes }: { schemes: ReadonlyArray<MfHolding> })
                     className={`${BUTTON} border-down`}
                   >
                     Delete
-                    <span className="sr-only">{` ${typeLabel(t.txn_type)} on ${t.txn_date}`}</span>
+                    <span className="sr-only">{` ${typeLabel(t.txn_type)} on ${formatDate(t.txn_date).text}`}</span>
                   </button>
                 </td>
               </tr>
@@ -240,6 +319,7 @@ export function MfTxnSection({ schemes }: { schemes: ReadonlyArray<MfHolding> })
           <button
             type="button"
             data-testid="pf-mf-txn-add"
+            ref={addRef}
             onClick={() => {
               setEditing(null);
               setAdding(true);
@@ -270,7 +350,7 @@ export function MfTxnSection({ schemes }: { schemes: ReadonlyArray<MfHolding> })
           aria-label="Filters"
           data-testid="pf-mf-txn-filters"
         >
-          <label className="flex flex-col gap-1 text-caption text-text-2">
+          <label className="flex min-w-0 max-w-full flex-col gap-1 text-caption text-text-2">
             Scheme
             <select
               data-testid="pf-mf-filter-scheme"
@@ -279,23 +359,23 @@ export function MfTxnSection({ schemes }: { schemes: ReadonlyArray<MfHolding> })
               onChange={(e) => set("schemeCode", e.target.value)}
             >
               <option value="">All schemes</option>
-              {schemes.map((s) => (
+              {schemeOptions.map((s) => (
                 <option key={s.scheme_code} value={String(s.scheme_code)}>
                   {s.scheme_name} ({planLabel(s.plan)}, {optionLabel(s.option)})
                 </option>
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-caption text-text-2">
+          <label className="flex min-w-0 max-w-full flex-col gap-1 text-caption text-text-2">
             Folio
             <input
               data-testid="pf-mf-filter-folio"
               className={FIELD}
-              value={filters.folio}
-              onChange={(e) => set("folio", e.target.value)}
+              value={folioText}
+              onChange={(e) => setFolioText(e.target.value)}
             />
           </label>
-          <label className="flex flex-col gap-1 text-caption text-text-2">
+          <label className="flex min-w-0 max-w-full flex-col gap-1 text-caption text-text-2">
             Type
             <select
               data-testid="pf-mf-filter-type"
@@ -311,7 +391,7 @@ export function MfTxnSection({ schemes }: { schemes: ReadonlyArray<MfHolding> })
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-caption text-text-2">
+          <label className="flex min-w-0 max-w-full flex-col gap-1 text-caption text-text-2">
             From
             <input
               type="date"
@@ -321,7 +401,7 @@ export function MfTxnSection({ schemes }: { schemes: ReadonlyArray<MfHolding> })
               onChange={(e) => set("from", e.target.value)}
             />
           </label>
-          <label className="flex flex-col gap-1 text-caption text-text-2">
+          <label className="flex min-w-0 max-w-full flex-col gap-1 text-caption text-text-2">
             To
             <input
               type="date"
@@ -331,7 +411,7 @@ export function MfTxnSection({ schemes }: { schemes: ReadonlyArray<MfHolding> })
               onChange={(e) => set("to", e.target.value)}
             />
           </label>
-          <label className="flex flex-col gap-1 text-caption text-text-2">
+          <label className="flex min-w-0 max-w-full flex-col gap-1 text-caption text-text-2">
             Source
             <select
               data-testid="pf-mf-filter-source"
@@ -353,7 +433,7 @@ export function MfTxnSection({ schemes }: { schemes: ReadonlyArray<MfHolding> })
         title="Delete this transaction?"
         message={
           deleting
-            ? `Delete the ${typeLabel(deleting.txn_type).toLowerCase()} of ${deleting.units} units in ${deleting.scheme_name}, folio ${deleting.folio}. Every later redemption of this scheme and folio is re-checked; if one would then exceed the units held, nothing is deleted.`
+            ? `Delete the ${typeLabel(deleting.txn_type).toLowerCase()} of ${qty(deleting.units)} units in ${deleting.scheme_name}, folio ${deleting.folio ?? DASH}. Every later redemption of this scheme and folio is re-checked; if one would then exceed the units held, nothing is deleted.`
             : ""
         }
         confirmLabel="Delete"

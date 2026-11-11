@@ -1,4 +1,4 @@
-import { formatInr, formatNumber, formatPercent, type Formatted } from "@/lib/format";
+import { formatDate, formatInr, formatNumber, formatPercent, type Formatted } from "@/lib/format";
 import { displayNumber, qtyDecimals } from "@/lib/portfolio/decimal";
 
 // Display helpers for the portfolio screens. All text comes from lib/format; API money strings are
@@ -160,3 +160,16 @@ export const NO_MF_TXNS_COPY =
   "No mutual fund transactions yet. Import your broker's MF statement or add a transaction.";
 export const SWITCH_NOT_SUPPORTED_COPY =
   "Switches and merger/bonus entries are not supported yet. Enter a switch as a redemption plus a purchase.";
+
+/** "Mutual funds (NAV) as of 9 Oct 2026; Stocks (close) as of 10 Oct 2026": the date of each part of a day change. */
+export function dayPartsText(
+  rows: ReadonlyArray<{ asset_class: string; as_of?: string | null | undefined }>,
+): string | null {
+  if (rows.length === 0) return null;
+  return rows
+    .map((r) => {
+      const d = formatDate(r.as_of);
+      return `${r.asset_class === "mf" ? "Mutual funds (NAV)" : "Stocks (close)"} as of ${d.reason === null ? d.text : "unknown"}`;
+    })
+    .join("; ");
+}
