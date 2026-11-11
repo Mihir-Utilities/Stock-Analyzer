@@ -9,6 +9,7 @@ import {
   brokerStatusSchema,
   marketOverviewSchema,
   portfolioSummarySchema,
+  seasonalityListSchema,
   stockEventsSchema,
   watchlistSchema,
 } from "./schemas";
@@ -18,6 +19,7 @@ import {
 
 export const dashboardKeys = {
   watchlist: ["dashboard", "watchlist"] as const,
+  seasonality: ["dashboard", "seasonality"] as const,
   overview: ["dashboard", "market-overview"] as const,
   portfolio: ["dashboard", "portfolio-summary"] as const,
   alerts: ["dashboard", "alert-events"] as const,
@@ -31,6 +33,23 @@ export function useWatchlist() {
     queryKey: dashboardKeys.watchlist,
     queryFn: ({ signal }) => apiRequest("/watchlist", { schema: watchlistSchema, signal }),
     staleTime: 5 * 60_000,
+  });
+}
+
+export type SeasonScope = "all" | "watchlist";
+
+/** The Home tile list (docs/03 4b); the key carries the scope, the previous scope stays while the next loads. */
+export function useSeasonality(scope: SeasonScope) {
+  return useQuery({
+    queryKey: [...dashboardKeys.seasonality, scope],
+    queryFn: ({ signal }) =>
+      apiRequest("/stocks/seasonality", {
+        schema: seasonalityListSchema,
+        query: { scope },
+        signal,
+      }),
+    staleTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
   });
 }
 

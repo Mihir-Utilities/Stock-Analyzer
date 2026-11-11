@@ -26,7 +26,7 @@ function reply(route: Route, r: MockReply) {
   });
 }
 
-async function mockApi(page: Page) {
+async function mockApi(page: Page, opts: { many?: boolean } = {}) {
   await page.route("**/api/v1/**", (route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname.replace("/api/v1", "");
@@ -37,7 +37,22 @@ async function mockApi(page: Page) {
       "GET /stocks/TCS/events": fx.events,
       "GET /stocks/TCS/links": fx.links,
       "GET /stocks/TCS/fundamentals": fx.fundamentalsNotComputed,
-      "GET /watchlist": ix.watchlistWithSeasonality(),
+      "GET /stocks/seasonality": opts.many
+        ? ix.seasonalityMany(48)
+        : ix.seasonalityList(
+            new URL(req.url()).searchParams.get("scope") === "watchlist" ? "watchlist" : "all",
+          ),
+      "GET /watchlist": ok({
+        stocks: ["AAA", "CCC"].map((symbol, id) => ({
+          id: id + 1,
+          symbol,
+          name: `${symbol} Limited`,
+          ltp: 100,
+          ltp_as_of: "2026-11-10",
+          change_pct: 0.5,
+        })),
+        funds: [],
+      }),
       "GET /alerts/events": ok({ items: [], next_cursor: null }),
       "GET /broker/status": ok({ enabled: false, mode: "manual" }),
     };
@@ -210,6 +225,59 @@ test.describe("Home tile: This month, across the years", () => {
       "/stocks/BBB?tab=analysis",
     );
   });
+
+  test("INVA: the All stocks | Watchlist control works by keyboard and marks watchlisted stocks", async ({
+    page,
+  }) => {
+    await signIn(page);
+    await mockApi(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/");
+    const order = () =>
+      page
+        .locator('a[data-testid^="dash-seasonality-row-"]')
+        .evaluateAll((els) =>
+          els.map((e) => e.getAttribute("data-testid")?.replace("dash-seasonality-row-", "")),
+        );
+    await expect(page.getByTestId("dash-seasonality-list")).toBeVisible();
+    expect(await order()).toEqual(["BBB", "CCC", "AAA"]);
+    await expect(page.getByTestId("dash-seasonality-watch-AAA")).toBeVisible();
+    await expect(page.getByTestId("dash-seasonality-watch-BBB")).toHaveCount(0);
+    await page.getByTestId("dash-seasonality-scope-all").focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByTestId("dash-seasonality-scope-watchlist")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await expect(page.getByTestId("dash-seasonality-scope-watchlist")).toBeFocused();
+    await expect.poll(order).toEqual(["CCC", "AAA"]);
+    await expect(page.getByTestId("dash-seasonality-live")).toHaveText("2 stocks shown");
+    await page.keyboard.press("ArrowLeft");
+    await expect.poll(order).toEqual(["BBB", "CCC", "AAA"]);
+  });
+
+  for (const theme of ["dark", "light"] as const) {
+    for (const width of [375, 1440]) {
+      test(`48 tracked stocks: axe, targets and no page scroll: ${theme} at ${width}`, async ({
+        page,
+      }) => {
+        await signIn(page);
+        await mockApi(page, { many: true });
+        await page.setViewportSize({ width, height: 900 });
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        await page.goto("/");
+        await setTheme(page, theme);
+        await expect(page.getByTestId("dash-seasonality-list")).toBeVisible();
+        await expect(page.getByTestId("dash-seasonality-scope")).toBeVisible();
+        await setTheme(page, theme);
+        expect(await axeViolations(page)).toEqual([]);
+        if (width === 375) {
+          expect(await smallTargets(page)).toEqual([]);
+          await noPageScroll(page);
+        }
+      });
+    }
+  }
 
   test("375 px: one column, each row a stacked card, month so far at the end", async ({ page }) => {
     await signIn(page);
