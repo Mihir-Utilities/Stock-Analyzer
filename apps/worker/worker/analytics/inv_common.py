@@ -100,6 +100,7 @@ class InvContext:
 
     today: date
     holidays: Collection[date] = field(default_factory=frozenset)
+    market_closed: Collection[date] = field(default_factory=frozenset)  # derived from the data
     settings: InvSettings = field(default_factory=InvSettings)
 
 

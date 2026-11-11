@@ -276,7 +276,7 @@ def _analysis(bars: Bars, bench: dict[date, float], ctx: InvContext) -> dict[str
     window = ser.SERIES_ROWS
     beta_by_date = dict(rt.rolling_beta(d, c, bench))
     vol21 = ser.rolling_vol(c, 21)
-    model = inm.MonthModel(d, c, ctx.today, ctx.holidays)
+    model = inm.MonthModel(d, c, ctx.today, ctx.holidays, ctx.market_closed)
     cells, cell_reasons = inm.month_cells(model)
     st = ctx.settings
     return {
@@ -293,6 +293,7 @@ def _analysis(bars: Bars, bench: dict[date, float], ctx: InvContext) -> dict[str
         "return_histogram": ser.histogram(c),
         "month_year": cells,
         "month_year_reasons": cell_reasons,
+        "months_excluded_incomplete": model.months_excluded_incomplete(),
         "calendar": ser.calendar_days(d, c),
         # Investment-context blocks (docs/05 section 12, docs/03 4a): descriptions of past prices.
         "year_returns": inm.year_returns(model),

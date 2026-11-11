@@ -145,3 +145,39 @@ async def test_inv_s08_stored_size_and_compute_time_for_a_25_year_stock(
     )
     assert size < 200_000 and grown < 20_000
     assert took < 30  # the existing per-stock compute is a few seconds; blocks add well under 1 s
+
+
+async def test_inv_m14_market_closed_days_come_from_other_tracked_instruments(
+    pg_full: asyncpg.Pool,
+) -> None:
+    days = weekdays(80)
+    month_ends = sorted({d for i, d in enumerate(days[:-1]) if days[i + 1].month != d.month})
+    shut = month_ends[1]
+    ids = [await seed(pg_full, s, 80) for s in ("CL1", "CL2", "CL3", "CL4")]
+    await pg_full.execute("UPDATE instrument SET is_tracked = true WHERE id = ANY($1::int[])", ids)
+    await pg_full.execute(
+        "DELETE FROM price_daily WHERE trade_date = $1 AND instrument_id = ANY($2::int[])",
+        shut,
+        ids,
+    )  # nobody traded that day: an unlisted exchange holiday
+
+    async def reason(symbol: str, iid: int) -> object:
+        await analysis_db.compute_analysis(pg_full, symbol, now=NOW)
+        a = doc((await snapshot_rows(pg_full, iid))[-1]["indicators"])["analysis"]
+        assert "months_excluded_incomplete" in a["seasonality"]
+        cells = {(r[0], r[1]): r[2] for r in a["month_year"]}
+        assert cells[(shut.year, shut.month)] is not None
+        return a["months_excluded_incomplete"]
+
+    # only the trailing partial month (the data stops mid-month, today is later) is excluded
+    assert await reason("CL1", ids[0]) == 1
+    # a stock lacking a day that the others traded stays incomplete
+    await pg_full.execute(
+        "UPDATE instrument SET is_tracked = false WHERE id = ANY($1::int[])", ids[1:]
+    )
+    await pg_full.execute("UPDATE instrument SET is_tracked = true WHERE id = $1", ids[0])
+    await analysis_db.compute_analysis(pg_full, "CL1", now=NOW)  # one tracked instrument: fallback
+    a = doc((await snapshot_rows(pg_full, ids[0]))[-1]["indicators"])["analysis"]
+    assert a["months_excluded_incomplete"] == 2
+    reasons = {(r[0], r[1]): r[2] for r in a["month_year_reasons"]}
+    assert reasons[(shut.year, shut.month)] == "incomplete_month_data"

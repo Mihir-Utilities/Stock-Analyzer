@@ -2,17 +2,18 @@
 
 A month is the calendar month. It is **closed** when ``today`` (IST, an argument) is after its
 last day; it is **complete** when the imported prices reach its last expected trading day
-(weekends plus the holidays file). Only closed, complete months with a base enter a statistic;
-the month of ``today`` is the running month (month to date, never counted). Price return only.
+(weekends, the holidays file and the market-closed days derived from the data). Only closed,
+complete months with a base enter a statistic; the month of ``today`` is the running month (month
+to date, never counted). Price return only.
 """
 
 from __future__ import annotations
 
 import calendar
 import math
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import numpy as np
@@ -21,6 +22,9 @@ from worker.analytics.inv_common import F64, InvSettings, iso, median, r4
 from worker.ml.display import last_trading_day
 
 HEATMAP_YEARS = 10
+# Market-closed days derived from the data (docs/05 12.1, D-INV3).
+CLOSED_MIN_ACTIVE = 3  # tracked instruments with bars in the month, and with bars in the period
+CLOSED_MAX_RUN = 5  # a longer run of bar-less weekdays is a data outage, not exchange closures
 
 GAP_BEFORE = "gap_before"
 NO_BASE = "no_base"
@@ -45,6 +49,46 @@ def last_expected_trading_day(idx: int, holidays: Collection[date]) -> date:
     return last_trading_day(date(y, m, calendar.monthrange(y, m)[1]), holidays)
 
 
+def derive_closed_days(day_counts: Mapping[date, int], first: date) -> frozenset[date]:
+    """Weekdays on which the market was closed, judged from the data itself (docs/05 12.1, D-INV3).
+
+    ``day_counts`` maps a date to the number of tracked instruments with a valid bar on it. A
+    weekday on or after ``first`` is *closed* when all of these hold: no tracked instrument has a
+    bar on it; at least ``CLOSED_MIN_ACTIVE`` instruments have bars in the same calendar month
+    (else the month is too thin to tell a holiday from missing data); a later day has bars (the
+    newest import is never presumed closed); and it is not part of a run of more than
+    ``CLOSED_MAX_RUN`` consecutive bar-less weekdays (a long outage is missing data). With fewer
+    than ``CLOSED_MIN_ACTIVE`` instruments in the period the result is empty (the holidays file
+    alone decides)."""
+    live = {d: n for d, n in day_counts.items() if n > 0 and d >= first}
+    if not live:
+        return frozenset()
+    by_month: dict[int, int] = {}
+    for d, n in live.items():
+        by_month[_idx(d)] = max(by_month.get(_idx(d), 0), n)
+    if max(live.values()) < CLOSED_MIN_ACTIVE:
+        return frozenset()
+    last = max(live)
+    out: set[date] = set()
+    run: list[date] = []
+
+    def flush() -> None:
+        if 0 < len(run) <= CLOSED_MAX_RUN:
+            out.update(x for x in run if by_month.get(_idx(x), 0) >= CLOSED_MIN_ACTIVE)
+        run.clear()
+
+    d = first
+    while d < last:
+        if d.weekday() < 5:
+            if d in live:
+                flush()
+            else:
+                run.append(d)
+        d += timedelta(days=1)
+    flush()
+    return frozenset(out)
+
+
 @dataclass(frozen=True)
 class MonthReturn:
     value: float | None  # unrounded percent: "green" is decided on this value (INV-7)
@@ -60,6 +104,7 @@ class MonthModel:
         close: F64,
         today: date,
         holidays: Collection[date] = frozenset(),
+        closed: Collection[date] = frozenset(),
     ) -> None:
         self.end_date: dict[int, date] = {}
         self.end_close: dict[int, float] = {}
@@ -75,8 +120,9 @@ class MonthModel:
         self.last_date = dates[-1]
         self.last_close = float(close[-1])
         self.holidays = holidays
+        off = frozenset(holidays) | frozenset(closed)  # holidays file + market-closed days
         self._complete = {
-            i: d >= last_expected_trading_day(i, holidays) for i, d in self.end_date.items()
+            i: d >= last_expected_trading_day(i, off) for i, d in self.end_date.items()
         }
 
     def has_bars(self, idx: int) -> bool:
@@ -87,6 +133,10 @@ class MonthModel:
 
     def complete(self, idx: int) -> bool:
         return self._complete.get(idx, False)
+
+    def months_excluded_incomplete(self) -> int:
+        """Closed months with bars that are incomplete (in no statistic, docs/05 12.1)."""
+        return sum(1 for i in self.end_date if self.is_closed(i) and not self._complete[i])
 
     def _base_problem(self, idx: int) -> str | None:
         """Why month ``idx`` has no month-end base (None when it has one)."""
@@ -332,4 +382,5 @@ def seasonality(model: MonthModel, bars: int, settings: InvSettings) -> dict[str
         "worst_month": worst_month,
         "best_worst_reason": reason,
         "years": years,
+        "months_excluded_incomplete": model.months_excluded_incomplete(),
     }

@@ -24,6 +24,7 @@ from worker import actions_db
 from worker.analytics import fundamentals as fnd
 from worker.analytics.actions import qty_multiplier
 from worker.analytics.inv_common import SETTING_KEYS, InvContext, InvSettings
+from worker.analytics.inv_months import derive_closed_days
 from worker.analytics.scores import RiskInput, risk_scores
 from worker.analytics.snapshot import DEFAULT_RISK_FREE, VERSION, Bars, build_snapshot
 from worker.marketdate import ist_today
@@ -89,8 +90,23 @@ async def load_risk_free(pool: asyncpg.Pool) -> float:
     return rate if 0.0 <= rate < 1.0 else DEFAULT_RISK_FREE
 
 
-async def load_inv_context(pool: asyncpg.Pool, now: datetime | None = None) -> InvContext:
-    """The IST date of this computation, the trading holidays and the ``INV_*`` settings with the
+async def load_market_closed(pool: asyncpg.Pool, first: date) -> frozenset[date]:
+    """Weekdays since ``first`` on which no tracked instrument traded (docs/05 12.1, D-INV3): one
+    aggregate over ``price_daily`` returning one row per trading date (about 250 a year)."""
+    rows = await pool.fetch(
+        "SELECT p.trade_date, count(*) AS n FROM price_daily p "
+        "JOIN instrument i ON i.id = p.instrument_id "
+        "WHERE i.is_tracked AND NOT p.suspect AND p.trade_date >= $1 GROUP BY p.trade_date",
+        first,
+    )
+    return derive_closed_days({r["trade_date"]: int(r["n"]) for r in rows}, first)
+
+
+async def load_inv_context(
+    pool: asyncpg.Pool, now: datetime | None = None, first: date | None = None
+) -> InvContext:
+    """The IST date of this computation, the trading holidays, the market-closed days derived
+    from the data since ``first`` (the stock's first bar) and the ``INV_*`` settings with the
     documented fallbacks (docs/05 12.0; INV-A06)."""
     holidays = frozenset(
         r["holiday_date"]
@@ -103,7 +119,10 @@ async def load_inv_context(pool: asyncpg.Pool, now: datetime | None = None) -> I
     )
     raw = {r["key"]: _loads(r["value"]) for r in rows}
     return InvContext(
-        today=ist_today(now), holidays=holidays, settings=InvSettings.from_mapping(raw)
+        today=ist_today(now),
+        holidays=holidays,
+        market_closed=frozenset() if first is None else await load_market_closed(pool, first),
+        settings=InvSettings.from_mapping(raw),
     )
 
 
@@ -214,7 +233,7 @@ async def compute_analysis(
         await load_benchmark(pool),
         risk_free=await load_risk_free(pool),
         warnings=warnings,
-        inv_ctx=await load_inv_context(pool, now),
+        inv_ctx=await load_inv_context(pool, now, bars.dates[0] if bars.dates else None),
     )
     scores: dict[str, Any] = {}
     if snap is not None:
