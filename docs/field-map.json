@@ -408,13 +408,49 @@
     "db.warn_level": "admin-db-bar",
     "holiday_list_missing_years": "admin-holiday-warning",
     "version": "admin-version",
-    "storage_policy": "admin-policy"
+    "storage_policy": "admin-policy",
+    "recent_errors": "not-rendered|the Recent errors card derives its list from jobs[] (F15-3); the server list of the newest 50 failed or partial runs (B14-6) is the follow-up source",
+    "recent_errors[].job": "not-rendered|see recent_errors: the card reads jobs[] until the web switches over",
+    "recent_errors[].error": "not-rendered|see recent_errors: the card reads jobs[] until the web switches over",
+    "db.limit_mb": "not-rendered|the meter uses the fixed 380 MB constant and the server warn_level; limit_mb is the same number (B14-5)",
+    "db.used_pct": "not-rendered|the meter computes the percentage from size_mb and 380 MB; used_pct is the server value for the same ratio (B14-5)"
   },
   "GET /market/overview": {
     "indices": "dash-indices",
     "vix": "dash-indices",
     "market_status": "dash-market-status",
-    "movers": "not-rendered|movers on the Dashboard come from the watchlist (movers-table); the server does not send them in v1 (F04)"
+    "movers": "not-rendered|movers on the Dashboard come from the watchlist (movers-table); the server list (B14-4) is not rendered in v1",
+    "indices_reason": "dash-indices",
+    "vix_reason": "dash-indices",
+    "movers_reason": "not-rendered|movers are not rendered from this response in v1 (B14-4)"
+  },
+  "GET /market/holidays": {
+    "year": "not-rendered|no screen lists the holiday calendar yet; the Admin status page shows only the missing-year warning",
+    "holidays": "not-rendered|no screen lists the holiday calendar yet",
+    "year_loaded": "not-rendered|the Admin status page uses holiday_list_missing_years instead",
+    "note": "not-rendered|no screen lists the holiday calendar yet"
+  },
+  "GET /stocks/{symbol}/prediction": {
+    "experimental": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "disclaimer": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "state": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "state_reason": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "as_of": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "ref_close": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "ref_close_reason": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "horizons": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "horizons[].days": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "horizons[].shown": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "horizons[].p_up": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "horizons[].bucket": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "horizons[].band": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "horizons[].hidden_reason": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "horizons[].model": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "horizons[].track_record": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "trend": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "risk": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "model": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map",
+    "track_record": "not-rendered|the Prediction tab is not built yet (F15-5); the fields are listed so the tab starts from a complete map"
   },
   "GET /watchlist": {
     "stocks": "watch-tiles",

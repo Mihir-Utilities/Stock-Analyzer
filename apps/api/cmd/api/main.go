@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/india-analyzer/api/internal/actions"
+	"github.com/india-analyzer/api/internal/admin"
 	"github.com/india-analyzer/api/internal/auth"
 	"github.com/india-analyzer/api/internal/config"
 	"github.com/india-analyzer/api/internal/egress"
@@ -24,7 +25,9 @@ import (
 	"github.com/india-analyzer/api/internal/instruments"
 	"github.com/india-analyzer/api/internal/jobs"
 	"github.com/india-analyzer/api/internal/logx"
+	"github.com/india-analyzer/api/internal/market"
 	"github.com/india-analyzer/api/internal/portfolio"
+	"github.com/india-analyzer/api/internal/predict"
 	"github.com/india-analyzer/api/internal/prices"
 	"github.com/india-analyzer/api/internal/screener"
 )
@@ -84,6 +87,9 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 		Portfolio:        portfolio.New(pool),
 		Imports:          importService(cfg, pool, jobSvc, log),
 		Actions:          actions.New(pool, jobSvc, log),
+		Predict:          predict.New(pool),
+		Market:           market.New(pool),
+		Admin:            admin.New(pool, cfg.DBSoftLimitMB, getenv("GIT_SHA")),
 		TrustedProxyHops: cfg.TrustedProxyHops})
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
