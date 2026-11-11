@@ -13,14 +13,19 @@ import { SeasonalityCard } from "@/components/dashboard/SeasonalityCard";
 import { Heatmap } from "@/components/ui/Heatmap";
 import { DefinitionTip } from "@/components/ui/DefinitionTip";
 import { rankSeasonality } from "@/lib/dashboard/seasonality";
-import type { WatchStock } from "@/lib/dashboard/schemas";
+import type { SeasonStock } from "@/lib/dashboard/schemas";
 import { definitions } from "@/lib/definitions";
 import { formatMonthName, formatMonthYear } from "@/lib/format";
 import { parseInvBlocks } from "@/lib/stock/inv-schemas";
 import type { Load } from "@/lib/stock/load";
 import type { IndicatorsData } from "@/lib/stock/schemas";
 import { createMockFetch, type Handler } from "../mocks/mock-fetch";
-import { indicatorsWithInv, watchlistWithSeasonality } from "../mocks/inv-fixtures";
+import {
+  indicatorsWithInv,
+  seasonalityList,
+  seasonalityMany,
+  seasonalityRoute,
+} from "../mocks/inv-fixtures";
 import "./dom-matchers";
 
 vi.setConfig({ testTimeout: 30_000 });
@@ -628,7 +633,7 @@ describe("Home tile: This month, across the years", () => {
 
   it("INV-T01: default order is share, then years, then symbol; sort and minimum years move rows", async () => {
     const user = userEvent.setup();
-    mountTile({ "GET /watchlist": watchlistWithSeasonality() });
+    mountTile({ "GET /stocks/seasonality": seasonalityRoute });
     await screen.findByTestId("dash-seasonality-list");
     expect(rowOrder()).toEqual(["BBB", "CCC", "AAA"]);
     expect(screen.getByTestId("dash-seasonality-month")).toHaveTextContent("November");
@@ -659,8 +664,7 @@ describe("Home tile: This month, across the years", () => {
   });
 
   it("ranking ties: equal share goes to more years, then to the symbol", () => {
-    const mk = (id: number, symbol: string, pct: number, n: number): WatchStock => ({
-      id,
+    const mk = (symbol: string, pct: number, n: number): SeasonStock => ({
       symbol,
       name: symbol,
       seasonality: {
@@ -683,7 +687,7 @@ describe("Home tile: This month, across the years", () => {
       },
     });
     const { ranked } = rankSeasonality(
-      [mk(1, "ZED", 50, 4), mk(2, "ABC", 50, 4), mk(3, "MID", 50, 8), mk(4, "TOP", 80, 5)],
+      [mk("ZED", 50, 4), mk("ABC", 50, 4), mk("MID", 50, 8), mk("TOP", 80, 5)],
       "share",
       3,
     );
@@ -691,7 +695,7 @@ describe("Home tile: This month, across the years", () => {
   });
 
   it("INV-T02: the main line and the sub-line use the history start, never 'since listing'", async () => {
-    mountTile({ "GET /watchlist": watchlistWithSeasonality() });
+    mountTile({ "GET /stocks/seasonality": seasonalityRoute });
     await screen.findByTestId("dash-seasonality-list");
     expect(screen.getByTestId("dash-seasonality-main-AAA")).toHaveTextContent(
       "4 of 6 years green (67%)",
@@ -706,7 +710,7 @@ describe("Home tile: This month, across the years", () => {
   });
 
   it("INV-T03: month to date is shown separately with sign and arrow, or an em dash with the reason", async () => {
-    mountTile({ "GET /watchlist": watchlistWithSeasonality() });
+    mountTile({ "GET /stocks/seasonality": seasonalityRoute });
     await screen.findByTestId("dash-seasonality-list");
     const aaa = screen.getByTestId("dash-seasonality-mtd-AAA");
     expect(aaa).toHaveTextContent("November so far:");
@@ -721,7 +725,7 @@ describe("Home tile: This month, across the years", () => {
   });
 
   it("INV-T05: fewer than 5 years shows the Small sample chip and the rough-guide sentence", async () => {
-    mountTile({ "GET /watchlist": watchlistWithSeasonality() });
+    mountTile({ "GET /stocks/seasonality": seasonalityRoute });
     await screen.findByTestId("dash-seasonality-list");
     const ccc = screen.getByTestId("dash-seasonality-row-CCC");
     expect(within(ccc).getByTestId("dash-seasonality-small-CCC")).toHaveTextContent("Small sample");
@@ -730,7 +734,7 @@ describe("Home tile: This month, across the years", () => {
   });
 
   it("INV-T08: the footnote is always present; stocks without enough years are in the collapsed group with reasons", async () => {
-    mountTile({ "GET /watchlist": watchlistWithSeasonality() });
+    mountTile({ "GET /stocks/seasonality": seasonalityRoute });
     await screen.findByTestId("dash-seasonality-list");
     expect(screen.getByTestId("dash-seasonality-note")).toHaveTextContent(
       "Past behaviour is not a forecast. Counts only closed past months from your imported prices (price change, dividends excluded).",
@@ -753,39 +757,43 @@ describe("Home tile: This month, across the years", () => {
   it("INV-T04: loading, empty, nothing ranked, partial, stale and error each render with their copy", async () => {
     // loading
     const pending = mountTile({
-      "GET /watchlist": () => new Promise(() => undefined) as never,
+      "GET /stocks/seasonality": () => new Promise(() => undefined) as never,
     });
     expect(screen.getByTestId("dash-seasonality")).toHaveAttribute("data-state", "loading");
     pending.unmount();
     vi.unstubAllGlobals();
 
-    // empty: no watchlist stocks
+    // empty: no tracked stocks
     const empty = mountTile({
-      "GET /watchlist": {
+      "GET /stocks/seasonality": {
         status: 200,
-        body: { data: { stocks: [], funds: [] }, meta: {}, warnings: [] },
+        body: {
+          data: { month: 11, month_name: "November", as_of: null, scope: "all", stocks: [] },
+          meta: {},
+          warnings: [],
+        },
       },
     });
     await waitFor(() =>
       expect(screen.getByTestId("dash-seasonality")).toHaveAttribute("data-state", "empty"),
     );
     expect(screen.getByTestId("dash-seasonality")).toHaveTextContent(
-      "Add stocks to your watchlist to see how this month has behaved in past years.",
+      "No stocks are tracked yet. Import prices for a stock to see how this month has behaved in past years.",
     );
     expect(screen.getByTestId("dash-seasonality-browse")).toHaveAttribute("href", "/stocks");
     empty.unmount();
     vi.unstubAllGlobals();
 
     // nothing ranked: every stock is short; the group is still listed
-    const body = watchlistWithSeasonality().body as { data: { stocks: unknown[] } };
+    const body = seasonalityList().body as { data: { stocks: unknown[] } };
     const short = {
       status: 200,
-      body: { ...body, data: { stocks: body.data.stocks.slice(3), funds: [] } },
+      body: { ...body, data: { ...body.data, stocks: body.data.stocks.slice(3) } },
     };
-    const none = mountTile({ "GET /watchlist": short });
+    const none = mountTile({ "GET /stocks/seasonality": short });
     await screen.findByTestId("dash-seasonality-none");
     expect(screen.getByTestId("dash-seasonality-none")).toHaveTextContent(
-      "No watchlist stock has 3 years of this month yet. Import more price history.",
+      "No tracked stock has 3 years of this month yet. Import more price history.",
     );
     expect(screen.getByTestId("dash-seasonality-short")).toHaveTextContent(
       "Not enough years yet (2)",
@@ -796,11 +804,12 @@ describe("Home tile: This month, across the years", () => {
     vi.unstubAllGlobals();
 
     // stale: an old snapshot gets the amber stale chip, and the share is still shown
-    const stale = JSON.parse(JSON.stringify(watchlistWithSeasonality())) as {
+    const stale = JSON.parse(JSON.stringify(seasonalityList())) as {
       body: { data: { stocks: Array<{ seasonality: { as_of: string } | null }> } };
     };
     for (const s of stale.body.data.stocks) if (s.seasonality) s.seasonality.as_of = "2026-09-01";
-    const st = mountTile({ "GET /watchlist": stale as never });
+    (stale.body.data as unknown as { as_of: string }).as_of = "2026-09-01";
+    const st = mountTile({ "GET /stocks/seasonality": stale as never });
     await screen.findByTestId("dash-seasonality-list");
     expect(
       within(screen.getByTestId("dash-seasonality")).getByTestId("asof-chip"),
@@ -812,7 +821,7 @@ describe("Home tile: This month, across the years", () => {
     // error: message + Retry; the tile failing leaves the Dashboard standing
     mountTile(
       {
-        "GET /watchlist": {
+        "GET /stocks/seasonality": {
           status: 500,
           body: { error: { code: "INTERNAL", message: "x", request_id: "req-77" } },
         },
@@ -830,7 +839,7 @@ describe("Home tile: This month, across the years", () => {
 
   it("INV-T06 (unit part): the controls are labelled native selects reachable by keyboard", async () => {
     const user = userEvent.setup();
-    mountTile({ "GET /watchlist": watchlistWithSeasonality() });
+    mountTile({ "GET /stocks/seasonality": seasonalityRoute });
     await screen.findByTestId("dash-seasonality-list");
     await user.tab();
     const sort = screen.getByLabelText("Sort");
@@ -843,6 +852,101 @@ describe("Home tile: This month, across the years", () => {
     await user.tab();
     expect(document.activeElement).toBe(min);
     expect(screen.getByTestId("dash-seasonality-live")).toHaveAttribute("aria-live", "polite");
+  });
+
+  it("INVA-11/12: All stocks is the default; the scope control is a radio group that refetches with the scope", async () => {
+    const user = userEvent.setup();
+    const mock = createMockFetch({ "GET /stocks/seasonality": seasonalityRoute });
+    vi.stubGlobal("fetch", mock.impl);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <SeasonalityCard />
+      </QueryClientProvider>,
+    );
+    await screen.findByTestId("dash-seasonality-list");
+    expect(mock.calls.at(-1)!.query.get("scope")).toBe("all");
+    const group = screen.getByRole("radiogroup", { name: "Stocks to show" });
+    const all = within(group).getByTestId("dash-seasonality-scope-all");
+    const wl = within(group).getByTestId("dash-seasonality-scope-watchlist");
+    expect(all).toHaveAttribute("aria-checked", "true");
+    expect(wl).toHaveAttribute("aria-checked", "false");
+    expect(all).toHaveAttribute("tabindex", "0");
+    expect(wl).toHaveAttribute("tabindex", "-1");
+    expect(rowOrder()).toEqual(["BBB", "CCC", "AAA"]);
+    // INVA-12: the chip (text and icon) marks watchlisted stocks in All mode only
+    expect(screen.getByTestId("dash-seasonality-watch-AAA")).toHaveTextContent("Watchlist");
+    expect(screen.getByTestId("dash-seasonality-watch-CCC")).toBeInTheDocument();
+    expect(screen.queryByTestId("dash-seasonality-watch-BBB")).toBeNull();
+
+    all.focus();
+    await user.keyboard("{ArrowRight}");
+    await waitFor(() => expect(mock.calls.at(-1)!.query.get("scope")).toBe("watchlist"));
+    await waitFor(() => expect(rowOrder()).toEqual(["CCC", "AAA"]));
+    expect(wl).toHaveAttribute("aria-checked", "true");
+    expect(document.activeElement).toBe(wl);
+    expect(screen.queryByTestId("dash-seasonality-watch-AAA")).toBeNull();
+    await waitFor(() =>
+      expect(screen.getByTestId("dash-seasonality-live")).toHaveTextContent("2 stocks shown"),
+    );
+    await user.keyboard("{Home}");
+    await waitFor(() => expect(rowOrder()).toEqual(["BBB", "CCC", "AAA"]));
+    expect(screen.getByTestId("dash-seasonality-scope")).toHaveAttribute("data-scope", "all");
+  });
+
+  it("INVA-13: the empty copy and the caption follow the scope; the switch stays reachable when empty", async () => {
+    const user = userEvent.setup();
+    const emptyWatch = {
+      status: 200,
+      body: {
+        data: { month: 11, month_name: "November", as_of: null, scope: "watchlist", stocks: [] },
+        meta: {},
+        warnings: [],
+      },
+    };
+    mountTile({
+      "GET /stocks/seasonality": (c) =>
+        c.query.get("scope") === "watchlist" ? emptyWatch : seasonalityList(),
+    });
+    await screen.findByTestId("dash-seasonality-list");
+    expect(screen.getByRole("table")).toHaveTextContent(
+      "Tracked stocks by how often November ended higher in past years",
+    );
+    await user.click(screen.getByTestId("dash-seasonality-scope-watchlist"));
+    await waitFor(() =>
+      expect(screen.getByTestId("dash-seasonality")).toHaveAttribute("data-state", "empty"),
+    );
+    expect(screen.getByTestId("dash-seasonality")).toHaveTextContent(
+      "Add stocks to your watchlist to see how this month has behaved in past years.",
+    );
+    // the control is still there to go back
+    await user.click(screen.getByTestId("dash-seasonality-scope-all"));
+    await screen.findByTestId("dash-seasonality-list");
+  });
+
+  it("INVA-14 (unit part): 48 tracked stocks rank, sort, filter and group; the footnote stays", async () => {
+    const user = userEvent.setup();
+    mountTile({ "GET /stocks/seasonality": seasonalityMany(48) });
+    await screen.findByTestId("dash-seasonality-list");
+    const total = () =>
+      rowOrder().length +
+      document.querySelectorAll('[data-testid^="dash-seasonality-short-row-"]').length;
+    expect(total()).toBe(48);
+    await user.selectOptions(screen.getByTestId("dash-seasonality-sort"), "symbol");
+    expect(rowOrder().slice(0, 2)).toEqual(["S000", "S001"]);
+    await user.selectOptions(screen.getByTestId("dash-seasonality-min-years"), "8");
+    expect(screen.getByTestId("dash-seasonality-short")).toBeInTheDocument();
+    expect(total()).toBe(48);
+    expect(screen.getByTestId("dash-seasonality-note")).toBeInTheDocument();
+  });
+
+  it("INVA: a wrong-typed on_watchlist degrades to no chip; the row still renders", async () => {
+    const body = seasonalityList().body as { data: { stocks: Array<Record<string, unknown>> } };
+    body.data.stocks[0]!.on_watchlist = "yes";
+    mountTile({ "GET /stocks/seasonality": { status: 200, body } });
+    await screen.findByTestId("dash-seasonality-list");
+    expect(screen.getByTestId("dash-seasonality-row-AAA")).toBeInTheDocument();
+    expect(screen.queryByTestId("dash-seasonality-watch-AAA")).toBeNull();
   });
 
   it("format helpers: month names and Mon YYYY come from format.ts and are unknown-safe", () => {

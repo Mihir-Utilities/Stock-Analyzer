@@ -133,6 +133,7 @@ var routes = []route{
 
 	// Stocks (sections 3-6)
 	{Method: mGet, Path: "/stocks/index"},
+	{Method: mGet, Path: "/stocks/seasonality"}, // before /stocks/{symbol} (INVA, D-INV2)
 	{Method: mGet, Path: "/stocks"},
 	{Method: mGet, Path: "/stocks/{symbol}"},
 	{Method: mGet, Path: "/stocks/{symbol}/prices"},

@@ -1,10 +1,10 @@
 import { formatCount, formatMonthName, formatMonthYear } from "@/lib/format";
 import { invReason, istMonth } from "@/lib/stock/inv-model";
 import type { WatchSeasonality } from "@/lib/stock/inv-schemas";
-import type { WatchStock } from "./schemas";
+import type { SeasonStock } from "./schemas";
 
 // Pure helpers for the Home tile "This month, across the years" (docs/06 6.2a). The tile computes
-// nothing: it sorts, filters and words the stored `stocks[].seasonality` of GET /watchlist.
+// nothing: it sorts, filters and words the stored `stocks[].seasonality` of GET /stocks/seasonality.
 
 export type SeasonSort = "share" | "years" | "symbol" | "mtd";
 export const SORT_LABELS: Record<SeasonSort, string> = {
@@ -21,11 +21,11 @@ export const HISTORY_NOTE =
 export const SEASON_SOURCE = "Your imported prices";
 
 export interface RankedRow {
-  stock: WatchStock;
+  stock: SeasonStock;
   s: WatchSeasonality;
 }
 export interface ShortRow {
-  stock: WatchStock;
+  stock: SeasonStock;
   reason: string;
 }
 
@@ -33,7 +33,7 @@ const num = (v: number | null | undefined): v is number =>
   typeof v === "number" && Number.isFinite(v);
 
 /** Reason a stock is not ranked: no snapshot, fewer years than the minimum, or no share yet. */
-function shortReason(stock: WatchStock, minYears: number): string | null {
+function shortReason(stock: SeasonStock, minYears: number): string | null {
   const s = stock.seasonality;
   if (!s) {
     return stock.seasonality_reason ? invReason(stock.seasonality_reason) : "Not computed yet";
@@ -52,7 +52,7 @@ const bySymbol = (a: RankedRow, b: RankedRow) => a.stock.symbol.localeCompare(b.
 
 /** Ranked rows (sorted) and the "Not enough years yet" group. */
 export function rankSeasonality(
-  stocks: ReadonlyArray<WatchStock>,
+  stocks: ReadonlyArray<SeasonStock>,
   sort: SeasonSort,
   minYears: number,
 ): { ranked: RankedRow[]; short: ShortRow[] } {
@@ -96,7 +96,7 @@ export function subLine(s: WatchSeasonality): string {
 }
 
 /** The month the tile is about: the API's month name, else the IST month of `now`. */
-export function tileMonth(stocks: ReadonlyArray<WatchStock>, now: Date): string {
+export function tileMonth(stocks: ReadonlyArray<SeasonStock>, now: Date): string {
   const named = stocks.find((s) => s.seasonality?.month_name)?.seasonality?.month_name;
   if (named) return named;
   const m = stocks.find((s) => s.seasonality?.month)?.seasonality?.month;
@@ -104,7 +104,7 @@ export function tileMonth(stocks: ReadonlyArray<WatchStock>, now: Date): string 
   return f.reason === null ? f.text : "This month";
 }
 
-export function latestSeasonAsOf(stocks: ReadonlyArray<WatchStock>): string | null {
+export function latestSeasonAsOf(stocks: ReadonlyArray<SeasonStock>): string | null {
   let best: string | null = null;
   for (const s of stocks) {
     const d = s.seasonality?.as_of;

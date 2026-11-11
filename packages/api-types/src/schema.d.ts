@@ -174,6 +174,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stocks/seasonality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Home tile 'This month, across the years' over every tracked stock (decision D-INV2). (docs/03 section 4b) */
+        get: operations["getStocksSeasonality"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stocks/{symbol}": {
         parameters: {
             query?: never;
@@ -1517,6 +1534,23 @@ export interface components {
             sip_backtest?: components["schemas"]["InvSipBacktest"];
             risk_adjusted?: components["schemas"]["InvRiskAdjusted"];
         };
+        /** @description data of GET /stocks/seasonality (docs/03 section 4b). */
+        SeasonalityList: {
+            month: number;
+            month_name: string;
+            /** Format: date */
+            as_of: string | null;
+            /** @enum {string} */
+            scope: "all" | "watchlist";
+            stocks: {
+                symbol: string;
+                name: string;
+                on_watchlist: boolean;
+                seasonality: components["schemas"]["WatchlistSeasonality"] | null;
+                /** @description no_prices_imported | no_history */
+                seasonality_reason?: string | null;
+            }[];
+        };
         /** @description stocks[].seasonality of GET /watchlist (docs/03 section 11): the current IST calendar month across past years. green_pct is a percent number; the running month is never counted; data_since is the first imported bar, not the listing date. */
         WatchlistSeasonality: {
             month: number;
@@ -2433,6 +2467,41 @@ export interface operations {
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             501: components["responses"]["NotImplemented"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getStocksSeasonality: {
+        parameters: {
+            query?: {
+                /** @description all = every tracked stock; watchlist = only watchlisted stocks. Any other value is 422. */
+                scope?: "all" | "watchlist";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success. data = SeasonalityList: today's IST month, the newest as_of, and one row per tracked stock with on_watchlist and the same seasonality object as GET /watchlist (or null with seasonality_reason). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["RateLimited"];
             /** @description Error envelope */
             default: {
                 headers: {

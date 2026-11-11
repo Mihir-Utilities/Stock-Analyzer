@@ -20,6 +20,7 @@ type PortfolioService interface {
 	Add(ctx context.Context, in portfolio.WatchAdd) (portfolio.WatchEntry, error)
 	PatchNote(ctx context.Context, id int64, note string) (portfolio.WatchEntry, error)
 	Remove(ctx context.Context, id int64) error
+	SeasonalityList(ctx context.Context, scope string) (portfolio.SeasonList, error)
 	ListTxns(ctx context.Context, p portfolio.TxnListParams) (pagination.Page[portfolio.TxnItem], error)
 	CreateTxn(ctx context.Context, in portfolio.TxnInput, key string) (portfolio.TxnResult, error)
 	UpdateTxn(ctx context.Context, id int64, in portfolio.TxnInput) (portfolio.TxnResult, error)
@@ -46,6 +47,22 @@ func portfolioHandler(rt route, d Deps) http.Handler {
 				return mapPortfolioError(err)
 			}
 			WriteData(w, http.StatusOK, res, WithMeta(NewMeta(time.Now(), "import", stale, 0)))
+			return nil
+		})
+	case "GET /stocks/seasonality":
+		return Adapt(func(w http.ResponseWriter, r *http.Request) error {
+			scope := portfolio.SeasonScopeAll
+			if v := r.URL.Query().Get("scope"); v != "" {
+				scope = v
+			}
+			if scope != portfolio.SeasonScopeAll && scope != portfolio.SeasonScopeWatchlist {
+				return ErrValidation(FieldError{Field: "scope", Message: "must be all or watchlist"})
+			}
+			res, err := svc.SeasonalityList(r.Context(), scope)
+			if err != nil {
+				return mapPortfolioError(err)
+			}
+			WriteData(w, http.StatusOK, res, WithMeta(NewMeta(time.Now(), "import", false, 0)))
 			return nil
 		})
 	case "POST /watchlist":

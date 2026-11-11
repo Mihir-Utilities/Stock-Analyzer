@@ -1,12 +1,13 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Minus } from "lucide-react";
+import { ArrowDown, ArrowUp, Minus, Star } from "lucide-react";
 import Link from "next/link";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Card } from "@/components/ui/Card";
 import { SmallSampleChip } from "@/components/ui/chips";
-import { useWatchlist } from "@/lib/dashboard/queries";
-import type { WatchStock } from "@/lib/dashboard/schemas";
+import { cx } from "@/components/ui/cx";
+import { useSeasonality, type SeasonScope } from "@/lib/dashboard/queries";
+import type { SeasonStock } from "@/lib/dashboard/schemas";
 import {
   HISTORY_NOTE,
   MIN_YEARS_OPTIONS,
@@ -29,6 +30,80 @@ import { invReason } from "@/lib/stock/inv-model";
 const TITLE = "This month, across the years";
 const selectCls =
   "h-9 touch-target min-w-0 rounded-control border border-border bg-surface-1 px-2 text-body-sm text-text-1";
+
+const SCOPES: ReadonlyArray<{ value: SeasonScope; label: string }> = [
+  { value: "all", label: "All stocks" },
+  { value: "watchlist", label: "Watchlist" },
+];
+
+/**
+ * All stocks | Watchlist (docs/06 6.2a, D-INV2). Radio-group semantics: one tab stop, arrow keys move
+ * and select, Home/End jump; the active segment is announced through `aria-checked`.
+ */
+function ScopeSwitch({
+  value,
+  onChange,
+}: {
+  value: SeasonScope;
+  onChange: (v: SeasonScope) => void;
+}) {
+  const refs = useRef<Array<HTMLButtonElement | null>>([]);
+  const move = (i: number) => {
+    const n = (i + SCOPES.length) % SCOPES.length;
+    const next = SCOPES[n];
+    if (next === undefined) return;
+    onChange(next.value);
+    refs.current[n]?.focus();
+  };
+  const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    const i = SCOPES.findIndex((o) => o.value === value);
+    const step: Record<string, number | undefined> = {
+      ArrowRight: i + 1,
+      ArrowDown: i + 1,
+      ArrowLeft: i - 1,
+      ArrowUp: i - 1,
+      Home: 0,
+      End: SCOPES.length - 1,
+    };
+    const to = step[e.key];
+    if (to === undefined) return;
+    e.preventDefault();
+    move(to);
+  };
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Stocks to show"
+      data-testid="dash-seasonality-scope"
+      data-scope={value}
+      onKeyDown={onKey}
+      className="inline-flex rounded-control border border-border bg-surface-2 p-0.5"
+    >
+      {SCOPES.map((o, i) => (
+        <button
+          key={o.value}
+          ref={(el) => {
+            refs.current[i] = el;
+          }}
+          type="button"
+          role="radio"
+          aria-checked={o.value === value}
+          tabIndex={o.value === value ? 0 : -1}
+          data-testid={`dash-seasonality-scope-${o.value}`}
+          onClick={() => onChange(o.value)}
+          className={cx(
+            "h-9 touch-target rounded-control px-3 text-body-sm",
+            o.value === value
+              ? "bg-surface-1 font-medium text-text-1 shadow-sm"
+              : "text-text-2 hover:text-text-1",
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function MonthSoFar({ row, month }: { row: RankedRow; month: string }) {
   const s = row.s;
@@ -55,7 +130,7 @@ function MonthSoFar({ row, month }: { row: RankedRow; month: string }) {
   );
 }
 
-function Row({ row, month }: { row: RankedRow; month: string }) {
+function Row({ row, month, showWatch }: { row: RankedRow; month: string; showWatch: boolean }) {
   const { stock, s } = row;
   const pct = formatPercent(s.green_pct ?? null, { decimals: 0 });
   const width = Math.min(100, Math.max(0, s.green_pct ?? 0));
@@ -72,6 +147,15 @@ function Row({ row, month }: { row: RankedRow; month: string }) {
             <span className="truncate text-caption text-text-2" title={stock.name}>
               {stock.name}
             </span>
+            {showWatch && stock.on_watchlist === true ? (
+              <span
+                data-testid={`dash-seasonality-watch-${stock.symbol}`}
+                className="inline-flex shrink-0 items-center gap-1 rounded-chip border border-border bg-surface-2 px-2 py-0.5 text-micro text-text-2"
+              >
+                <Star size={12} strokeWidth={1.75} aria-hidden="true" />
+                Watchlist
+              </span>
+            ) : null}
           </span>
           <span className="num text-body-sm" data-testid={`dash-seasonality-main-${stock.symbol}`}>
             {mainLine(s, pct.text)}
@@ -105,14 +189,30 @@ function BrowseAction() {
   );
 }
 
-/** Home tile (docs/06 6.2a): how often each watchlist stock's current month ended higher in past years. */
+/** Home tile (docs/06 6.2a): how often each tracked stock's current month ended higher in past years. */
 export function SeasonalityCard() {
-  const q = useWatchlist();
+  const [scope, setScope] = useState<SeasonScope>("all");
+  const q = useSeasonality(scope);
   const [sort, setSort] = useState<SeasonSort>("share");
   const [minYears, setMinYears] = useState<number>(3);
   const [live, setLive] = useState("");
   const sortId = useId();
   const minId = useId();
+  const announceNext = useRef(false);
+  // After a scope change the count is announced once the new list has arrived.
+  useEffect(() => {
+    if (!announceNext.current || !q.data || q.isPlaceholderData) return;
+    announceNext.current = false;
+    const n = rankSeasonality(q.data.data.stocks, sort, minYears).ranked.length;
+    setLive(`${n} stocks shown`);
+  }, [q.data, q.isPlaceholderData, sort, minYears]);
+  const changeScope = (v: SeasonScope) => {
+    if (v === scope) return;
+    announceNext.current = true;
+    setScope(v);
+  };
+  const switcher = <ScopeSwitch value={scope} onChange={changeScope} />;
+  const noun = scope === "all" ? "tracked" : "watchlist";
 
   if (q.isPending) return <Card title={TITLE} state="loading" testId="dash-seasonality" />;
   if (q.isError) {
@@ -123,27 +223,38 @@ export function SeasonalityCard() {
         state={u.state}
         message={u.message}
         onRetry={() => void q.refetch()}
+        actions={switcher}
         source={SEASON_SOURCE}
         testId="dash-seasonality"
       />
     );
   }
-  const stocks: WatchStock[] = q.data.data.stocks;
+  const list = q.data.data;
+  const stocks: SeasonStock[] = list.stocks;
   if (stocks.length === 0) {
     return (
       <Card
         title={TITLE}
         state="empty"
-        message="Add stocks to your watchlist to see how this month has behaved in past years."
+        message={
+          scope === "all"
+            ? "No stocks are tracked yet. Import prices for a stock to see how this month has behaved in past years."
+            : "Add stocks to your watchlist to see how this month has behaved in past years."
+        }
         source={SEASON_SOURCE}
-        actions={<BrowseAction />}
+        actions={
+          <>
+            {switcher}
+            <BrowseAction />
+          </>
+        }
         testId="dash-seasonality"
       />
     );
   }
-  const month = tileMonth(stocks, new Date());
+  const month = list.month_name ?? tileMonth(stocks, new Date());
   const { ranked, short } = rankSeasonality(stocks, sort, minYears);
-  const asOf = latestSeasonAsOf(stocks);
+  const asOf = list.as_of ?? latestSeasonAsOf(stocks);
   const stale = isOlderThanExpected(asOf, new Date()) || q.data.meta?.stale === true;
   const noSnapshot = stocks.filter((s) => !s.seasonality).length;
   const announce = (nextSort: SeasonSort, nextMin: number) => {
@@ -160,11 +271,12 @@ export function SeasonalityCard() {
           : undefined
       }
       stale={stale}
+      actions={switcher}
       source={SEASON_SOURCE}
       asOf={asOfText(asOf)}
       testId="dash-seasonality"
     >
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3" aria-busy={q.isPlaceholderData}>
         <p className="text-body font-medium text-text-1" data-testid="dash-seasonality-month">
           {month}
         </p>
@@ -228,7 +340,7 @@ export function SeasonalityCard() {
         {ranked.length > 0 ? (
           <table className="w-full" data-testid="dash-seasonality-list">
             <caption className="sr-only">
-              {`Watchlist stocks by how often ${month} ended higher in past years`}
+              {`${scope === "all" ? "Tracked" : "Watchlist"} stocks by how often ${month} ended higher in past years`}
             </caption>
             <thead>
               <tr>
@@ -243,13 +355,13 @@ export function SeasonalityCard() {
             </thead>
             <tbody>
               {ranked.map((r) => (
-                <Row key={r.stock.id} row={r} month={month} />
+                <Row key={r.stock.symbol} row={r} month={month} showWatch={scope === "all"} />
               ))}
             </tbody>
           </table>
         ) : (
           <p className="text-body-sm text-text-2" data-testid="dash-seasonality-none">
-            {`No watchlist stock has ${minYears} years of this month yet. Import more price history.`}
+            {`No ${noun} stock has ${minYears} years of this month yet. Import more price history.`}
           </p>
         )}
         {short.length > 0 ? (
@@ -260,7 +372,7 @@ export function SeasonalityCard() {
             <ul className="flex flex-col gap-1 pb-1">
               {short.map((r) => (
                 <li
-                  key={r.stock.id}
+                  key={r.stock.symbol}
                   data-testid={`dash-seasonality-short-row-${r.stock.symbol}`}
                   className="text-caption text-text-2"
                 >

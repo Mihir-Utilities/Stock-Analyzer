@@ -394,44 +394,65 @@ const sea = (over: Record<string, unknown>) => ({
   ...over,
 });
 
-/** `GET /watchlist` with seasonality on every row: ranked, small sample, short, and absent. */
-export function watchlistWithSeasonality() {
-  const stock = (id: number, symbol: string, extra: Record<string, unknown>) => ({
-    id,
+/** Rows of `GET /stocks/seasonality`: ranked, small sample, short, and absent; AAA and CCC are watchlisted. */
+const seasonRows = () => {
+  const stock = (symbol: string, onWatchlist: boolean, extra: Record<string, unknown>) => ({
     symbol,
     name: `${symbol} Limited`,
-    ltp: 100,
-    ltp_as_of: "2026-11-10",
-    change_pct: 0.5,
+    on_watchlist: onWatchlist,
     ...extra,
   });
+  return [
+    stock("AAA", true, { seasonality: sea({}) }),
+    stock("BBB", false, {
+      seasonality: sea({ n_years: 9, n_green: 8, green_pct: 88.89, mtd_return_pct: -2.5 }),
+    }),
+    stock("CCC", true, {
+      seasonality: sea({
+        n_years: 4,
+        n_green: 3,
+        green_pct: 75,
+        small_sample: true,
+        mtd_return_pct: null,
+        mtd_reason: "no_bar_this_month",
+      }),
+    }),
+    stock("DDD", false, {
+      seasonality: sea({
+        n_years: 2,
+        n_green: 1,
+        green_pct: null,
+        green_pct_reason: "too_few_years",
+        small_sample: true,
+      }),
+    }),
+    stock("EEE", false, { seasonality: null, seasonality_reason: "no_prices_imported" }),
+  ];
+};
+
+/** `GET /stocks/seasonality` (docs/03 4b): `scope=watchlist` keeps only the watchlisted rows. */
+export function seasonalityList(scope: "all" | "watchlist" = "all") {
+  const rows = seasonRows().filter((r) => scope === "all" || r.on_watchlist);
   return ok({
-    stocks: [
-      stock(1, "AAA", { seasonality: sea({}) }),
-      stock(2, "BBB", {
-        seasonality: sea({ n_years: 9, n_green: 8, green_pct: 88.89, mtd_return_pct: -2.5 }),
-      }),
-      stock(3, "CCC", {
-        seasonality: sea({
-          n_years: 4,
-          n_green: 3,
-          green_pct: 75,
-          small_sample: true,
-          mtd_return_pct: null,
-          mtd_reason: "no_bar_this_month",
-        }),
-      }),
-      stock(4, "DDD", {
-        seasonality: sea({
-          n_years: 2,
-          n_green: 1,
-          green_pct: null,
-          green_pct_reason: "too_few_years",
-          small_sample: true,
-        }),
-      }),
-      stock(5, "EEE", { seasonality: null, seasonality_reason: "no_prices_imported" }),
-    ],
-    funds: [],
+    month: 11,
+    month_name: "November",
+    as_of: "2026-11-10",
+    scope,
+    stocks: rows,
   });
+}
+
+/** A route handler that answers by the `scope` query, like the API. */
+export const seasonalityRoute = (call: { query: URLSearchParams }) =>
+  seasonalityList(call.query.get("scope") === "watchlist" ? "watchlist" : "all");
+
+/** `n` tracked stocks (every third one watchlisted) for the long-list checks. */
+export function seasonalityMany(n: number) {
+  const stocks = Array.from({ length: n }, (_, i) => ({
+    symbol: `S${String(i).padStart(3, "0")}`,
+    name: `Stock ${i} Limited`,
+    on_watchlist: i % 3 === 0,
+    seasonality: sea({ n_years: 3 + (i % 8), n_green: 2 + (i % 3), green_pct: 40 + (i % 50) }),
+  }));
+  return ok({ month: 11, month_name: "November", as_of: "2026-11-10", scope: "all", stocks });
 }

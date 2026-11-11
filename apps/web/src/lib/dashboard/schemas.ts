@@ -22,6 +22,24 @@ export const watchStockSchema = z.object({
   seasonality_reason: str,
 });
 
+/** One row of GET /stocks/seasonality (docs/03 section 4b): a tracked stock, watchlisted or not. */
+export const seasonStockSchema = z.object({
+  symbol: z.string(),
+  name: z.string().catch(""),
+  /** Unknown is null: no chip is drawn (never guessed). */
+  on_watchlist: z.boolean().nullish().catch(null),
+  seasonality: watchSeasonalitySchema.nullish().catch(null),
+  seasonality_reason: str,
+});
+
+export const seasonalityListSchema = z.object({
+  month: z.number().int().min(1).max(12).nullish().catch(null),
+  month_name: str,
+  as_of: str,
+  scope: str,
+  stocks: z.array(seasonStockSchema),
+});
+
 export const watchFundSchema = z.object({
   id: z.number(),
   code: z.number(),
@@ -148,6 +166,8 @@ export const stockEventsSchema = z.object({
 
 export type Watchlist = z.infer<typeof watchlistSchema>;
 export type WatchStock = z.infer<typeof watchStockSchema>;
+export type SeasonStock = z.infer<typeof seasonStockSchema>;
+export type SeasonalityList = z.infer<typeof seasonalityListSchema>;
 export type WatchFund = z.infer<typeof watchFundSchema>;
 export type MarketOverview = z.infer<typeof marketOverviewSchema>;
 export type PortfolioSummary = z.infer<typeof portfolioSummarySchema>;
