@@ -548,3 +548,10 @@ Branch protection for `main` (Settings > Branches): require a pull request, requ
 - **Admin status:** `db.warn_level` is computed on each read from the database size and `DB_SOFT_LIMIT_MB` (70/85/95/limit); the worker's Telegram notice per crossing is D08's. `holiday_list_missing_years` lists the current year and the newest bar's year when they have no trading-holiday row; fix it by importing `holidays.csv` in the Import center. The broker is not listed (manual price mode).
 - **Version:** set the optional env var `GIT_SHA` in the host's build (for example `GIT_SHA=$RENDER_GIT_COMMIT`); it shows on the Admin status page, `unknown` when unset.
 - **Tests:** `cd apps/api && go test ./internal/httpx -run 'Prediction|Market|Admin|Buckets|TradingDays|ComputeStatus'` (integration tests need Docker or `TEST_DATABASE_URL`).
+
+## 120. Stock detail Prediction tab (F09, web)
+- **What it shows:** `GET /stocks/{symbol}/prediction` (B14). Today the API answers `no_model` or `insufficient_universe`: the tab then shows the experimental banner, the disclaimer, the reason, both horizons hidden and the trend/risk gauges. That is the correct state until 20 tracked stocks have about three years of imported prices and `train_models` has run (D07). It is not a fault.
+- **Never:** a single target price. The tab shows a reference close and a price range (`price_q10` to `price_q90`); the median price field is never rendered. The test `prediction-tab.test.tsx` (ML-12) fails if it appears.
+- **A tab that looks wrong:** check the response first. An unexpected field type or enum value is shown as unknown or generic copy by design (degrade per field); fix the cause in the API or add the new enum copy in `lib/stock/prediction.ts`.
+- **Not yet shown:** the calibration plot and AUC-by-fold bars (the API serves only the aggregate card, F09-1).
+- **Tests:** `cd apps/web && npx vitest run tests/unit/prediction-tab.test.tsx`.
