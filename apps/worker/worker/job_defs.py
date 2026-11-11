@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from worker import actions_db, alerts_db, analysis_db, jobs, mf_jobs
 from worker.db import create_pool
+from worker.ml import jobs as ml_jobs
 from worker.notify import TelegramNotifier
 from worker.post_import import (
     PgPostImportStore,
@@ -78,6 +79,11 @@ async def process_queued_jobs_job(ctx: JobContext) -> None:
         )
         ctx.extra["jobs"] = summaries
         # docs/04 3.13: `predict` runs here once models exist (Phase 7, deferred by D-4).
+        try:
+            if await ml_jobs.has_models(pool):
+                await ml_jobs.run_predict(pool, ctx)
+        except Exception as exc:  # a prediction failure never fails the queue run
+            ctx.extra["predict_error"] = f"{type(exc).__name__}"
     finally:
         await pool.close()
 
@@ -136,6 +142,11 @@ def register_all() -> None:
         JobSpec("evaluate_alerts", EVALUATE_ALERTS_TIMEOUT_S, evaluate_alerts_job)
     )
     jobs.register_http_handler("post_import", post_import_handler)
+    # D07: experimental ML (deferred by D-4: `insufficient_universe` below 20 eligible stocks)
+    jobs.register_cli_job(
+        JobSpec("train_models", ml_jobs.TRAIN_TIMEOUT_S, ml_jobs.train_models_job)
+    )
+    jobs.register_cli_job(JobSpec("predict", ml_jobs.PREDICT_TIMEOUT_S, ml_jobs.predict_job))
     # D04: mutual fund jobs
     jobs.register_cli_job(JobSpec("sync_mf_schemes", 20 * 60, mf_jobs.sync_mf_schemes_job))
     jobs.register_cli_job(JobSpec("ingest_mf_navs", 30 * 60, mf_jobs.ingest_mf_navs_job))
