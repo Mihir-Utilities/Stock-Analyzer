@@ -5,7 +5,7 @@
 | Track | frontend |
 | Depends on | F04 (Dashboard), F06 (Analysis tab and `Heatmap`), F03 (definitions generator), B16 (data; develop against MSW mocks from the OpenAPI examples until it lands) |
 | Size | L (S < 0.5 day, M 0.5-1.5 days, L 1.5-4 days of focused work) |
-| Status | PROPOSED (decision INV, 2026-11-11); do not start before the owner answers or accepts the defaults of `docs/OPEN_QUESTIONS.md` INV-1..INV-28 |
+| Status | BUILT (decision D-INV accepted 2026-11-11; notes and questions F17-1..F17-6 in `docs/OPEN_QUESTIONS.md`); awaiting review |
 
 ## Read first
 - docs/06-frontend-spec.md sections 3, 5, 6.2, **6.2a**, 6.4, **6.4a**, 7, 8, 9; docs/06a-design-system.md sections 3 and 5 (Heatmap)
@@ -30,7 +30,7 @@ Show the investment-context cards on the stock Analysis tab, extend the monthly-
 - Any calculation of seasonality, percentiles, XIRR or returns in the browser (sorting and filtering excepted); a tile for tracked stocks beyond the watchlist (INV-9); relative strength versus Nifty (INV-22); Sharpe; a chosen SIP amount; buy/sell wording, scores, rankings of attractiveness, target prices, forecasts; third-party calls; new dependencies.
 
 ## Steps
-1. Schemas, fixtures and the `Heatmap` extension; 2. Year column, summary rows and markers in the monthly heatmap; 3. the Analysis cards (shared card shell first); 4. Entry context strip; 5. Dashboard tile; 6. definitions generation; 7. states, accessibility, 375 px, field map; 8. RUNBOOK section 140 additions for the UI.
+1. Schemas, fixtures and the `Heatmap` extension; 2. Year column, summary rows and markers in the monthly heatmap; 3. the Analysis cards (shared card shell first); 4. Entry context strip; 5. Dashboard tile; 6. definitions generation; 7. states, accessibility, 375 px, field map; 8. RUNBOOK section 141 for the UI.
 
 ## Acceptance criteria (all must be true)
 - [ ] Rows `INV-C01..C04`, `INV-T01..T08`, `INV-U01..U10` pass; UI-09 passes with no `conditional:` placeholder left for the new fields.

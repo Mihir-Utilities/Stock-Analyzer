@@ -7,9 +7,11 @@ export function DefinitionTip({ term }: { term: DefinitionKey }) {
   return (
     <InfoPopover label={`Definition of ${d.label}`} testId={`definition-${term}`}>
       <span className="block text-caption text-text-1">{d.text}</span>
-      <span className="mt-1 block text-micro text-text-2">
-        Source: analytics spec section {d.section}
-      </span>
+      {d.section ? (
+        <span className="mt-1 block text-micro text-text-2">
+          Source: analytics spec section {d.section}
+        </span>
+      ) : null}
     </InfoPopover>
   );
 }

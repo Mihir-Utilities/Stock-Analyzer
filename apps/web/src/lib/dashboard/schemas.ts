@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { watchSeasonalitySchema } from "@/lib/stock/inv-schemas";
 
 // Response shapes the dashboard reads, taken from docs/03-api-spec.md (sections 8, 11, 12, 13, 14,
 // 15) and the B11 notes. The OpenAPI file types these `data` payloads loosely, so the shapes are
@@ -16,6 +17,9 @@ export const watchStockSchema = z.object({
   price_stale: z.boolean().nullish(),
   change_pct: num,
   change_reason: str,
+  /** INV (docs/03 section 11): the current IST month across past years; absent on an older API. */
+  seasonality: watchSeasonalitySchema.nullish().catch(null),
+  seasonality_reason: str,
 });
 
 export const watchFundSchema = z.object({

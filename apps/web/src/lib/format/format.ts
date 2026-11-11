@@ -283,6 +283,36 @@ export function formatDate(v: string | Date | null | undefined, o: NullOpts = {}
   );
 }
 
+const MONTHS_FULL = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+/** `November` from a month number 1..12; anything else is unknown. */
+export function formatMonthName(m: number | null | undefined, o: NullOpts = {}): Formatted {
+  if (typeof m !== "number" || !Number.isInteger(m) || m < 1 || m > 12) {
+    return unknown(o.reason ?? NULL_REASONS.noData);
+  }
+  return known(MONTHS_FULL[m - 1]!);
+}
+
+/** `Mar 2019` from `YYYY-MM-DD` (the day is ignored); anything else is unknown. */
+export function formatMonthYear(v: string | null | undefined, o: NullOpts = {}): Formatted {
+  const p = typeof v === "string" ? parseDateOnly(v) : null;
+  if (!p) return unknown(o.reason ?? NULL_REASONS.noData);
+  return known(`${MONTHS[p.m - 1]} ${p.y}`);
+}
+
 /** A Date whose UTC fields hold the IST wall clock, or null if `v` is not a valid instant. */
 function toIst(v: string | Date): Date | null {
   let t: number;

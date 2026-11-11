@@ -220,6 +220,56 @@ export const definitions = {
     section: "8.5.6",
     text: "The simple percentage gain on the money you put in, not turned into a yearly rate. It is shown instead of XIRR until your first purchase is a year old.",
   },
+  "year_price_return": {
+    label: "Year (price return)",
+    section: "",
+    text: "How much the price changed over the calendar year, from the last close of December of the year before to the last close of December. The first year shows only the months we have data for, and the running year is year to date. It is the price change only: dividends you received are not included.",
+  },
+  "month_green_share": {
+    label: "Share of years this month ended higher",
+    section: "",
+    text: "In how many of the past years this calendar month ended higher than the month before. A month that ended exactly flat does not count as higher. The month that is still running is not counted.",
+  },
+  "price_position": {
+    label: "Price position",
+    section: "",
+    text: "Where today's closing price sits between the lowest and the highest close of the last 52 weeks. It describes the past year only. A low or high position does not mean the price will rise or fall.",
+  },
+  "drawdown_profile": {
+    label: "Drawdown profile",
+    section: "",
+    text: "How far the price has fallen from its highest earlier close, how long it stayed below that high, and how long past falls of 10% or 20% took to be won back. These are the stock's own past episodes, and only a few of them.",
+  },
+  "holding_period": {
+    label: "Holding periods",
+    section: "",
+    text: "What would have happened if you had bought on any past day and sold exactly 1, 3, 6 or 12 months or 3 years later. The windows overlap, so they are far fewer independent experiences than the count suggests.",
+  },
+  "entry_study": {
+    label: "Entry-point study",
+    section: "",
+    text: "After the price first closed at least 10% or 20% below its 52-week high, what it did over the next 3 and 6 months. Each past episode counts once. With only a few episodes this is an anecdote, not a pattern.",
+  },
+  "vol_regime": {
+    label: "Volatility regime",
+    section: "",
+    text: "How big the recent day-to-day price swings are compared with this stock's own history. It says nothing about direction.",
+  },
+  "sip_vs_lump": {
+    label: "Monthly plan versus lump sum",
+    section: "",
+    text: "A look back: putting the same fixed amount in every month compared with putting all of the money in on the first day, using this stock's imported prices. It is a replay of the past with hindsight, not an estimate of what will happen.",
+  },
+  "calmar": {
+    label: "Growth per unit of deepest fall",
+    section: "",
+    text: "Yearly price growth over the last 3 years divided by the deepest fall in that period. Higher means more growth for each unit of pain. It ignores dividends.",
+  },
+  "downside_risk": {
+    label: "Growth per unit of downside",
+    section: "",
+    text: "Yearly price growth divided by how large the falling days were, counting only days when the price fell. It ignores dividends and has no risk-free rate.",
+  },
 } as const satisfies Record<string, Definition>;
 
 export type DefinitionKey = keyof typeof definitions;

@@ -62,6 +62,23 @@ export const ENTRIES = [
     "8.5.6",
     "**Owner text (absolute_return):**",
   ],
+  // Investment-context texts (INV, F17): plain English with no ids; the section is left empty so
+  // the tooltip prints no spec number (docs/05 12.12).
+  ["year_price_return", "Year (price return)", "", "**Owner text (year_price_return):**"],
+  [
+    "month_green_share",
+    "Share of years this month ended higher",
+    "",
+    "**Owner text (month_green_share):**",
+  ],
+  ["price_position", "Price position", "", "**Owner text (price_position):**"],
+  ["drawdown_profile", "Drawdown profile", "", "**Owner text (drawdown_profile):**"],
+  ["holding_period", "Holding periods", "", "**Owner text (holding_period):**"],
+  ["entry_study", "Entry-point study", "", "**Owner text (entry_study):**"],
+  ["vol_regime", "Volatility regime", "", "**Owner text (vol_regime):**"],
+  ["sip_vs_lump", "Monthly plan versus lump sum", "", "**Owner text (sip_vs_lump):**"],
+  ["calmar", "Growth per unit of deepest fall", "", "**Owner text (calmar):**"],
+  ["downside_risk", "Growth per unit of downside", "", "**Owner text (downside_risk):**"],
 ];
 
 function strip(md) {

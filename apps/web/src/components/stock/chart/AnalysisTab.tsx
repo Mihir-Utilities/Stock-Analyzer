@@ -1,6 +1,7 @@
 "use client";
 
 import { Download, Table2 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { ChartFrame } from "@/components/charts/ChartFrame";
 import type { ChartDataset } from "@/components/charts/chart-data";
@@ -15,15 +16,31 @@ import {
   calendarModel,
   drawdownDataset,
   histogramDataset,
-  monthYearModel,
   parseAnalysis,
   rollingBetaDataset,
   rollingVolDataset,
   type HeatModel,
 } from "@/lib/stock/chart-model";
 import { humanReason } from "@/lib/stock/derive";
+import { YEAR_COLUMN, invHeatModel, type InvHeatModel } from "@/lib/stock/inv-model";
+import { parseInvBlocks } from "@/lib/stock/inv-schemas";
 import type { Load } from "@/lib/stock/load";
 import type { IndicatorsData } from "@/lib/stock/schemas";
+
+// The investment-context cards load on demand (one chunk); each shows a skeleton card first.
+const cardLoading = () => <Skeleton className="h-32 w-full" label="Loading card" />;
+const lazyCard = <K extends keyof typeof import("./InvCards")>(name: K) =>
+  dynamic(() => import("./InvCards").then((m) => m[name] as never), {
+    loading: cardLoading,
+  }) as (typeof import("./InvCards"))[K];
+const EntryContextCard = lazyCard("EntryContextCard");
+const PositionCard = lazyCard("PositionCard");
+const VolRegimeCard = lazyCard("VolRegimeCard");
+const DrawdownProfileCard = lazyCard("DrawdownProfileCard");
+const HoldingPeriodsCard = lazyCard("HoldingPeriodsCard");
+const EntryStudyCard = lazyCard("EntryStudyCard");
+const SipCard = lazyCard("SipCard");
+const RiskAdjustedCard = lazyCard("RiskAdjustedCard");
 
 const SRC = "Imported prices (adjusted, price return excludes dividends)";
 const small =
@@ -90,6 +107,29 @@ function ChartSlot({
   );
 }
 
+/** Notes under the monthly grid: empty-cell reasons as text, markers, the best and worst month line, the footnote. */
+function MonthYearNotes({ inv }: { inv: InvHeatModel }) {
+  const { best, worst, reason } = inv.bestWorst;
+  return (
+    <div className="mt-2 flex flex-col gap-1 text-caption text-text-2">
+      {inv.emptyReasons.length > 0 ? (
+        <p data-testid="heatmap-empty-reasons">{`Empty cells: ${inv.emptyReasons.join("; ")}.`}</p>
+      ) : null}
+      <p data-testid="heatmap-markers">
+        MTD is the month still running (outlined, counted nowhere). partial is the first year, which
+        has only the months after its first month. YTD is the running year so far. {"†"} marks a
+        statistic from fewer than the minimum years.
+      </p>
+      <p data-testid="heatmap-best-worst">
+        {best && worst
+          ? `Best calendar month by median: ${best}. Worst: ${worst}.`
+          : `Best and worst calendar month: not shown (${reason ?? "not computed yet"}).`}
+      </p>
+      <p data-testid="heatmap-footnote">{inv.footnote}</p>
+    </div>
+  );
+}
+
 function HeatmapCard({
   title,
   testId,
@@ -101,11 +141,14 @@ function HeatmapCard({
   nullReason,
   filename,
   rowHeader,
+  inv = null,
 }: {
   title: string;
   testId: string;
   load: Load<IndicatorsData>;
   model: HeatModel | null;
+  /** The month x year card only: Year column, summary rows, markers and the notes under the grid. */
+  inv?: InvHeatModel | null;
   reason: string | null;
   info: React.ReactNode;
   legend: { negative: string; positive: string };
@@ -156,11 +199,38 @@ function HeatmapCard({
       return { row: r, col: c, value: cell?.value ?? null, text: cell?.text ?? nullReason };
     }),
   );
+  const yearCells = inv?.trailing?.cells ?? [];
+  const yearLong = model.rows.map((r, ri) => ({
+    row: r,
+    col: YEAR_COLUMN,
+    value: yearCells[ri]?.value ?? null,
+    text: [yearCells[ri]?.text ?? yearCells[ri]?.reason ?? nullReason, yearCells[ri]?.marker]
+      .filter(Boolean)
+      .join(" "),
+  }));
+  const summaryLong = (inv?.footer ?? []).flatMap((f) => [
+    ...f.cells.map((c, i) => ({
+      row: f.label,
+      col: model.columns[i] ?? "",
+      value: null as number | null,
+      text: c.reason ? `— (${c.reason})` : c.text,
+    })),
+    {
+      row: f.label,
+      col: YEAR_COLUMN,
+      value: null as number | null,
+      text: f.year.reason ? `— (${f.year.reason})` : f.year.text,
+    },
+  ]);
+  const allLong = inv ? [...long, ...yearLong, ...summaryLong] : long;
   const exportCsv = () =>
     downloadCsv(
       toCsv(
         [rowHeader, "Column", "Return (%)"],
-        long.map((l) => [l.row, l.col, l.value]),
+        [
+          ...long.map((l) => [l.row, l.col, l.value]),
+          ...(inv ? [...yearLong, ...summaryLong].map((l) => [l.row, l.col, l.text]) : []),
+        ],
       ),
       `${filename}.csv`,
     );
@@ -200,7 +270,7 @@ function HeatmapCard({
           className="max-h-96 overflow-auto rounded-control border border-border"
         >
           <table className="w-full border-separate border-spacing-0 text-body-sm">
-            <caption className="sr-only">{`${title}: ${long.length} values`}</caption>
+            <caption className="sr-only">{`${title}: ${allLong.length} values`}</caption>
             <thead>
               <tr>
                 {[rowHeader, "Column", "Return"].map((h) => (
@@ -215,7 +285,7 @@ function HeatmapCard({
               </tr>
             </thead>
             <tbody>
-              {long.map((l, i) => (
+              {allLong.map((l, i) => (
                 <tr key={i} data-testid="heat-data-row">
                   <td className="border-b border-border px-2 py-1 text-text-1">{l.row}</td>
                   <td className="border-b border-border px-2 py-1 text-text-1">{l.col}</td>
@@ -228,15 +298,41 @@ function HeatmapCard({
           </table>
         </div>
       ) : (
-        <Heatmap
-          label={title}
-          rows={model.rows}
-          columns={model.columns}
-          cells={model.cells}
-          maxAbs={model.maxAbs}
-          legend={legend}
-          nullReason={nullReason}
-        />
+        <>
+          <Heatmap
+            label={title}
+            rows={model.rows}
+            columns={model.columns}
+            cells={model.cells}
+            maxAbs={model.maxAbs}
+            legend={legend}
+            nullReason={nullReason}
+            {...(inv?.trailing
+              ? {
+                  trailing: {
+                    testId: "heatmap-year-col",
+                    header: YEAR_COLUMN,
+                    headerTitle: "Price return, dividends excluded",
+                    headerExtra: <DefinitionTip term="year_price_return" />,
+                    cells: inv.trailing.cells,
+                    maxAbs: inv.trailing.maxAbs,
+                  },
+                }
+              : {})}
+            {...(inv && inv.footer.length > 0
+              ? {
+                  footerRows: inv.footer.map((f) => ({
+                    key: f.key,
+                    label: f.label,
+                    cells: f.cells,
+                    ...(inv.trailing ? { trailing: f.year } : {}),
+                  })),
+                  footerTestId: "heatmap-summary",
+                }
+              : {})}
+          />
+          {inv ? <MonthYearNotes inv={inv} /> : null}
+        </>
       )}
     </Card>
   );
@@ -289,7 +385,11 @@ export function AnalysisTab({ indicatorsLoad }: { indicatorsLoad: Load<Indicator
           ? "Not enough daily returns for a histogram (needs at least 20)."
           : `No histogram: ${parsed.reason}.`,
       };
-  const monthYear = useMemo(() => (a?.month_year ? monthYearModel(a.month_year) : null), [a]);
+  const inv = useMemo(() => parseInvBlocks(ind?.analysis), [ind]);
+  const monthYear = useMemo(
+    () => (a?.month_year ? invHeatModel(a.month_year, inv) : null),
+    [a, inv],
+  );
   const calendar = useMemo(
     () => (a?.calendar && a.calendar.dates.length > 0 ? calendarModel(a.calendar) : null),
     [a],
@@ -309,6 +409,11 @@ export function AnalysisTab({ indicatorsLoad }: { indicatorsLoad: Load<Indicator
         All views use adjusted closes (price return, excludes dividends) over the stored window: the
         last 750 trading days for the line charts, the last year for the calendar.
       </p>
+      <EntryContextCard load={indicatorsLoad} blocks={inv} />
+      <div className="grid min-w-0 gap-4 xl:grid-cols-2">
+        <PositionCard load={indicatorsLoad} blocks={inv} />
+        <VolRegimeCard load={indicatorsLoad} blocks={inv} />
+      </div>
       <ChartSlot
         title="Drawdown from the running peak (peak within the last 750 trading days)"
         testId="chart-drawdown"
@@ -317,6 +422,7 @@ export function AnalysisTab({ indicatorsLoad }: { indicatorsLoad: Load<Indicator
         info={<DefinitionTip term="max_drawdown" />}
         filename="drawdown"
       />
+      <DrawdownProfileCard load={indicatorsLoad} blocks={inv} />
       <ChartSlot
         title="Rolling volatility"
         testId="chart-rolling-vol"
@@ -343,6 +449,10 @@ export function AnalysisTab({ indicatorsLoad }: { indicatorsLoad: Load<Indicator
           ) : null
         }
       />
+      <HoldingPeriodsCard load={indicatorsLoad} blocks={inv} />
+      <EntryStudyCard load={indicatorsLoad} blocks={inv} />
+      <SipCard load={indicatorsLoad} blocks={inv} />
+      <RiskAdjustedCard load={indicatorsLoad} blocks={inv} />
       <HeatmapCard
         title="Monthly returns by year"
         testId="heatmap-month-year"
@@ -359,6 +469,7 @@ export function AnalysisTab({ indicatorsLoad }: { indicatorsLoad: Load<Indicator
         nullReason="No month-end close for this month"
         filename="monthly-returns"
         rowHeader="Year"
+        inv={monthYear}
       />
       <HeatmapCard
         title="Daily returns calendar, last year"

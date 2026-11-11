@@ -42,3 +42,12 @@ export function AsOfChip({ asOf, stale = false }: { asOf: string | null; stale?:
 export function DepthChip({ text }: { text: string }) {
   return <Chip testId="depth-chip">{text}</Chip>;
 }
+
+/** Flags a statistic built on few observations; the sentence next to it says how many. */
+export function SmallSampleChip({ testId = "small-sample-chip" }: { testId?: string }) {
+  return (
+    <Chip testId={testId} tone="warn">
+      Small sample
+    </Chip>
+  );
+}
