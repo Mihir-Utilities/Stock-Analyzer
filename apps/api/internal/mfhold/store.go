@@ -291,12 +291,6 @@ func (s *Service) refreshIfNoNAV(ctx context.Context, code int32) {
 	_ = s.Refresh.EnqueueMFRefresh(ctx, code) // best effort: the transaction is already stored
 }
 
-// insufficientFor wraps an oversell with the transaction id of the row being written.
-func isInsufficient(err error) bool {
-	var ie *InsufficientError
-	return errors.As(err, &ie)
-}
-
 // CreateTxn validates and stores a transaction (docs/03 12a). key is the optional Idempotency-Key
 // (already checked to be a UUID).
 func (s *Service) CreateTxn(ctx context.Context, in TxnInput, key string) (TxnResult, error) {

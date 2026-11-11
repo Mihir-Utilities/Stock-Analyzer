@@ -127,8 +127,8 @@ func TestIDCW(t *testing.T) {
 
 func flows(pairs ...string) []Flow {
 	var out []Flow
-	for i := 0; i < len(pairs); i += 2 {
-		out = append(out, Flow{day(pairs[i]), d(pairs[i+1])})
+	for ; len(pairs) >= 2; pairs = pairs[2:] {
+		out = append(out, Flow{day(pairs[0]), d(pairs[1])})
 	}
 	return out
 }
@@ -381,7 +381,7 @@ func TestBucketsExitedAndAllocation(t *testing.T) {
 // MFH-F46: property test over random ledgers: total = unrealised + realised + idcw income, and the
 // cash-flow identity holds for the absolute return.
 func TestPropertyBuckets(t *testing.T) {
-	rng := rand.New(rand.NewSource(7))
+	rng := rand.New(rand.NewSource(7)) //nolint:gosec // fixed seed: deterministic test data, not security
 	for n := 0; n < 200; n++ {
 		var txns []Txn
 		held := 0
