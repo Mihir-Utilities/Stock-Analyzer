@@ -1572,7 +1572,7 @@ export interface components {
                     /** @description insufficient_history | insufficient_overlap | too_few_windows */
                     reason?: string | null;
                 };
-                /** @description Aligned to series.dates of the same response; null where the date is not an aligned date. 100 at ratio_base_date. */
+                /** @description Aligned to the stored series.dates (last 750 rows): position i belongs to the date of pair i of data.analysis.drawdown; null where the date is not an aligned date. 100 at ratio_base_date. */
                 ratio_rebased?: (number | null)[] | null;
                 /** Format: date */
                 ratio_base_date?: string | null;

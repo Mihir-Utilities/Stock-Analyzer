@@ -220,3 +220,36 @@ func TestExpandIndicatorsPassesInvBlocksThrough(t *testing.T) {
 		t.Fatal("an old snapshot must not gain blocks")
 	}
 }
+
+// RST-W01: the relative_strength block (docs/03 4a.RST) passes through unchanged. Its nested
+// ratio_rebased array is not zipped with the dates; an older snapshot without it gains nothing.
+func TestExpandIndicatorsPassesRelativeStrengthThrough(t *testing.T) {
+	block := `{"as_of":"2026-10-07","bars":3,"basis":"price return (adj_close), excludes dividends",
+	  "vs_index":{"index_code":"NIFTY50","aligned_rows":2,"windows":[{"key":"1m","rows":21,"excess_pp":null,"reason":"insufficient_overlap"}],
+	  "ratio_rebased":[100,null,99.5],"ratio_base_date":"2026-10-05","ratio_reason":null},"vs_index_reason":null,
+	  "vs_peers":null,"vs_peers_reason":"no_sector"}`
+	ind := `{"as_of":"2026-10-07","series":{"format":"columnar","dates":["2026-10-05","2026-10-06","2026-10-07"],"sma50":[null,null,99.5]},
+	  "analysis":{"format":"columnar","drawdown":[0,-1,0],"relative_strength":` + block + `}}`
+	got, err := ExpandIndicators([]byte(ind), []byte(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	an := got["analysis"].(map[string]any)
+	var want map[string]any
+	if err := json.Unmarshal([]byte(block), &want); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(an["relative_strength"], want) {
+		t.Fatalf("relative_strength changed: %v != %v", an["relative_strength"], want)
+	}
+	if fmt.Sprint(an["drawdown"]) != "[[2026-10-05 0] [2026-10-06 -1] [2026-10-07 0]]" {
+		t.Fatalf("drawdown not aligned: %v", an["drawdown"])
+	}
+	old, err := ExpandIndicators([]byte(`{"analysis":{"format":"columnar","drawdown":[0]}}`), []byte(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := old["analysis"].(map[string]any)["relative_strength"]; ok {
+		t.Fatal("an old snapshot must not gain the block")
+	}
+}

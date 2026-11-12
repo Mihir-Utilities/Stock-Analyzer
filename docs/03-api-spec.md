@@ -208,7 +208,7 @@ Additive and optional like the other 4a blocks (an older snapshot lacks it; the 
 ```
 Rules.
 - `windows` of `vs_index` has the four rows `1m|3m|6m|1y` (rows 21, 63, 126, 252); `windows` of `vs_peers` has `3m|6m|1y` (rows 63, 126, 252). `years` has at most 10 rows ascending (`kind` `full | ytd`).
-- `ratio_rebased` has the length of `series.dates` of the same response (docs/03 4): position `i` belongs to `series.dates[i]`, `null` where that date is not an aligned date. `ratio_base_date` is its 100.
+- `ratio_rebased` has the length of the stored `series.dates` (the last 750 rows). The API zips `series.dates` into `[date, value]` pairs (section 4), so position `i` belongs to the date of pair `i` of `data.analysis.drawdown` (the same rows), and is `null` where that date is not an aligned date. `ratio_base_date` is its 100.
 - `aligned_rows` is the number of dates present in both the stock and the NIFTY50 series; the two dropped counts are dates present in only one of them (docs/05 12.14.1) and are always shown. `index_rows`, `index_as_of` describe the stored index series (source: the owner's prices.csv import of the reserved symbol; the UI prints "Your imported NIFTY50").
 - Hidden numbers: a null `rank`, `percentile`, `peer_median_pct`, `vs_median_pp` always has `reason` (`too_few_peers` below 3 peers; `insufficient_history` when the stock is shorter than the window); `n_peers` is always present.
 - A failure inside one half never fails the snapshot or the other half: that half is `null` with `compute_error` and the incident is logged (`relative_strength_failed`, symbol, half, error class).
