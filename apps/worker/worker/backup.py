@@ -95,6 +95,7 @@ _REFERENCED_INSTRUMENTS = (
     "SELECT instrument_id FROM watchlist_item WHERE instrument_id IS NOT NULL "
     "UNION SELECT instrument_id FROM portfolio_txn "
     "UNION SELECT instrument_id FROM portfolio_adjustment "
+    "UNION SELECT instrument_id FROM journal_note "  # B20: a note keeps its stock
     "UNION SELECT instrument_id FROM alert WHERE instrument_id IS NOT NULL "
     "UNION SELECT instrument_id FROM corporate_action "
     "WHERE NOT (source = 'detected' AND status = 'detected') "
@@ -212,6 +213,25 @@ TABLES: tuple[TableSpec, ...] = (
             "fees",
             "trade_date",
             "note",
+            "created_at",
+            "updated_at",
+        ),
+        identity=True,
+        pk="id",
+    ),
+    TableSpec(
+        "journal_note",  # decision journal (B20, plan Item D): owner text, never exported elsewhere
+        (
+            "id",
+            "instrument_id",
+            "noted_on",
+            "note_text",
+            "price_at_note",
+            "price_as_of",
+            "review_on",
+            "status",
+            "reviewed_at",
+            "portfolio_txn_id",
             "created_at",
             "updated_at",
         ),

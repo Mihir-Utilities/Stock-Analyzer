@@ -70,6 +70,9 @@ type Deps struct {
 	// Portfolio serves /watchlist and /portfolio/* (B11); nil keeps them 501 stubs.
 	Portfolio PortfolioService
 
+	// Journal serves the decision-journal routes (B20); nil keeps them 501 stubs.
+	Journal JournalService
+
 	// MFHoldings serves /portfolio/mf/* (B15); nil keeps them 501 stubs.
 	MFHoldings MFHoldingsService
 

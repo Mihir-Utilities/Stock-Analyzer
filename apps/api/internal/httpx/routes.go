@@ -78,6 +78,9 @@ func (rt route) handler(d Deps) http.Handler {
 	if h := insightsHandler(rt, d); h != nil { // B14 (insights_handlers.go)
 		return h
 	}
+	if h := journalHandler(rt, d); h != nil { // B20 (journal_handlers.go)
+		return h
+	}
 	switch rt.Kind {
 	case kindHealthz:
 		return http.HandlerFunc(healthz)

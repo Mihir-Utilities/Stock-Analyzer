@@ -73,6 +73,7 @@ _LRU_EXEMPT = (
     "AND NOT EXISTS (SELECT 1 FROM watchlist_item x WHERE x.instrument_id = i.id) "
     "AND NOT EXISTS (SELECT 1 FROM portfolio_txn x WHERE x.instrument_id = i.id) "
     "AND NOT EXISTS (SELECT 1 FROM portfolio_adjustment x WHERE x.instrument_id = i.id) "
+    "AND NOT EXISTS (SELECT 1 FROM journal_note x WHERE x.instrument_id = i.id) "
     "AND NOT EXISTS (SELECT 1 FROM alert x WHERE x.instrument_id = i.id) "
     "AND NOT EXISTS (SELECT 1 FROM corporate_action x WHERE x.instrument_id = i.id "
     "AND NOT (x.source = 'detected' AND x.status = 'detected')) "
