@@ -999,3 +999,12 @@ Request: an investor wants a monthly-return heatmap with a Year column and seaso
 | RST-6 | Staleness of peer ranks. | Ranks are stored in the stock's own snapshot; a peer's price change shows only after this stock is recomputed. The card says so with the `as_of`. No cross-stock recompute is added (a recompute of every tracked stock after an import would multiply the cost); the owner can run the recompute for all tracked stocks. | 05 12.14.6, RUNBOOK 153 |
 | RST-7 | Peer alignment: a peer with a different last bar date. | Peers are measured at this stock's last bar date and must have a bar on that date; others are left out and counted (`excluded`). No forward-fill and no tolerance window. | 05 12.14.6 |
 | RST-8 | Windows are aligned trading rows (21/63/126/252), not calendar months, to match docs/05 12.0 and the Holding periods card. | As stated; the labels say "about 1 month" etc. only through the `rows` count shown in the tooltip. | 05 12.14.2 |
+
+## B21 and F22 notes (Claude, 2026-11-12; none blocks the owner; the owner may overrule)
+
+| ID | Question or ambiguity | What B21/F22 did (default) | Where |
+|---|---|---|---|
+| RST-9 | Cost of the peer read and the block. | Measured on a throwaway Postgres 16 with a 25-year stock (6,500 bars), 12 same-sector peers and a 6,500-row NIFTY50: the one extra grouped read returned 3,708 rows in about 16 ms and `relative_strength.build` took about 9 ms, so about 25 ms on top of a `compute_analysis` of about 816 ms (3%). The stored block is under 12 KB (test RST-B04). | 05 12.14.6, RUNBOOK 153 |
+| RST-10 | `series.dates` is replaced by `[date, value]` pairs by the API, so a raw `ratio_rebased` array has no date axis in the response. | The block states that `ratio_rebased` is aligned to the dates of the `analysis.drawdown` pairs (the same last 750 rows); the web reads the dates there and draws no line (with a reason) if the lengths differ. No Go change. Owner: ask for dated pairs in the block instead if you prefer (about 15 KB more). | 03 4a.RST |
+| RST-11 | The strict field-coverage guard needs real test ids, so `docs/field-map.json` entries were added with the web commit rather than the spec commit. | Done in the F22 commit; every new field maps to a real `data-testid` or a documented conditional. | field-map |
+| RST-12 | The Go `httpx` suite takes more than the default 10 minutes under load on a Windows machine (unrelated to this item). | Ran it with `-timeout 40m`; result in the B21 report. | CI |

@@ -41,6 +41,11 @@ const HoldingPeriodsCard = lazyCard("HoldingPeriodsCard");
 const EntryStudyCard = lazyCard("EntryStudyCard");
 const SipCard = lazyCard("SipCard");
 const RiskAdjustedCard = lazyCard("RiskAdjustedCard");
+// Relative strength (RST, F22): its own lazy chunk and its own parser (rst-schemas).
+const RelativeStrengthCard = dynamic(
+  () => import("./RelativeStrengthCard").then((m) => m.RelativeStrengthCard),
+  { loading: cardLoading },
+);
 
 const SRC = "Imported prices (adjusted, price return excludes dividends)";
 const small =
@@ -450,6 +455,7 @@ export function AnalysisTab({ indicatorsLoad }: { indicatorsLoad: Load<Indicator
         }
       />
       <HoldingPeriodsCard load={indicatorsLoad} blocks={inv} />
+      <RelativeStrengthCard load={indicatorsLoad} analysis={ind?.analysis} />
       <EntryStudyCard load={indicatorsLoad} blocks={inv} />
       <SipCard load={indicatorsLoad} blocks={inv} />
       <RiskAdjustedCard load={indicatorsLoad} blocks={inv} />
