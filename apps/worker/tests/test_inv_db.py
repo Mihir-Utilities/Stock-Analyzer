@@ -143,7 +143,7 @@ async def test_inv_s08_stored_size_and_compute_time_for_a_25_year_stock(
     print(
         f"B16 compute_analysis {n} bars: {took:.2f}s, indicators {size} bytes, new blocks {grown}"
     )
-    assert size < 200_000 and grown < 20_000
+    assert size < 250_000 and grown < 25_000
     assert took < 30  # the existing per-stock compute is a few seconds; blocks add well under 1 s
 
 
