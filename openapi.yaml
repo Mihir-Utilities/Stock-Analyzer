@@ -4228,6 +4228,190 @@ components:
         - "as_of"
         - "amount_per_month_inr"
         - "variants"
+    InvSwingDipRecord:
+      type: "object"
+      description: "One dip of analysis.swing_dips.thresholds[].records (docs/05 12.13 rule A). depth_pct is a negative percent number; days are calendar days between bar dates."
+      properties:
+        peak_date:
+          type: "string"
+          format: "date"
+        peak_close:
+          type: "number"
+        start_date:
+          type: "string"
+          format: "date"
+        start_close:
+          type: "number"
+        low_date:
+          type: "string"
+          format: "date"
+        low_close:
+          type: "number"
+        depth_pct:
+          type: "number"
+        days_peak_to_low:
+          type: "integer"
+        recovery_date:
+          type: "string"
+          format: "date"
+          nullable: true
+        days_low_to_recovery:
+          type: "integer"
+          nullable: true
+        days_low_to_recovery_reason:
+          type: "string"
+          nullable: true
+          description: "open_dip while the dip has not recovered."
+        status:
+          type: "string"
+          enum:
+            - "recovered"
+            - "open"
+      required:
+        - "peak_date"
+        - "low_date"
+        - "depth_pct"
+        - "status"
+    InvSwingDipRow:
+      type: "object"
+      description: "Rule A summary for one threshold (peak-recovery dips, docs/05 12.13). When the history is shorter than 252 rows every count and statistic is null and reason is insufficient_history."
+      properties:
+        threshold_pct:
+          type: "integer"
+        dips:
+          type: "integer"
+          nullable: true
+        recovered:
+          type: "integer"
+          nullable: true
+        open:
+          type: "integer"
+          nullable: true
+        recovered_share_pct:
+          type: "number"
+          nullable: true
+        recovered_share_reason:
+          type: "string"
+          nullable: true
+        median_depth_pct:
+          type: "number"
+          nullable: true
+        median_depth_reason:
+          type: "string"
+          nullable: true
+        worst_depth_pct:
+          type: "number"
+          nullable: true
+        worst_depth_reason:
+          type: "string"
+          nullable: true
+          description: "no_dips | insufficient_history"
+        median_days_peak_to_low:
+          type: "number"
+          nullable: true
+        median_days_peak_to_low_reason:
+          type: "string"
+          nullable: true
+        median_days_to_recover:
+          type: "number"
+          nullable: true
+          description: "Median over recovered (completed) dips only."
+        median_days_to_recover_reason:
+          type: "string"
+          nullable: true
+        longest_open_days:
+          type: "integer"
+          nullable: true
+        longest_open_reason:
+          type: "string"
+          nullable: true
+          description: "no_open_dip | insufficient_history"
+        small_sample:
+          type: "boolean"
+        reason:
+          type: "string"
+          nullable: true
+          description: "insufficient_history when fewer than 252 rows exist."
+        records:
+          type: "array"
+          description: "The last 8 dips, newest first."
+          items:
+            "$ref": "#/components/schemas/InvSwingDipRecord"
+      required:
+        - "threshold_pct"
+        - "small_sample"
+    InvSwingLegRow:
+      type: "object"
+      description: "Rule B summary for one threshold (zig-zag swing legs, docs/05 12.13). A bounce of X percent is not a recovery of the old peak."
+      properties:
+        threshold_pct:
+          type: "integer"
+        legs:
+          type: "integer"
+          nullable: true
+        bounced:
+          type: "integer"
+          nullable: true
+        open:
+          type: "integer"
+          nullable: true
+        median_depth_pct:
+          type: "number"
+          nullable: true
+        median_depth_reason:
+          type: "string"
+          nullable: true
+        worst_depth_pct:
+          type: "number"
+          nullable: true
+        worst_depth_reason:
+          type: "string"
+          nullable: true
+        median_days_peak_to_low:
+          type: "number"
+          nullable: true
+        median_days_peak_to_low_reason:
+          type: "string"
+          nullable: true
+        median_days_to_bounce:
+          type: "number"
+          nullable: true
+          description: "Median over bounced legs only."
+        median_days_to_bounce_reason:
+          type: "string"
+          nullable: true
+        small_sample:
+          type: "boolean"
+        reason:
+          type: "string"
+          nullable: true
+      required:
+        - "threshold_pct"
+        - "small_sample"
+    InvSwingDips:
+      type: "object"
+      description: "analysis.swing_dips (docs/05 12.13, docs/03 4a-swing): falls of at least 10 and 20 percent from the recent 52-week high, recovered or not, plus zig-zag swing legs. Additive and optional; drawdown_profile is unchanged. Past prices only."
+      properties:
+        as_of:
+          type: "string"
+          format: "date"
+        bars:
+          type: "integer"
+        window_rows:
+          type: "integer"
+        thresholds:
+          type: "array"
+          items:
+            "$ref": "#/components/schemas/InvSwingDipRow"
+        zigzag:
+          type: "array"
+          items:
+            "$ref": "#/components/schemas/InvSwingLegRow"
+      required:
+        - "as_of"
+        - "bars"
+        - "thresholds"
+        - "zigzag"
     InvRiskAdjusted:
       type: "object"
       description: "analysis.risk_adjusted (docs/05 12.9): Calmar-style ratio and downside-deviation ratio over the calendar 3-year window. No risk-free rate, no Sharpe."
@@ -4286,6 +4470,12 @@ components:
           "$ref": "#/components/schemas/InvPricePosition"
         drawdown_profile:
           "$ref": "#/components/schemas/InvDrawdownProfile"
+        swing_dips:
+          "$ref": "#/components/schemas/InvSwingDips"
+        swing_dips_reason:
+          type: "string"
+          nullable: true
+          description: "compute_error when swing_dips is null because the block failed to compute (docs/05 12.13, SWD-7)."
         holding_periods:
           "$ref": "#/components/schemas/InvHoldingPeriods"
         entry_study:

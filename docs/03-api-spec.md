@@ -180,6 +180,47 @@ Rules.
 - All new blocks together add roughly 12 KB to the stored snapshot (the 29 SIP variants dominate); the snapshot stays under the 200 KB budget (RET-89). The expansion step of B04 (`prices/expand.go`) passes the new blocks through unchanged (they carry their own dates; nothing is aligned to `series.dates`).
 - Errors and `DATA_UNAVAILABLE` reasons are those of `/indicators` above. No endpoint takes a parameter for these blocks.
 
+### 4a-swing. `analysis.swing_dips` (decision SWD, PROPOSED; built by B18; formulas in `05` 12.13)
+
+An additive, optional block next to `drawdown_profile` (which is unchanged). No new route and no parameter. Percent fields are percent numbers (a depth of -15.0 means 15% below the peak); the swing-leg rows are summaries only. Older snapshots lack the block (the web shows "Not computed yet"); a snapshot whose block failed to compute has `swing_dips: null` and `swing_dips_reason: "compute_error"` and every other block intact.
+
+```json
+"swing_dips": {
+  "as_of": "2024-01-15", "bars": 15, "window_rows": 252,
+  "thresholds": [
+    { "threshold_pct": 10, "dips": 3, "recovered": 2, "open": 1,
+      "recovered_share_pct": 66.6667, "recovered_share_reason": null,
+      "median_depth_pct": -11.5385, "median_depth_reason": null,
+      "worst_depth_pct": -15.0, "worst_depth_reason": null,
+      "median_days_peak_to_low": 2.0, "median_days_peak_to_low_reason": null,
+      "median_days_to_recover": null, "median_days_to_recover_reason": "too_few_episodes",
+      "longest_open_days": 2, "longest_open_reason": null,
+      "small_sample": true, "reason": null,
+      "records": [
+        { "peak_date": "2024-01-13", "peak_close": 105.0, "start_date": "2024-01-14", "start_close": 94.0,
+          "low_date": "2024-01-14", "low_close": 94.0, "depth_pct": -10.4762, "days_peak_to_low": 1,
+          "recovery_date": null, "days_low_to_recovery": null, "days_low_to_recovery_reason": "open_dip", "status": "open" },
+        { "peak_date": "2024-01-10", "peak_close": 104.0, "start_date": "2024-01-11", "start_close": 93.0,
+          "low_date": "2024-01-12", "low_close": 92.0, "depth_pct": -11.5385, "days_peak_to_low": 2,
+          "recovery_date": "2024-01-13", "days_low_to_recovery": 1, "days_low_to_recovery_reason": null, "status": "recovered" }
+      ] },
+    { "threshold_pct": 20, "dips": 0, "recovered": 0, "open": 0, "worst_depth_pct": null, "worst_depth_reason": "no_dips",
+      "longest_open_days": null, "longest_open_reason": "no_open_dip", "records": [], "...": "medians null with too_few_episodes" }
+  ],
+  "zigzag": [
+    { "threshold_pct": 10, "legs": 4, "bounced": 3, "open": 1,
+      "median_depth_pct": -22.1501, "median_depth_reason": null, "worst_depth_pct": -24.2424, "worst_depth_reason": null,
+      "median_days_peak_to_low": 1.0, "median_days_peak_to_low_reason": null,
+      "median_days_to_bounce": 1.0, "median_days_to_bounce_reason": null, "small_sample": true, "reason": null }
+  ]
+}
+```
+
+Rules.
+- `thresholds` has the entries `threshold_pct` 10 and 20 (rule A, peak-recovery dips); `zigzag` has the same two thresholds (rule B, swing legs, summaries only). `records` lists the last 8 dips of rule A, newest first, `status` is `recovered | open`; `days_low_to_recovery` and `recovery_date` are null with `days_low_to_recovery_reason: "open_dip"` while open. Counts and statistics of an entry are all null with `reason: "insufficient_history"` when fewer than 252 rows exist (rule A) or 2 rows (rule B). `median_depth_pct`, `median_days_peak_to_low` and `recovered_share_pct` are null with `too_few_episodes` below `INV_MIN_EPISODES` (3) dips; `median_days_to_recover` (completed dips only) is null with `too_few_episodes` below 3 recovered; `worst_depth_pct` is null with `no_dips` when there is no dip; `longest_open_days` is null with `no_open_dip` when none is open. Days are calendar days between bar dates.
+- Sample sizes (`dips`, `recovered`, `open`, `legs`, `bounced`) and `small_sample` (fewer than `INV_SMALL_EPISODES` = 10) travel with the figures. The block is about 3 KB for a stock with many dips (8 records per threshold); the snapshot stays under the 200 KB budget.
+- The expansion step of B04 passes the block through unchanged; `data.analysis` passes unknown blocks through, so the API has no code change (a test pins it).
+
 ### 4b. GET `/stocks/seasonality?scope=all|watchlist` (decision D-INV2 / INVA, PROPOSED; built by B17; answers INV-9)
 Read-only list for the Home tile "This month, across the years" (`06` 6.2a) over **every tracked stock** (`instrument.is_tracked = true`), not only the watchlist. `scope` is optional: `all` (default) or `watchlist` (only stocks that are on the watchlist); any other value -> 422 `UNPROCESSABLE` (field error `scope`). The route is declared before `/stocks/{symbol}`. Auth and CSRF as every GET; no body; `Cache-Control: no-store`.
 ```json
