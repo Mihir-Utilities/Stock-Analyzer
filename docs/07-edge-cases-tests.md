@@ -1035,7 +1035,7 @@ Types: U unit, I integration (Postgres), E Playwright. Vectors C1, C2, S1, TW1..
 | ID | Case | Expected | Type |
 |---|---|---|---|
 | PRK-C01 | Vector C1 (A 5000 Banks, B 3000 Banks, C 1500 IT, D 500 no sector) | weights 50/30/15/5, top1 50, top3 95, top5 100 with `holdings_count` 4, `hhi` 0.365, `effective_holdings` 2.74; groups Banks 80, IT 15, Unclassified 5, `group_hhi` 0.665, `group_top1_pct` 80 | U |
-| PRK-C02 | Vector C2: D has no price | `total_value` null with `missing_price: D`; every weight, top-N, hhi, effective, group figure null with the reason; A, B, C keep `value`; no partial sum anywhere | U |
+| PRK-C02 | Vector C2: D has no price | `total_value` null with `missing_price: D`; every weight, top-N, hhi, effective, group figure null with the reason; A, B, C keep `value`; the group holding the unpriced holding has `value` null, the other groups keep theirs; no partial sum anywhere | U |
 | PRK-C03 | Missing sector, blank sector (whitespace) | both land in the visible `Unclassified` group (`kind: unclassified`), not dropped | U |
 | PRK-C04 | One holding; fewer than five holdings | weight 100, hhi 1, effective 1; top5 equals 100 and `holdings_count` is given | U |
 | PRK-C05 | No open holding (never held, or everything sold) | `total_value` null, reason `no_open_holdings`, lists `[]`, 200 | U/I |
