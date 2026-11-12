@@ -240,6 +240,11 @@ export const definitions = {
     section: "",
     text: "How far the price has fallen from its highest earlier close, how long it stayed below that high, and how long past falls of 10% or 20% took to be won back. These are the stock's own past episodes, and only a few of them.",
   },
+  "swing_dips": {
+    label: "Swing dips",
+    section: "",
+    text: "How often the price fell at least 10% or 20% below its recent 52-week high, how deep each fall went, how long it took to reach the bottom and how long it took to get back to that earlier high, counting falls that never recovered. The swing rows count every fall of that size followed by an equal bounce, so they show repeated ups and downs inside a long decline. These are past episodes only, and often there are few of them.",
+  },
   "holding_period": {
     label: "Holding periods",
     section: "",

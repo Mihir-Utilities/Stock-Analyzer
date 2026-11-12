@@ -253,3 +253,41 @@ func TestExpandIndicatorsPassesRelativeStrengthThrough(t *testing.T) {
 		t.Fatal("an old snapshot must not gain the block")
 	}
 }
+
+// SWD-A01: analysis.swing_dips and swing_dips_reason pass through unchanged, including the null
+// block with reason compute_error; an old snapshot without them still works.
+func TestExpandIndicatorsPassesSwingDipsThrough(t *testing.T) {
+	for name, blocks := range map[string]string{
+		"block": `"swing_dips":{"as_of":"2026-10-07","bars":15,"window_rows":252,
+		  "thresholds":[{"threshold_pct":10,"dips":3,"recovered":2,"open":1,"median_days_to_recover":null,
+		    "median_days_to_recover_reason":"too_few_episodes","records":[{"status":"open","recovery_date":null}]}],
+		  "zigzag":[{"threshold_pct":10,"legs":4,"bounced":3,"open":1}]},"swing_dips_reason":null`,
+		"compute_error": `"swing_dips":null,"swing_dips_reason":"compute_error"`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			ind := `{"as_of":"2026-10-07","series":{"format":"columnar","dates":["2026-10-06","2026-10-07"]},
+			  "analysis":{"format":"columnar","drawdown":[0,-1],` + blocks + `}}`
+			got, err := ExpandIndicators([]byte(ind), []byte(`{}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			an := got["analysis"].(map[string]any)
+			var want map[string]any
+			if err := json.Unmarshal([]byte("{"+blocks+"}"), &want); err != nil {
+				t.Fatal(err)
+			}
+			for k, v := range want {
+				if got, ok := an[k]; !ok || !reflect.DeepEqual(got, v) {
+					t.Errorf("%s changed: %v != %v", k, got, v)
+				}
+			}
+		})
+	}
+	old, err := ExpandIndicators([]byte(`{"analysis":{"format":"columnar","drawdown":[0]}}`), []byte(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := old["analysis"].(map[string]any)["swing_dips"]; ok {
+		t.Fatal("an old snapshot must not gain the swing_dips block")
+	}
+}

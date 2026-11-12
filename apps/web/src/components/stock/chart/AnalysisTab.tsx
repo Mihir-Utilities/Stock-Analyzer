@@ -24,6 +24,7 @@ import {
 import { humanReason } from "@/lib/stock/derive";
 import { YEAR_COLUMN, invHeatModel, type InvHeatModel } from "@/lib/stock/inv-model";
 import { parseInvBlocks } from "@/lib/stock/inv-schemas";
+import { parseSwingDips } from "@/lib/stock/swing-schemas";
 import type { Load } from "@/lib/stock/load";
 import type { IndicatorsData } from "@/lib/stock/schemas";
 
@@ -37,6 +38,9 @@ const EntryContextCard = lazyCard("EntryContextCard");
 const PositionCard = lazyCard("PositionCard");
 const VolRegimeCard = lazyCard("VolRegimeCard");
 const DrawdownProfileCard = lazyCard("DrawdownProfileCard");
+const SwingDipsCard = dynamic(() => import("./SwingDipsCard").then((m) => m.SwingDipsCard), {
+  loading: cardLoading,
+});
 const HoldingPeriodsCard = lazyCard("HoldingPeriodsCard");
 const EntryStudyCard = lazyCard("EntryStudyCard");
 const SipCard = lazyCard("SipCard");
@@ -391,6 +395,7 @@ export function AnalysisTab({ indicatorsLoad }: { indicatorsLoad: Load<Indicator
           : `No histogram: ${parsed.reason}.`,
       };
   const inv = useMemo(() => parseInvBlocks(ind?.analysis), [ind]);
+  const swing = useMemo(() => parseSwingDips(ind?.analysis), [ind]);
   const monthYear = useMemo(
     () => (a?.month_year ? invHeatModel(a.month_year, inv) : null),
     [a, inv],
@@ -427,7 +432,14 @@ export function AnalysisTab({ indicatorsLoad }: { indicatorsLoad: Load<Indicator
         info={<DefinitionTip term="max_drawdown" />}
         filename="drawdown"
       />
-      <DrawdownProfileCard load={indicatorsLoad} blocks={inv} />
+      <div className="grid min-w-0 gap-4 xl:grid-cols-2">
+        <div className="min-w-0">
+          <DrawdownProfileCard load={indicatorsLoad} blocks={inv} />
+        </div>
+        <div className="min-w-0">
+          <SwingDipsCard load={indicatorsLoad} swing={swing} />
+        </div>
+      </div>
       <ChartSlot
         title="Rolling volatility"
         testId="chart-rolling-vol"

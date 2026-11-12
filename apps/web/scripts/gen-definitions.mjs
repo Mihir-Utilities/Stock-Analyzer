@@ -73,6 +73,7 @@ export const ENTRIES = [
   ],
   ["price_position", "Price position", "", "**Owner text (price_position):**"],
   ["drawdown_profile", "Drawdown profile", "", "**Owner text (drawdown_profile):**"],
+  ["swing_dips", "Swing dips", "", "**Owner text (swing_dips):**"],
   ["holding_period", "Holding periods", "", "**Owner text (holding_period):**"],
   ["entry_study", "Entry-point study", "", "**Owner text (entry_study):**"],
   ["vol_regime", "Volatility regime", "", "**Owner text (vol_regime):**"],
