@@ -32,6 +32,8 @@ tags:
     description: "Portfolio (section 12)"
   - name: "alerts"
     description: "Alerts and Telegram (section 13)"
+  - name: "journal"
+    description: "Decision journal (section 13a)"
   - name: "imports"
     description: "Imports and owner-entered data (section 14)"
   - name: "broker"
@@ -2471,6 +2473,178 @@ paths:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/ErrorEnvelope"
+  "/stocks/{symbol}/journal":
+    get:
+      operationId: "getStocksSymbolJournal"
+      tags:
+        - "journal"
+      summary: "List the owner's decision-journal notes for a stock, newest first. (docs/03 section 13a)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive; old symbols resolve through symbol_alias."
+          schema:
+            type: "string"
+        - name: "status"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            enum:
+              - "open"
+              - "reviewed"
+        - "$ref": "#/components/parameters/Limit"
+        - "$ref": "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: "Page of notes with today (owner's IST date) and review_due_count"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/JournalPageEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+    post:
+      operationId: "postStocksSymbolJournal"
+      tags:
+        - "journal"
+      summary: "Add a note (price at the time is taken from the latest imported close; Idempotency-Key supported; 500 notes per stock). (docs/03 section 13a)"
+      parameters:
+        - name: "symbol"
+          in: "path"
+          required: true
+          description: "URL-encoded exact exchange symbol, case-insensitive; old symbols resolve through symbol_alias."
+          schema:
+            type: "string"
+        - "$ref": "#/components/parameters/CsrfHeader"
+        - name: "Idempotency-Key"
+          in: "header"
+          required: false
+          description: "UUID; a replay within 24 h returns the stored response with Idempotent-Replayed: true."
+          schema:
+            type: "string"
+            format: "uuid"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/JournalCreate"
+      responses:
+        "201":
+          description: "Created note"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/JournalEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "409":
+          description: "CONFLICT (500 notes per stock, or Idempotency-Key reused with a different request)"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+  "/journal/{id}":
+    patch:
+      operationId: "patchJournalId"
+      tags:
+        - "journal"
+      summary: "Edit the note text, review date, status or transaction link (price and note date are fixed). (docs/03 section 13a)"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Numeric journal note id."
+          schema:
+            type: "integer"
+            format: "int64"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/JournalPatch"
+      responses:
+        "200":
+          description: "Updated note"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/JournalEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
+    delete:
+      operationId: "deleteJournalId"
+      tags:
+        - "journal"
+      summary: "Delete a note (final). (docs/03 section 13a)"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Numeric journal note id."
+          schema:
+            type: "integer"
+            format: "int64"
+        - "$ref": "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: "Success. data = {id, deleted: true}"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "404":
+          "$ref": "#/components/responses/NotFound"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
   "/alerts":
     post:
       operationId: "postAlerts"
@@ -4798,6 +4972,188 @@ components:
       type: "object"
       additionalProperties: true
       description: "Same fields as TxnCreate, all optional."
+    JournalTxn:
+      type: "object"
+      description: "The linked portfolio transaction (decimal strings like section 12)."
+      properties:
+        id:
+          type: "integer"
+          format: "int64"
+        side:
+          type: "string"
+          enum:
+            - "buy"
+            - "sell"
+        qty:
+          type: "string"
+        price:
+          type: "string"
+        trade_date:
+          type: "string"
+          format: "date"
+      required:
+        - "id"
+        - "side"
+        - "qty"
+        - "price"
+        - "trade_date"
+    JournalNote:
+      type: "object"
+      description: "One decision-journal note (docs/03 section 13a). note is untrusted plain text (1 to 1,000 characters); price_at_note is the latest valid imported close on or before noted_on, unadjusted, with its own date; both are null with price_reason when no price was imported. review_due is computed on read from the owner's IST date."
+      properties:
+        id:
+          type: "integer"
+          format: "int64"
+        symbol:
+          type: "string"
+        noted_on:
+          type: "string"
+          format: "date"
+        note:
+          type: "string"
+          minLength: 1
+          maxLength: 1000
+        price_at_note:
+          type: "string"
+          nullable: true
+          description: "INR, decimal string with 4 decimals."
+        price_as_of:
+          type: "string"
+          format: "date"
+          nullable: true
+        price_source:
+          type: "string"
+          description: "Constant: your imported prices."
+        price_reason:
+          type: "string"
+          nullable: true
+          enum:
+            - "no_price_imported"
+            - null
+        review_on:
+          type: "string"
+          format: "date"
+          nullable: true
+        status:
+          type: "string"
+          enum:
+            - "open"
+            - "reviewed"
+        reviewed_at:
+          type: "string"
+          format: "date-time"
+          nullable: true
+        review_due:
+          type: "boolean"
+        portfolio_txn_id:
+          type: "integer"
+          format: "int64"
+          nullable: true
+        txn:
+          allOf:
+            - "$ref": "#/components/schemas/JournalTxn"
+          nullable: true
+      required:
+        - "id"
+        - "symbol"
+        - "noted_on"
+        - "note"
+        - "price_at_note"
+        - "price_as_of"
+        - "price_source"
+        - "price_reason"
+        - "review_on"
+        - "status"
+        - "reviewed_at"
+        - "review_due"
+        - "portfolio_txn_id"
+        - "txn"
+    JournalCreate:
+      type: "object"
+      properties:
+        note:
+          type: "string"
+          minLength: 1
+          maxLength: 1000
+        review_on:
+          type: "string"
+          format: "date"
+          description: "Today (IST) or later, at most 10 years ahead."
+        portfolio_txn_id:
+          type: "integer"
+          format: "int64"
+          description: "A transaction of this stock."
+      required:
+        - "note"
+    JournalPatch:
+      type: "object"
+      description: "At least one key. review_on and portfolio_txn_id accept null to clear."
+      properties:
+        note:
+          type: "string"
+          minLength: 1
+          maxLength: 1000
+        review_on:
+          type: "string"
+          format: "date"
+          nullable: true
+        status:
+          type: "string"
+          enum:
+            - "open"
+            - "reviewed"
+        portfolio_txn_id:
+          type: "integer"
+          format: "int64"
+          nullable: true
+    JournalEnvelope:
+      type: "object"
+      properties:
+        data:
+          "$ref": "#/components/schemas/JournalNote"
+        meta:
+          "$ref": "#/components/schemas/Meta"
+        warnings:
+          type: "array"
+          items:
+            "$ref": "#/components/schemas/Warning"
+      required:
+        - "data"
+      description: "Success envelope with one journal note."
+    JournalPageEnvelope:
+      type: "object"
+      properties:
+        data:
+          type: "object"
+          properties:
+            items:
+              type: "array"
+              items:
+                "$ref": "#/components/schemas/JournalNote"
+            next_cursor:
+              type: "string"
+              nullable: true
+            today:
+              type: "string"
+              format: "date"
+              description: "The owner's IST date used for review_due."
+            review_due_count:
+              type: "integer"
+              description: "All open notes of the stock that are due, whatever the page or filter."
+          required:
+            - "items"
+            - "next_cursor"
+            - "today"
+            - "review_due_count"
+        meta:
+          "$ref": "#/components/schemas/Meta"
+        warnings:
+          type: "array"
+          items:
+            "$ref": "#/components/schemas/Warning"
+      required:
+        - "data"
+      description: "Success envelope with a page of journal notes."
     AlertCreate:
       type: "object"
       properties:

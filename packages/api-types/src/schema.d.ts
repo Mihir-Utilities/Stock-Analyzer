@@ -831,6 +831,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stocks/{symbol}/journal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the owner's decision-journal notes for a stock, newest first. (docs/03 section 13a) */
+        get: operations["getStocksSymbolJournal"];
+        put?: never;
+        /** Add a note (price at the time is taken from the latest imported close; Idempotency-Key supported; 500 notes per stock). (docs/03 section 13a) */
+        post: operations["postStocksSymbolJournal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/journal/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a note (final). (docs/03 section 13a) */
+        delete: operations["deleteJournalId"];
+        options?: never;
+        head?: never;
+        /** Edit the note text, review date, status or transaction link (price and note date are fixed). (docs/03 section 13a) */
+        patch: operations["patchJournalId"];
+        trace?: never;
+    };
     "/alerts": {
         parameters: {
             query?: never;
@@ -1767,6 +1803,89 @@ export interface components {
         /** @description Same fields as TxnCreate, all optional. */
         TxnPatch: {
             [key: string]: unknown;
+        };
+        /** @description The linked portfolio transaction (decimal strings like section 12). */
+        JournalTxn: {
+            /** Format: int64 */
+            id: number;
+            /** @enum {string} */
+            side: "buy" | "sell";
+            qty: string;
+            price: string;
+            /** Format: date */
+            trade_date: string;
+        };
+        /** @description One decision-journal note (docs/03 section 13a). note is untrusted plain text (1 to 1,000 characters); price_at_note is the latest valid imported close on or before noted_on, unadjusted, with its own date; both are null with price_reason when no price was imported. review_due is computed on read from the owner's IST date. */
+        JournalNote: {
+            /** Format: int64 */
+            id: number;
+            symbol: string;
+            /** Format: date */
+            noted_on: string;
+            note: string;
+            /** @description INR, decimal string with 4 decimals. */
+            price_at_note: string | null;
+            /** Format: date */
+            price_as_of: string | null;
+            /** @description Constant: your imported prices. */
+            price_source: string;
+            /** @enum {string|null} */
+            price_reason: "no_price_imported" | null;
+            /** Format: date */
+            review_on: string | null;
+            /** @enum {string} */
+            status: "open" | "reviewed";
+            /** Format: date-time */
+            reviewed_at: string | null;
+            review_due: boolean;
+            /** Format: int64 */
+            portfolio_txn_id: number | null;
+            txn: components["schemas"]["JournalTxn"] | null;
+        };
+        JournalCreate: {
+            note: string;
+            /**
+             * Format: date
+             * @description Today (IST) or later, at most 10 years ahead.
+             */
+            review_on?: string;
+            /**
+             * Format: int64
+             * @description A transaction of this stock.
+             */
+            portfolio_txn_id?: number;
+        };
+        /** @description At least one key. review_on and portfolio_txn_id accept null to clear. */
+        JournalPatch: {
+            note?: string;
+            /** Format: date */
+            review_on?: string | null;
+            /** @enum {string} */
+            status?: "open" | "reviewed";
+            /** Format: int64 */
+            portfolio_txn_id?: number | null;
+        };
+        /** @description Success envelope with one journal note. */
+        JournalEnvelope: {
+            data: components["schemas"]["JournalNote"];
+            meta?: components["schemas"]["Meta"];
+            warnings?: components["schemas"]["Warning"][];
+        };
+        /** @description Success envelope with a page of journal notes. */
+        JournalPageEnvelope: {
+            data: {
+                items: components["schemas"]["JournalNote"][];
+                next_cursor: string | null;
+                /**
+                 * Format: date
+                 * @description The owner's IST date used for review_due.
+                 */
+                today: string;
+                /** @description All open notes of the stock that are due, whatever the page or filter. */
+                review_due_count: number;
+            };
+            meta?: components["schemas"]["Meta"];
+            warnings?: components["schemas"]["Warning"][];
         };
         AlertCreate: {
             target: {
@@ -4532,6 +4651,183 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["RateLimited"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getStocksSymbolJournal: {
+        parameters: {
+            query?: {
+                status?: "open" | "reviewed";
+                /** @description Page size (values above 200 are clamped). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor from next_cursor. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                /** @description URL-encoded exact exchange symbol, case-insensitive; old symbols resolve through symbol_alias. */
+                symbol: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page of notes with today (owner's IST date) and review_due_count */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalPageEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["RateLimited"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    postStocksSymbolJournal: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description CSRF guard for non-GET requests. */
+                "X-Requested-With": components["parameters"]["CsrfHeader"];
+                /** @description UUID; a replay within 24 h returns the stored response with Idempotent-Replayed: true. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                /** @description URL-encoded exact exchange symbol, case-insensitive; old symbols resolve through symbol_alias. */
+                symbol: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JournalCreate"];
+            };
+        };
+        responses: {
+            /** @description Created note */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /** @description CONFLICT (500 notes per stock, or Idempotency-Key reused with a different request) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["RateLimited"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    deleteJournalId: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description CSRF guard for non-GET requests. */
+                "X-Requested-With": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                /** @description Numeric journal note id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success. data = {id, deleted: true} */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    patchJournalId: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description CSRF guard for non-GET requests. */
+                "X-Requested-With": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                /** @description Numeric journal note id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JournalPatch"];
+            };
+        };
+        responses: {
+            /** @description Updated note */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             /** @description Error envelope */

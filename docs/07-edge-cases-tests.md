@@ -1028,3 +1028,49 @@ Worker rows (INV-M, INV-S, INV-P, INV-D, INV-H, INV-E, INV-V, INV-L, INV-R) are 
 | INVA-13 | Tile copy by scope | Empty copy, nothing-ranked copy and caption follow the scope; footnote and "history starts" text unchanged | U |
 | INVA-14 | Tile 48 stocks | 48 stocks: ranking, collapsed short group, sort and min-years still work; 375 px no horizontal scroll; axe clean in both themes at 375 and 1440 px with the scope control | E |
 | INV-Z01 | Safe Edition | No new egress, no new dependency with a forbidden licence; deny-list, SAF-13 and licence scan pass | CI |
+
+## JRN / ALS: decision journal and alert shortcuts (plan Item D; API B20, web F21; docs/03 section 13a, docs/06 6.4b, docs/02 migration 0015)
+Types: U unit, I integration (throwaway Postgres), E Playwright, CI pipeline. Dates in tests come from an injected clock (IST), never the wall clock.
+
+| ID | Case | Expected | Type |
+|---|---|---|---|
+| JRN-01 | Migration 0015 up, down, up | Table `journal_note`, its 5 constraints and 2 indexes exist after up and are gone after down; docs/02 lists the same objects (`TestMigrateUpDownUp`) | I |
+| JRN-02 | Constraint guards | Direct SQL: blank text, 1,001 characters, price without a date, a status other than open/reviewed, `reviewed` without `reviewed_at` are all refused by the database | I |
+| JRN-03 | Create a note | 201; `note` trimmed; `noted_on` is the injected IST date (a clock at 18:31 UTC on 31 Dec gives 1 Jan); `status` open; `price_at_note` equals the latest non-suspect close on or before that day with its `price_as_of` and `price_source` | I |
+| JRN-04 | No imported price | A stock with no bars: 201, `price_at_note` and `price_as_of` null, `price_reason = "no_price_imported"`, never 0 | I |
+| JRN-05 | Suspect and later bars ignored | A suspect bar and a bar after the note date are never used for the price | I |
+| JRN-06 | Note length boundary | 1,000 characters (multi-byte characters counted as characters) accepted; 1,001 is 422 on `note`; empty and whitespace-only are 422 | U/I |
+| JRN-07 | Control characters | NUL, BEL and other control characters are 422 on `note`; newline and tab are kept | U |
+| JRN-08 | Untrusted text round trip | A note with `<script>alert(1)</script>` and `M&M` is stored and returned byte for byte; the web renders it as text (no element is created) | I/U |
+| JRN-09 | `review_on` rules | A past date on create is 422; today is accepted; more than 10 years ahead is 422; an invalid date is 422; on PATCH a past date is accepted only when equal to the stored value | U/I |
+| JRN-10 | Review due, boundaries | With today 2026-11-12: open + review_on 2026-11-11 is due; open + 2026-11-12 is due (the date counts); open + 2026-11-13 is not; reviewed + a past date is not; open without `review_on` is not; `review_due_count` counts all due open notes regardless of paging and filter | U/I |
+| JRN-11 | Review due follows the injected IST date | The same stored note is not due at 18:29 UTC on the day before and due at 18:30 UTC (IST midnight) | I |
+| JRN-12 | Transaction link | A transaction of the same stock is accepted and returned in `txn`; one of another stock is 422 on `portfolio_txn_id`; an unknown id is 422; deleting the transaction later leaves the note with `portfolio_txn_id` null | I |
+| JRN-13 | PATCH semantics | `note`, `review_on` (date or null), `status`, `portfolio_txn_id` (id or null) change independently; at least one key is required; `price_at_note`, `noted_on`, `symbol` are unknown keys (400); `reviewed` sets `reviewed_at`, `open` clears it | I |
+| JRN-14 | Status filter and order | `status=open` and `status=reviewed` filter; an unknown value is 422; the order is `(noted_on desc, id desc)`; keyset paging over 120 notes returns each exactly once; `limit` above 200 is clamped | I |
+| JRN-15 | Idempotency | The same `Idempotency-Key` and body returns the stored 201 with `Idempotent-Replayed: true` and creates one row; the same key with a different body is 409 `CONFLICT`; a malformed key is 422 | I |
+| JRN-16 | Delete | 200 `{id, deleted: true}`; a second delete and a non-numeric id are 404 | I |
+| JRN-17 | Per-stock cap | 500 notes accepted, the 501st is 409 `CONFLICT`; another stock is unaffected | I |
+| JRN-18 | Auth and CSRF | Every journal route is 401 without a session; POST, PATCH and DELETE without the CSRF header are refused like other routes | I |
+| JRN-19 | Unknown symbol and alias | Unknown symbol is 404 on GET and POST; a renamed symbol resolves through `symbol_alias` | I |
+| JRN-20 | Contract | The four routes are in `openapi.yaml` and `routes.go` (`TestRoutesMatchOpenAPI`); every operation answers with the envelope | I |
+| JRN-21 | Backup lists the table | `journal_note` is in the backup `TABLES` after `portfolio_txn`, its columns equal the schema (guard test), it carries no forbidden column, and `_REFERENCED_INSTRUMENTS` includes its instruments | U |
+| JRN-22 | Backup and restore round trip | Dump and restore into an emptied database keep every `id`, the text, price, dates, status and link, re-sync the identity sequence (the next insert gets max id + 1) and the verify step reports no problem | I |
+| JRN-23 | Housekeeping | An opened-only stock with a journal note is not untracked by the LRU eviction (owner data) | I |
+| JRN-24 | Never exported elsewhere | No CSV or other export route includes notes; the Telegram and alert texts never contain note text; logs do not contain note text (the request log has no bodies) | I |
+| JRN-25 | Journal tab states | Loading, empty, filtered empty, partial (an item whose price fields are malformed still shows its note; an item without an id is dropped with the visible count), error with Retry and request id | U |
+| JRN-26 | Journal form | Counter, over-limit message, API field errors under the fields, first invalid control focused, typed text kept on error, hint text present, one `Idempotency-Key` per form opening reused on retry | U |
+| JRN-27 | Journal focus and live regions | Focus goes to the textarea on open and back to Add note on close; after delete to the next entry's text, else the previous, else Add note; the polite region announces add, save, delete, reviewed, reopened | U/E |
+| JRN-28 | Review due marker in the UI | The chip "Review due" is shown from `review_due` only (text plus icon), `jrn-due-count` shows the API count and is hidden at 0 | U |
+| JRN-29 | Escaping in the UI | The `<script>` and `M&M` notes render as literal text; `white-space: pre-wrap` keeps newlines; no `dangerouslySetInnerHTML` in the journal components (grep test) | U |
+| JRN-30 | Playwright | Axe clean in both themes at 375 and 1440 px for the tab (list, form open, empty); keyboard-only path: Tab to Add note, type, set review date, submit, see the new entry, mark reviewed, delete with confirmation; no page-level horizontal scroll at 375 px | E |
+| ALS-01 | Levels | From `high_52w_close` 1150: 10% below is 1035.00, 20% below 920.00; rounding half up to 2 decimals on decimal strings (1150.05 x 0.9 = 1035.045 gives 1035.05; no floating error such as 1.005); `sma200` is used as given, rounded the same way | U |
+| ALS-02 | Direction of the 200-day row | Last close above the average gives `price_below` and "falls to"; last close below gives `price_above` and "rises to"; equal gives no button (a level equal to the close is already met either way) and the reason line | U |
+| ALS-03 | Missing facts | `high_52w_close` null: the two high-based rows show their reason, no button; `sma200` null: the reason line "needs 200 days of prices"; `position` missing: "Not computed yet" | U |
+| ALS-04 | Labels carry level and source | Each button text contains the exact level and each row its source fact value and as-of date; no row says buy, sell or target | U |
+| ALS-05 | Prefill | A shortcut opens the alert form in a drawer with symbol, kind and price filled; changing the kind afterwards still works; the Alerts page form is unchanged and starts empty | U |
+| ALS-06 | Create from a shortcut | Submit sends `POST /alerts` with `{target:{type:"stock",symbol}, kind, params:{price:"..."}, one_shot:true}` (the existing body shape); success closes the drawer, shows the toast and returns focus to the shortcut button | U/E |
+| ALS-07 | Threshold already met | A 422 `THRESHOLD_ALREADY_MET` shows the existing plain message inside the drawer and creates nothing; the shortcut button stays enabled | U |
+| ALS-08 | Dip-low row absent | No row mentions "current dip" while the data has no dip-low close (ALS-1) | U |
+| ALS-09 | Playwright | Keyboard path: focus a shortcut, Enter opens the drawer with the price filled, submit creates the alert (mocked), Escape closes without creating; axe clean in both themes at 375 and 1440 px | E |
+| JRN-Z01 | Safe Edition | No new egress and no new dependency; deny-list, SAF-13 and licence scan pass | CI |

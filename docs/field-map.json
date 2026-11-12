@@ -690,5 +690,60 @@
     "mf.fund_mappings": "mf-import-preview",
     "mf.duplicate_groups": "mf-import-preview",
     "mf.duplicates_in_db": "mf-import-preview"
+  },
+  "GET /stocks/{symbol}/journal": {
+    "items[].id": "conditional:jrn-item-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "items[].symbol": "conditional:jrn-item-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "items[].noted_on": "conditional:jrn-item-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "items[].note": "conditional:jrn-text-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "items[].price_at_note": "conditional:jrn-price-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "items[].price_as_of": "conditional:jrn-price-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "items[].price_source": "conditional:jrn-price-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "items[].price_reason": "conditional:jrn-price-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "items[].review_on": "conditional:jrn-review-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "items[].status": "conditional:jrn-status-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "items[].reviewed_at": "not-rendered|the reviewed state is shown by the status chip; the timestamp is not displayed",
+    "items[].review_due": "conditional:jrn-due-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "items[].portfolio_txn_id": "conditional:jrn-txn-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "items[].txn": "conditional:jrn-txn-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "next_cursor": "conditional:jrn-more|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "today": "conditional:jrn-list|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "review_due_count": "conditional:jrn-due-count|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands"
+  },
+  "POST /stocks/{symbol}/journal": {
+    "id": "conditional:jrn-item-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "symbol": "conditional:jrn-item-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "noted_on": "conditional:jrn-item-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "note": "conditional:jrn-text-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "price_at_note": "conditional:jrn-price-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "price_as_of": "conditional:jrn-price-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "price_source": "conditional:jrn-price-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "price_reason": "conditional:jrn-price-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "review_on": "conditional:jrn-review-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "status": "conditional:jrn-status-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "reviewed_at": "not-rendered|the reviewed state is shown by the status chip; the timestamp is not displayed",
+    "review_due": "conditional:jrn-due-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "portfolio_txn_id": "conditional:jrn-txn-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "txn": "conditional:jrn-txn-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands"
+  },
+  "PATCH /journal/{id}": {
+    "id": "conditional:jrn-item-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "symbol": "conditional:jrn-item-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "noted_on": "conditional:jrn-item-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "note": "conditional:jrn-text-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "price_at_note": "conditional:jrn-price-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "price_as_of": "conditional:jrn-price-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "price_source": "conditional:jrn-price-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "price_reason": "conditional:jrn-price-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "review_on": "conditional:jrn-review-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "status": "conditional:jrn-status-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "reviewed_at": "not-rendered|the reviewed state is shown by the status chip; the timestamp is not displayed",
+    "review_due": "conditional:jrn-due-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "portfolio_txn_id": "conditional:jrn-txn-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "txn": "conditional:jrn-txn-*|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands"
+  },
+  "DELETE /journal/{id}": {
+    "id": "conditional:jrn-list|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands",
+    "deleted": "conditional:jrn-list|built by F21 (docs/06 6.4b); the id is mapped to a real test id when the tab lands"
   }
 }

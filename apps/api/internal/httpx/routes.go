@@ -208,6 +208,12 @@ var routes = []route{
 	{Method: mPost, Path: "/telegram/test", Kind: kindTgTest},
 	{Method: mPost, Path: "/telegram/webhook", Public: true, NoCSRF: true, Limit: limitWebhook, Body: WebhookBodyLimit, Kind: kindTgWebhook},
 
+	// Decision journal (section 13a, B20): the owner's own notes per stock.
+	{Method: mGet, Path: "/stocks/{symbol}/journal"},
+	{Method: mPost, Path: "/stocks/{symbol}/journal"},
+	{Method: mPatch, Path: "/journal/{id}"},
+	{Method: mDelete, Path: "/journal/{id}"},
+
 	// Imports and owner-entered data (section 14)
 	{Method: mPost, Path: "/imports/{kind}/validate", Body: ImportBodyLimit},
 	{Method: mPost, Path: "/imports/{kind}/commit"},
