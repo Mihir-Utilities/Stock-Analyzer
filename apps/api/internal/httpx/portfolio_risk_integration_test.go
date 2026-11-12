@@ -3,7 +3,6 @@ package httpx
 import (
 	"context"
 	"encoding/json"
-	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -194,7 +193,7 @@ func TestPortfolioRiskMixedLedger(t *testing.T) {
 	// C2 through the API: an unpriced holding blanks the weights and names the stock
 	cc := e.stock("CCC", "IT")
 	e.stockTxn(cc, "buy", "5", "10", "2026-11-04")
-	r, body = e.risk("?view=equity")
+	_, body = e.risk("?view=equity")
 	body.into(t, &d)
 	if d.Concentration.TotalValue != nil || d.Concentration.TotalValueReason == nil || *d.Concentration.TotalValueReason != "missing_price: CCC" ||
 		d.Concentration.Top1 != nil || d.Concentration.HHI != nil {
@@ -272,7 +271,7 @@ func TestPortfolioRiskCost(t *testing.T) {
 	if median > 1500*time.Millisecond {
 		t.Errorf("median response %v is far over the 500 ms budget", median)
 	}
-	if points < 1000 || math.IsNaN(float64(points)) {
+	if points < 1000 {
 		t.Errorf("points %d", points)
 	}
 	_ = json.Valid

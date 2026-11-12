@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { cx } from "@/components/ui/cx";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -34,6 +34,7 @@ const loadHoldings = () => import("./HoldingsSection");
 const loadMfHoldings = () => import("./MfHoldingsSection");
 const loadTxn = () => import("./TxnSection");
 const loadMfTxn = () => import("./MfTxnSection");
+const loadRisk = () => import("./RiskSection");
 const sectionLoading = () => <Skeleton className="h-40 w-full" label="Loading section" />;
 const ChartsSection = dynamic(() => loadCharts().then((m) => m.ChartsSection), {
   loading: sectionLoading,
@@ -59,6 +60,44 @@ const TxnSection = dynamic(() => loadTxn().then((m) => m.TxnSection), {
 const MfTxnSection = dynamic(() => loadMfTxn().then((m) => m.MfTxnSection), {
   loading: sectionLoading,
 });
+const RiskSection = dynamic(() => loadRisk().then((m) => m.RiskSection), {
+  loading: sectionLoading,
+});
+
+/**
+ * Portfolio risk (docs/06 6.7b) loads its chunk and its data only when it is near the viewport, so the
+ * route stays inside its bundle budget and the summary is not slowed by the extra read. Where there is
+ * no IntersectionObserver (tests) it mounts at once.
+ */
+function RiskGate({ view }: { view: PortfolioView }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [near, setNear] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (near) return;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setNear(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) setNear(true);
+      },
+      { rootMargin: "400px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [near]);
+  return (
+    <div ref={ref} data-testid="pf-risk-gate">
+      {near ? (
+        <RiskSection view={view} />
+      ) : (
+        <Skeleton className="h-40 w-full" label="Portfolio risk loads when you scroll to it" />
+      )}
+    </div>
+  );
+}
 
 /** Starts the lazy imports; a failed preload is harmless because dynamic() asks again. */
 export function preloadSections(): Promise<unknown> {
@@ -343,6 +382,7 @@ function Body({ view }: { view: PortfolioView }) {
         {q.isPlaceholderData ? `Updating ${VIEW_LABEL[view]}...` : ""}
       </div>
       {top}
+      <RiskGate view={view} />
       {view === "all" ? (
         <Tabs
           label="Transactions"
