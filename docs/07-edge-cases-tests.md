@@ -1062,11 +1062,11 @@ Worker rows (SWD-W) are U tests in `apps/worker/tests/test_swing_dips.py` with t
 | SWD-U05 | "How this differs" sentence | `inv-swing-differs` is present and mentions the all-time-high view of the Drawdown profile | U |
 | SWD-U06 | Missing block, `compute_error`, wrong shape, insufficient history | "Not computed yet" for a missing block; the `compute_error` message for null plus reason; a card-level error for a wrong shape without affecting other cards; the 252-day sentence for `insufficient_history` | U |
 | SWD-U07 | Per-field degradation | A string where a number is expected degrades that cell to an em dash with a reason; one bad record does not blank the table | U |
-| SWD-U08 | 10% / 20% choice | The radio group switches the last-dips table between the two thresholds, keyboard operable (arrow keys), and says "Showing the last {k} of {n} dips" | U |
+| SWD-U08 | 10% / 20% choice (select) | The native select switches the last-dips table between the two thresholds and says "Showing the last {k} of {n} dips" | U |
 | SWD-U09 | Swing legs table | Rule B rows show legs, bounced, open and the medians, with the caption that a bounce is not a recovery | U |
 | SWD-U10 | Definitions | `definitions.swing_dips` equals the owner text of docs/05 12.13 (generated; `npm run gen:definitions` leaves no diff) and contains no ids | U |
 | SWD-U11 | Lazy loading and bundle | The card is loaded with `next/dynamic`; `npm run check:bundle` stays within budget | CI |
 | SWD-U12 | Field coverage guard | `f15-polish` UI-09 passes with the five mapped ids | U |
 | SWD-E01 | axe in both themes at 375 and 1440 px | No serious or critical violation on the Analysis tab with the card visible | E |
-| SWD-E02 | Keyboard and no page scroll | The tables' regions and the 10/20 radios are reachable and operable by keyboard; no horizontal page scroll at 375 px | E |
+| SWD-E02 | Keyboard and no page scroll | The tables' regions and the 10/20 select are reachable and operable by keyboard; no horizontal page scroll at 375 px | E |
 | SWD-Z01 | Safe Edition | No new egress, no new dependency; deny-list, SAF-13 and licence scan pass | CI |

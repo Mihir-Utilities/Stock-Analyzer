@@ -20,6 +20,7 @@ from worker.analytics import inv_months as inm
 from worker.analytics import investing as inv
 from worker.analytics import returns as rt
 from worker.analytics import sip
+from worker.analytics import swing_dips as swd
 from worker.analytics.inv_common import InvContext
 
 F64 = NDArray[np.float64]
@@ -279,6 +280,7 @@ def _analysis(bars: Bars, bench: dict[date, float], ctx: InvContext) -> dict[str
     model = inm.MonthModel(d, c, ctx.today, ctx.holidays, ctx.market_closed)
     cells, cell_reasons = inm.month_cells(model)
     st = ctx.settings
+    swing, swing_reason = swd.swing_dips_safe(d, c, st)  # isolated: a failure never aborts
     return {
         "format": "columnar",  # drawdown/rolling_* align to `series.dates` (the last 750 rows)
         "drawdown": ser.drawdown_column(c),
@@ -300,6 +302,9 @@ def _analysis(bars: Bars, bench: dict[date, float], ctx: InvContext) -> dict[str
         "seasonality": inm.seasonality(model, len(d), st),
         "position": inv.position(d, c),
         "drawdown_profile": inv.drawdown_profile(d, c, st),
+        # Swing dips (docs/05 12.13): an additional block next to the unchanged drawdown profile.
+        "swing_dips": swing,
+        "swing_dips_reason": swing_reason,
         "holding_periods": inv.holding_periods(d, c, st),
         "entry_study": inv.entry_study(d, c, st),
         "vol_regime": inv.vol_regime(d, vol21, st),
