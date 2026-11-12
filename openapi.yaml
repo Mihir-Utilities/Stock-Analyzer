@@ -4240,8 +4240,6 @@ components:
         start_date:
           type: "string"
           format: "date"
-        start_close:
-          type: "number"
         low_date:
           type: "string"
           format: "date"

@@ -1512,7 +1512,6 @@ export interface components {
             peak_close?: number;
             /** Format: date */
             start_date?: string;
-            start_close?: number;
             /** Format: date */
             low_date: string;
             low_close?: number;
