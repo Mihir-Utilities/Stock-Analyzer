@@ -6,9 +6,9 @@ Each file is a self-contained work package: goal, scope, out-of-scope, deliverab
 | Track | Folder | Tasks | What it covers |
 |---|---|---|---|
 | Foundation | `foundation/` | T00-T02 | Repo, CI, safety guards, spikes, migrations |
-| Backend (Go API) | `backend/` | B01-B14 (+ B15 proposed, D-MF; + B16 proposed, INV) | HTTP API, auth, imports, portfolio, alerts API, MF API |
+| Backend (Go API) | `backend/` | B01-B14 (+ B15 proposed, D-MF; + B16 proposed, INV; + B21 proposed, RST) | HTTP API, auth, imports, portfolio, alerts API, MF API |
 | Data/Worker (Python) | `data/` | D01-D08 | Ingestion jobs (`post_import`), analytics, alerts, ML, housekeeping (broker adapter D02 removed) |
-| Frontend (Next.js) | `frontend/` | F01-F15 (+ F16 proposed, D-MF; + F17 proposed, INV) | Design system, screens, visualisations |
+| Frontend (Next.js) | `frontend/` | F01-F15 (+ F16 proposed, D-MF; + F17 proposed, INV; + F22 proposed, RST) | Design system, screens, visualisations |
 
 ## Recommended order (sequential waves; tasks inside a wave can run in parallel)
 | Wave | Tasks | Notes |
@@ -40,7 +40,7 @@ Each file is a self-contained work package: goal, scope, out-of-scope, deliverab
 T00 -> T01, T02
 T00,T02 -> B01 -> B02 -> B03,B08(status only),B10,B12 ; B03 -> B04,B05,B11 ; D01 -> B09 ; B03,B09 -> B06a ; B05,B06a -> B06b -> B07
 T00,T02 -> D01 -> D03 -> D05 -> D07 ; D01 -> D04 ; D03,B12 -> D06 ; D01,D03..D07 -> D08      (D02 removed)
-B11,B06a,B10 -> B15 -> F16 (D-MF, proposed)      D05,B04,B11 -> B16 -> F17 (INV, proposed); F04,F06,F03 -> F17      F11,F13a,F13b -> F16
+B11,B06a,B10 -> B15 -> F16 (D-MF, proposed)      D05,B04,B11 -> B16 -> F17 (INV, proposed); F04,F06,F03 -> F17      F11,F13a,F13b -> F16      B16,B06a -> B21 -> F22 (RST, proposed; F17,F02,F03 -> F22)
 T00,B01 -> F01 -> F02 -> F03 -> F04..F14 -> F15 ; F13a needs B06a, F13b needs B06b
 ```
 
