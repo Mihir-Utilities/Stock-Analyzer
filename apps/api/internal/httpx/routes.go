@@ -185,6 +185,7 @@ var routes = []route{
 	{Method: mPatch, Path: "/portfolio/txns/{id}"},
 	{Method: mDelete, Path: "/portfolio/txns/{id}"},
 	{Method: mGet, Path: "/portfolio/summary"},
+	{Method: mGet, Path: "/portfolio/risk"}, // B19, portfolio risk (docs/03 section 12b)
 	// Mutual fund holdings (docs/03 section 12a, decision D-MF). Declared so the router matches openapi.yaml;
 	// they answer 501 until B15 builds them.
 	{Method: mGet, Path: "/portfolio/mf/txns"},

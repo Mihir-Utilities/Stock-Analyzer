@@ -1028,3 +1028,49 @@ Worker rows (INV-M, INV-S, INV-P, INV-D, INV-H, INV-E, INV-V, INV-L, INV-R) are 
 | INVA-13 | Tile copy by scope | Empty copy, nothing-ranked copy and caption follow the scope; footnote and "history starts" text unchanged | U |
 | INVA-14 | Tile 48 stocks | 48 stocks: ranking, collapsed short group, sort and min-years still work; 375 px no horizontal scroll; axe clean in both themes at 375 and 1440 px with the scope control | E |
 | INV-Z01 | Safe Edition | No new egress, no new dependency with a forbidden licence; deny-list, SAF-13 and licence scan pass | CI |
+
+## PRK: portfolio-level risk (decision PRK, PROPOSED; API B19, web F20; formulas docs/05 8.6, API docs/03 12b, screen docs/06 6.7b)
+Types: U unit, I integration (Postgres), E Playwright. Vectors C1, C2, S1, TW1..TW6 are in docs/05 8.6.
+
+| ID | Case | Expected | Type |
+|---|---|---|---|
+| PRK-C01 | Vector C1 (A 5000 Banks, B 3000 Banks, C 1500 IT, D 500 no sector) | weights 50/30/15/5, top1 50, top3 95, top5 100 with `holdings_count` 4, `hhi` 0.365, `effective_holdings` 2.74; groups Banks 80, IT 15, Unclassified 5, `group_hhi` 0.665, `group_top1_pct` 80 | U |
+| PRK-C02 | Vector C2: D has no price | `total_value` null with `missing_price: D`; every weight, top-N, hhi, effective, group figure null with the reason; A, B, C keep `value`; no partial sum anywhere | U |
+| PRK-C03 | Missing sector, blank sector (whitespace) | both land in the visible `Unclassified` group (`kind: unclassified`), not dropped | U |
+| PRK-C04 | One holding; fewer than five holdings | weight 100, hhi 1, effective 1; top5 equals 100 and `holdings_count` is given | U |
+| PRK-C05 | No open holding (never held, or everything sold) | `total_value` null, reason `no_open_holdings`, lists `[]`, 200 | U/I |
+| PRK-C06 | `mf` view: groups by `mf_scheme.category`, null category is Unclassified; `all` view: stocks by sector, every fund in one `Mutual funds` slice | as described | U/I |
+| PRK-C07 | Exited holdings and transactions after `as_of` | not counted | U/I |
+| PRK-C08 | Weights use decimals | six holdings with thirds: weights sum within 0.05 of 100 and are computed from decimal values (a value of 1234.5678 is not read from a rounded percent) | U |
+| PRK-S01 | Vector S1 | impacts -500/-5.00, -1000/-10.00 and the other rows exactly; order = `by_holding` | U |
+| PRK-S02 | Holding without value; total missing | `impact_*` null with `no_price`/`no_nav`; with a value but no total the rupees show and the percent is null with the total's reason | U |
+| PRK-S03 | Wording | the response `label` and the UI text contain "what if" semantics and no forecast, target or advice words (a test scans the copy for forbidden words) | U/E |
+| PRK-H01 | Vector TW1 (mid-period contribution) | index 100, 110, 99, 99, 108.9; dd 0, 0, -10, -10, -1; max_drawdown -10 (peak 01-02, trough 01-03, not recovered); current -1.00; `days_under_water` 3; the raw `value` series is 1000, 2200, 3960, 3960, 4356 | U |
+| PRK-H02 | Vector TW2 (full exit, re-entry, empty day omitted) | points on 01-01, 01-02 (value 0.0000), 01-04, 01-05; index 100, 110, 110, 99; `points_count` 4 | U |
+| PRK-H03 | Vector TW3 (missing price on one date) | 01-03 is a gap `missing_price: C` (one range, `gap_dates_total` 1); 01-04 index 100.3333, dd -2.90; no partial sum on 01-03 | U |
+| PRK-H04 | Vector TW3b (trade inside the gap) | `skipped_steps` 1, index 103.3333 on 01-04, warning `HISTORY_STEP_SKIPPED`; the step is never silently 0 | U |
+| PRK-H05 | Vector TW5 (MF NAV older than 4 days in `all`) | 01-08 is a gap `nav_gap: S`; 01-09 index 106.0 | U |
+| PRK-H06 | Vector TW6 (2:1 split on ex-date; also a `src_adjusted` bar) | index 100, 104, 110 with no artificial fall; an adjusted-source bar is converted the same way | U |
+| PRK-H07 | Deposits cannot hide a fall, withdrawals cannot fake one | TW1 shows -10 where the raw value shows none; a withdrawal of half the holding with unchanged prices leaves the index flat | U |
+| PRK-H08 | No transactions in the view | `series_reason: no_transactions`, `points: []`, drawdown fields null with `too_few_points` | U/I |
+| PRK-H09 | Transactions but no prices at all | `series_reason: no_priced_dates`; one gap range with `missing_price: SYM`; nothing carried from before the first bar | U/I |
+| PRK-H10 | Prices start after the first buy | the leading dates are one gap range; the index starts at the first valid date (base 100) | U |
+| PRK-H11 | Past `as_of` | later transactions and later bars are ignored; `to` is at most `as_of` | U/I |
+| PRK-H12 | Drawdown definitions | on a fixed index series (VD1 of docs/05 12.4 closes as the index): current, max with peak, trough, recovery date, `days_under_water`, ties earliest | U |
+| PRK-H13 | One point only | `too_few_points`, drawdown fields null, no 0 | U |
+| PRK-H14 | Oversold stored sequence | the instrument is excluded, warning `HOLDINGS_INCONSISTENT`, the rest of the response is served | I |
+| PRK-H15 | Gap list bounded | 80 separate gap ranges: 50 returned, `gaps_truncated` true, `gap_dates_total` exact | U |
+| PRK-H16 | Weekend-dated transaction | takes effect at the end of the next series date; the index is unchanged by it | U |
+| PRK-H17 | Single held stock with a missing bar | treated as a non-trading day (documented limitation), no point on that date | U |
+| PRK-A01 | Contract | 401 without a session; 422 for `view=foo` and for a future or malformed `as_of` (`details.fields`); default view is `all`; the route is in `openapi.yaml` and `routes.go` (TestRoutesMatchOpenAPI) | I |
+| PRK-A02 | Honesty of the JSON | no `NaN`, `Infinity` or `-0`; money strings have 4 decimals; percent fields are percent numbers; every null has its `*_reason` | I |
+| PRK-A03 | Cost | about 200 transactions over about 40 stocks and about 10 years (2,500 dates) of daily prices answer under 500 ms locally; the measured value is logged and recorded in OPEN_QUESTIONS PRK-8 | I |
+| PRK-A04 | No new egress | no new import, host or dependency; deny-list and licence scan pass | CI |
+| PRK-U01 | Section renders each block from fixtures: full, concentration unavailable (unpriced), history empty, history with gaps and skipped steps | each state per docs/06 6.7b; reasons are visible text; nothing is 0 or NaN | U |
+| PRK-U02 | Zod per-field degradation | a wrong-typed field degrades only its own figure to an em dash with "could not be read"; the section does not crash; a missing block says so | U |
+| PRK-U03 | View switch | the section reads the page's `view` (URL state), sends `view` explicitly, keeps the previous data dimmed while loading, and announces the change in a polite live region | U/E |
+| PRK-U04 | Lazy load | the section is loaded with `next/dynamic`; `npm run check:bundle` keeps the portfolio route under 250 kB gzip | CI |
+| PRK-U05 | Field coverage | every field of `GET /portfolio/risk` is in `docs/field-map.json` with a real test id (strict f15-polish guard) | U |
+| PRK-U06 | Definitions | the five owner texts (`pf_*`) exist in docs/05 8.6.5 and in the generated `definitions.ts`; none contains ids or section numbers | U |
+| PRK-U07 | Formatting | all figures go through `format.ts` (INR, percent with sign, plain index); no ad-hoc colours; charts only through `ChartFrame` | U |
+| PRK-E01 | Playwright | axe clean in both themes at 375 and 1440 px for the section in All, Equity and Mutual funds; keyboard (arrow keys) on the view switch updates the section; no horizontal page scroll at 375 px; "Show data" opens for both charts | E |

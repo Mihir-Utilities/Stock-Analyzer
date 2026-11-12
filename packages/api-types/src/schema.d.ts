@@ -742,6 +742,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/portfolio/risk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Portfolio-level risk for view=all|equity|mf (default all): concentration (weights per holding and group, top-1/3/5, HHI as a fraction, effective holdings), position stress (what-if 10 and 20 percent fall of one holding, arithmetic only) and the reconstructed daily value history with a time-weighted return index, current and maximum drawdown and days under water. Money fields are strings with 4 decimals (INR); percent fields are percent numbers; unknown values are null with a sibling *_reason; an unpriced holding nulls every weight (never a partial total); a date without a price is a gap, not a partial sum. (docs/03 section 12b, docs/05 section 8.6) */
+        get: operations["getPortfolioRisk"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/portfolio/adjustments": {
         parameters: {
             query?: never;
@@ -4141,6 +4158,43 @@ export interface operations {
                 as_of?: string;
                 /** @description Also list fully sold positions (hidden by default; their realized P&L is always in the totals). */
                 include_exited?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["RateLimited"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getPortfolioRisk: {
+        parameters: {
+            query?: {
+                /** @description Asset-class filter of one ledger: all (default), equity or mf. Other values are 422. */
+                view?: "all" | "equity" | "mf";
+                /** @description Valuation date (market date, IST); default today; a future date or a bad format is 422. */
+                as_of?: string;
             };
             header?: never;
             path?: never;
