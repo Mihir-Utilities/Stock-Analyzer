@@ -1074,7 +1074,48 @@ Types: U unit, I integration (throwaway Postgres), E Playwright, CI pipeline. Da
 | ALS-08 | Dip-low row absent | No row mentions "current dip" while the data has no dip-low close (ALS-1) | U |
 | ALS-09 | Playwright | Keyboard path: focus a shortcut, Enter opens the drawer with the price filled, submit creates the alert (mocked), Escape closes without creating; axe clean in both themes at 375 and 1440 px | E |
 | JRN-Z01 | Safe Edition | No new egress and no new dependency; deny-list, SAF-13 and licence scan pass | CI |
+## RST: relative strength against the Nifty 50 and sector peers (decision RST, PROPOSED; worker and API B21, web F22; formulas docs/05 12.14, API docs/03 4a.RST, card docs/06 6.4a.RST)
 
+Worker rows (RST-I, RST-P, RST-B) are U tests in `apps/worker/tests/test_relative_strength.py` (pure, vectors RA1..RA3, RP1..RP3 in the Case column) and, with `TEST_DATABASE_URL`, `tests/test_relative_strength_db.py`; API rows (RST-W) are I tests in `apps/api/internal/httpx`; web rows (RST-C, RST-E) are U/E tests.
+
+| ID | Case | Expected | Type |
+|---|---|---|---|
+| RST-I01 | Alignment (RA1): stock and index share 4 of their dates | `aligned_rows` 4, `dropped_stock_dates` 1, `dropped_index_dates` 1 (an index date after the stock's last bar is not counted) | U |
+| RST-I02 | Trailing windows on the aligned series (RA1, `w` 1, 2, 3) | `excess_pp` -9.0909, -10.0, -11.0; stock and index percents as in docs/05 12.14 | U |
+| RST-I03 | Window limits (RA1) | `w = 4`: `null`, `insufficient_overlap`; `w = 6`: `null`, `insufficient_history`; never 0 | U |
+| RST-I04 | Rebased ratio (RA1) | `[100, 100, null, 100, 90]` against the stock's own dates, `ratio_base_date` 2024-01-01; length equals `series.dates` | U |
+| RST-I05 | Rolling 1-year win share, a stock that lags then leads (RA2) | 6 windows, share 83.3333, median excess 12.2727, independent 3, not small | U |
+| RST-I06 | Same, short history (RA2 truncated) | 4 windows, share 75.0, independent 2, `small_sample` true; with `INV_MIN_WINDOWS` 5: `null`, `too_few_windows` | U |
+| RST-I07 | A tie is not a win | A stock equal to the index on every row: 0 wins, share 0.0 with its window count | U |
+| RST-I08 | Short index (RA3) | 10 aligned rows: `vs_index` null `no_index_series`; 100 aligned rows against 300 stock rows: 1M and 3M computed, 6M, 1Y and `rolling_year` `insufficient_overlap`, block present; no index rows: `no_index_series` | U |
+| RST-I09 | Non-finite or non-positive index values are ignored | A NaN, 0 or negative index value is not an aligned row and is not counted as dropped | U |
+| RST-I10 | Calendar years | Base is the last aligned row of the previous year, end the last aligned row of the year, the last year is `ytd`, a year with no previous-year row has no row, at most 10 rows; values match a hand computation on a two-year fixture | U |
+| RST-I11 | Unit and rounding | Percents and points have 4 decimals, no `-0.0`, no NaN or Infinity in the JSON (`allow_nan=False` passes) | U |
+| RST-P01 | 2-peer sector (RP1) | `n_peers` 2, `rank`, `percentile`, `peer_median_pct`, `vs_median_pp` null, reason `too_few_peers` | U |
+| RST-P02 | 3-peer sector (RP2) | `rank` 3 of 4, percentile 37.5, peer median 15.0, `vs_median_pp` -5.0, `small_sample` true | U |
+| RST-P03 | Tie with a peer (RP2 tie variant) | `rank` 2 (ties share the better rank), percentile 50.0, `vs_median_pp` 0.0 | U |
+| RST-P04 | A peer without a bar dated on the stock's last bar date, or with fewer than `w + 1` bars | Not counted for that window; `excluded` counts peers that qualify for no window | U |
+| RST-P05 | The stock itself is shorter than the window | The window is `null`, `insufficient_history`; the other windows still compute | U |
+| RST-P06 | Sector grouping (RP3, loader) | Same sector means trimmed and case-insensitive; a stock with no sector has `vs_peers` null `no_sector` and is nobody's peer; an untracked same-sector stock is not a peer | U |
+| RST-P07 | Peer prices at or before the stock's `as_of` only | A peer with newer bars than the stock is measured at the stock's last bar date, not at its own last bar | U |
+| RST-P08 | The peer read is one grouped query | Exactly one extra `price_daily` read per `compute_analysis` (counted with a spy); no read when the stock has no sector | U |
+| RST-B01 | Block isolation | An exception inside `vs_index` gives `vs_index` null `compute_error` with `vs_peers` intact and the snapshot still written (the other analysis blocks unchanged), and the failure is logged without prices or secrets; the same for `vs_peers` | U |
+| RST-B02 | Existing blocks untouched | The existing `analysis` keys and their values for a fixture are identical with and without the new block; the new key is additive | U |
+| RST-B03 | Peer load failure | A database error while reading peers gives `vs_peers` null `compute_error` and the snapshot is written | I |
+| RST-B04 | Pruning and size | The newest snapshot keeps `relative_strength`; older snapshots drop it with `analysis` (RET-90 rule); a 25-year stock stays under the 200 KB snapshot budget (RET-89) | I |
+| RST-B05 | No wall clock | Re-running with the same inputs and `today` gives byte-identical JSON; nothing reads the clock | U |
+| RST-W01 | `GET /stocks/{symbol}/indicators` passes `relative_strength` through unchanged | The block and both reasons appear in `data.analysis`; absent in an older snapshot; the `expand` step does not drop or reshape it | I |
+| RST-W02 | Contract | `openapi.yaml` has `InvRelativeStrength`, the generated types are current (`check:generated`), `docs/field-map.json` maps every field to a real `data-testid`; no new route (`TestRoutesMatchOpenAPI` untouched) | CI |
+| RST-C01 | Card renders both halves with the fixture | Window table, years table, chart, beat share with the overlap sentence, peer strip, source chip, note line "Beating the index in the past is not a forecast." | U |
+| RST-C02 | `no_index_series` | The hint "Import NIFTY50 history in prices.csv (the reserved symbol)" and the Import Center link; no numbers; the peers half still renders | U |
+| RST-C03 | `no_sector`, `too_few_peers`, `compute_error` | Each shows its own sentence with the reason as visible, focusable text; never a rank for fewer than 3 peers | U |
+| RST-C04 | Small sample and stale | Chip under 5 peers and under 3 independent periods; as-of chip amber when stale | U |
+| RST-C05 | Missing block and wrong-shaped fields | "Not computed yet" for a missing block; a bad field shows an em dash with a reason and does not throw; other halves render | U |
+| RST-C06 | Honesty | No 0, NaN or Infinity text; no verdict wording; no colour classes outside tokens; numbers through `format.ts`; the chart only through `ChartFrame` | U |
+| RST-C07 | Definitions | `definitions.ts` carries `relative_return`, `relative_line`, `beat_share`, `peer_rank` generated from docs/05 (`gen:definitions --check` clean) | U |
+| RST-E01 | Playwright: the Analysis tab with the card | axe has no serious or critical violation in both themes at 375 and 1440 px; no horizontal page scroll; keyboard reaches the How to read, the reasons and the chart's Show data | E |
+| RST-E02 | Playwright: no index imported | The hint and the Import link are visible and reachable by keyboard | E |
+| RST-Z01 | Safe Edition | No new egress, no new dependency, no NSE/BSE or sector-index source; deny-list, SAF-13 and licence scan pass | CI |
 ## SWD: swing dips (decision SWD, PROPOSED; worker B18, web F19; formulas docs/05 12.13, API docs/03 4a-swing, card docs/06 6.4a item 4a)
 
 Worker rows (SWD-W) are U tests in `apps/worker/tests/test_swing_dips.py` with the hand-computed vectors SW1-SW4 of docs/05 12.13; API rows (SWD-A) are I tests in `apps/api/internal/httpx`; web rows (SWD-U) are U tests in `apps/web/tests/unit/swd-f19.test.tsx`; E rows are Playwright (`tests/e2e/swd-f19.spec.ts`). Prices are on consecutive calendar days in the vectors; there is no wall clock and no network.

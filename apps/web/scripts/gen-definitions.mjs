@@ -80,6 +80,11 @@ export const ENTRIES = [
   ["sip_vs_lump", "Monthly plan versus lump sum", "", "**Owner text (sip_vs_lump):**"],
   ["calmar", "Growth per unit of deepest fall", "", "**Owner text (calmar):**"],
   ["downside_risk", "Growth per unit of downside", "", "**Owner text (downside_risk):**"],
+  // Relative strength (RST, F22): docs/05 12.14.
+  ["relative_return", "Return against the Nifty 50", "", "**Owner text (relative_return):**"],
+  ["relative_line", "Stock divided by the Nifty 50", "", "**Owner text (relative_line):**"],
+  ["beat_share", "One-year periods that beat the index", "", "**Owner text (beat_share):**"],
+  ["peer_rank", "Rank among tracked sector peers", "", "**Owner text (peer_rank):**"],
 ];
 
 function strip(md) {

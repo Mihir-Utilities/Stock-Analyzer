@@ -754,7 +754,7 @@ paths:
             type: "string"
       responses:
         "200":
-          description: "Success. Latest analysis_snapshot: returns, technicals, scores, null_reasons, units and series/analysis arrays as [[date, value]] pairs (nulls at warm-up positions, last 750 rows). 404 DATA_UNAVAILABLE reason no_prices_imported or no_history (fewer than 60 valid bars or snapshot not computed yet). An alias answers data = {redirect_symbol}. INV (proposed, B16): data.analysis also carries the optional investment-context blocks year_returns, seasonality, position, drawdown_profile, holding_periods, entry_study, vol_regime, sip_backtest and risk_adjusted (schema InvAnalysisBlocks, docs/03 4a, docs/05 section 12); month_year keeps its shape. There is no GET /stocks/{symbol}/analysis route."
+          description: "Success. Latest analysis_snapshot: returns, technicals, scores, null_reasons, units and series/analysis arrays as [[date, value]] pairs (nulls at warm-up positions, last 750 rows). 404 DATA_UNAVAILABLE reason no_prices_imported or no_history (fewer than 60 valid bars or snapshot not computed yet). An alias answers data = {redirect_symbol}. INV (proposed, B16): data.analysis also carries the optional investment-context blocks year_returns, seasonality, position, drawdown_profile, holding_periods, entry_study, vol_regime, sip_backtest and risk_adjusted, plus relative_strength (RST, B21, InvRelativeStrength, docs/03 4a.RST, docs/05 12.14) (schema InvAnalysisBlocks, docs/03 4a, docs/05 section 12); month_year keeps its shape. There is no GET /stocks/{symbol}/analysis route."
           content:
             "application/json":
               schema:
@@ -4622,6 +4622,189 @@ components:
       required:
         - "as_of"
         - "window"
+    InvRelativeStrength:
+      type: "object"
+      description: "analysis.relative_strength (docs/05 12.14, docs/03 4a.RST): the stock against the owner-imported NIFTY50 and against tracked peers of the same sector. Price return only. Each half is an object or null with its sibling reason. Past behaviour is not a forecast."
+      properties:
+        as_of:
+          type: "string"
+          format: "date"
+        bars:
+          type: "integer"
+        basis:
+          type: "string"
+        vs_index:
+          type: "object"
+          nullable: true
+          properties:
+            index_code:
+              type: "string"
+              enum:
+                - "NIFTY50"
+            index_as_of:
+              type: "string"
+              format: "date"
+            index_rows:
+              type: "integer"
+            aligned_rows:
+              type: "integer"
+            first_aligned:
+              type: "string"
+              format: "date"
+            last_aligned:
+              type: "string"
+              format: "date"
+            dropped_stock_dates:
+              type: "integer"
+            dropped_index_dates:
+              type: "integer"
+            windows:
+              type: "array"
+              items:
+                type: "object"
+                properties:
+                  key:
+                    type: "string"
+                    enum:
+                      - "1m"
+                      - "3m"
+                      - "6m"
+                      - "1y"
+                  rows:
+                    type: "integer"
+                  stock_pct:
+                    type: "number"
+                    nullable: true
+                  index_pct:
+                    type: "number"
+                    nullable: true
+                  excess_pp:
+                    type: "number"
+                    nullable: true
+                    description: "stock_pct minus index_pct, percentage points"
+                  reason:
+                    type: "string"
+                    nullable: true
+                    description: "insufficient_history | insufficient_overlap"
+            years:
+              type: "array"
+              items:
+                type: "object"
+                properties:
+                  year:
+                    type: "integer"
+                  kind:
+                    type: "string"
+                    enum:
+                      - "full"
+                      - "ytd"
+                  base_date:
+                    type: "string"
+                    format: "date"
+                  end_date:
+                    type: "string"
+                    format: "date"
+                  stock_pct:
+                    type: "number"
+                  index_pct:
+                    type: "number"
+                  excess_pp:
+                    type: "number"
+            rolling_year:
+              type: "object"
+              properties:
+                windows:
+                  type: "integer"
+                independent_periods:
+                  type: "integer"
+                share_beat_pct:
+                  type: "number"
+                  nullable: true
+                median_excess_pp:
+                  type: "number"
+                  nullable: true
+                small_sample:
+                  type: "boolean"
+                reason:
+                  type: "string"
+                  nullable: true
+                  description: "insufficient_history | insufficient_overlap | too_few_windows"
+            ratio_rebased:
+              type: "array"
+              nullable: true
+              description: "Aligned to the stored series.dates (last 750 rows): position i belongs to the date of pair i of data.analysis.drawdown; null where the date is not an aligned date. 100 at ratio_base_date."
+              items:
+                type: "number"
+                nullable: true
+            ratio_base_date:
+              type: "string"
+              format: "date"
+              nullable: true
+            ratio_reason:
+              type: "string"
+              nullable: true
+        vs_index_reason:
+          type: "string"
+          nullable: true
+          description: "no_index_series | compute_error"
+        vs_peers:
+          type: "object"
+          nullable: true
+          properties:
+            sector:
+              type: "string"
+            as_of:
+              type: "string"
+              format: "date"
+            peers_in_sector:
+              type: "integer"
+            excluded:
+              type: "integer"
+            windows:
+              type: "array"
+              items:
+                type: "object"
+                properties:
+                  key:
+                    type: "string"
+                    enum:
+                      - "3m"
+                      - "6m"
+                      - "1y"
+                  rows:
+                    type: "integer"
+                  stock_pct:
+                    type: "number"
+                    nullable: true
+                  n_peers:
+                    type: "integer"
+                  n_total:
+                    type: "integer"
+                  rank:
+                    type: "integer"
+                    nullable: true
+                  percentile:
+                    type: "number"
+                    nullable: true
+                    description: "0-100, mid-rank, higher = stronger among tracked same-sector stocks"
+                  peer_median_pct:
+                    type: "number"
+                    nullable: true
+                  vs_median_pp:
+                    type: "number"
+                    nullable: true
+                  small_sample:
+                    type: "boolean"
+                  reason:
+                    type: "string"
+                    nullable: true
+                    description: "insufficient_history | too_few_peers"
+        vs_peers_reason:
+          type: "string"
+          nullable: true
+          description: "no_sector | compute_error"
+      required:
+        - "as_of"
     InvAnalysisBlocks:
       type: "object"
       description: "The investment-context additions to GET /stocks/{symbol}/indicators data.analysis (docs/03 4a, docs/05 section 12). All optional: an older snapshot lacks them. month_year keeps its [year, month, percent|null] shape; a null cell has its reason in month_year_reasons ([year, month, no_base|gap_before|incomplete_month_data]). A month is closed when today's IST date is after its last day; a closed month whose prices do not reach its last expected trading day is null (incomplete_month_data) (D-INV)."
@@ -4658,6 +4841,8 @@ components:
           "$ref": "#/components/schemas/InvSipBacktest"
         risk_adjusted:
           "$ref": "#/components/schemas/InvRiskAdjusted"
+        relative_strength:
+          "$ref": "#/components/schemas/InvRelativeStrength"
     SeasonalityList:
       type: "object"
       description: "data of GET /stocks/seasonality (docs/03 section 4b)."

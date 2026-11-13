@@ -275,6 +275,26 @@ export const definitions = {
     section: "",
     text: "Yearly price growth divided by how large the falling days were, counting only days when the price fell. It ignores dividends and has no risk-free rate.",
   },
+  "relative_return": {
+    label: "Return against the Nifty 50",
+    section: "",
+    text: "How much the stock's price rose or fell over the period minus how much the Nifty 50 index did over the same days, in percentage points. A positive number means the stock did better than the index in that period. Only dates where both have a closing price are used, and the price change excludes dividends.",
+  },
+  "relative_line": {
+    label: "Stock divided by the Nifty 50",
+    section: "",
+    text: "The stock's price divided by the Nifty 50 level, scaled so the first day shown is 100. A rising line means the stock did better than the index since that day; a falling line means it did worse. It does not say what will happen next.",
+  },
+  "beat_share": {
+    label: "One-year periods that beat the index",
+    section: "",
+    text: "Out of all the past one-year periods that ended on a day in your imported history, the share in which the stock's price change was bigger than the index's. The periods overlap heavily, so they are far fewer independent experiences than the count suggests. Beating the index in the past is not a forecast.",
+  },
+  "peer_rank": {
+    label: "Rank among tracked sector peers",
+    section: "",
+    text: "How this stock's price change over 3, 6 and 12 months ranks among the other stocks you track in the same sector. Rank 1 is the biggest gain. It only compares stocks you track, it is not the whole sector, and no sector index is used.",
+  },
 } as const satisfies Record<string, Definition>;
 
 export type DefinitionKey = keyof typeof definitions;

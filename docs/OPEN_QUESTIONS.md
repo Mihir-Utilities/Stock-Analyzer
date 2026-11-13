@@ -1001,7 +1001,27 @@ Request: an investor wants a monthly-return heatmap with a Year column and seaso
 | ALS-2 | Does any new alert kind help? | No. `price_below` and `price_above` express every offered level; `wk52_high` and `wk52_low` are events at the extremes, not levels like "10% below the high". No new kind. | 03 13a |
 | ALS-3 | How the existing alert form is prefilled. | The form had no prefill (it only took an existing alert to edit). The smallest change: an optional `prefill` prop (symbol, kind, price) on the existing `AlertForm`; the Alerts page does not pass it. No URL deep link (a URL would let a link put a level into the form; a prop cannot be forged from outside). | 06 6.4b, 6.8 |
 | ALS-4 | 200-day average direction. | The kind follows the last close: above the average gives `price_below` ("falls to"), below gives `price_above` ("rises to"); the label states which. A shortcut for a level the last close already satisfies still opens the form and the server's `THRESHOLD_ALREADY_MET` text explains. | 06 6.4b |
+## Relative strength: Nifty 50 and sector peers (RST, Claude, 2026-11-12; none blocks the build; each row has the default used; owner may overrule)
 
+| ID | Question or ambiguity | Proposed default (owner may change) | Where |
+|---|---|---|---|
+| RST-1 | Relative strength against a sector index. | Not available (Safe Edition: no sector index source) and never simulated. "Against the sector" means the stock's return rank and the median of **tracked** stocks of the same owner-imported sector. | 05 12.14.6 |
+| RST-2 | Minimum overlap with the index. | 252 aligned rows for any 1-year figure, read as 252 aligned one-day returns (253 aligned rows); below that the figure is null with `insufficient_overlap`. The whole block is `no_index_series` only when the index has no valid row or fewer than 22 aligned rows (too short for the 1-month window). | 05 12.14.1-2 |
+| RST-3 | Calendar-year base when the previous year's last aligned date is far from year end (a gap in either series). | No extra rule: base and end dates are shown on every row and the dropped-date counts are shown; no threshold was invented. A year with no aligned row in the previous year has no row. | 05 12.14.3 |
+| RST-4 | Small-sample flag for peers. | `small_sample` when fewer than 5 peers took part (the 3-peer minimum is the plan's). Judgement, not evidence. | 05 12.14.6 |
+| RST-5 | Up and down capture ratios. | Deferred (out of scope of this item); revisit if the owner wants them. | 05 12.11 |
+| RST-6 | Staleness of peer ranks. | Ranks are stored in the stock's own snapshot; a peer's price change shows only after this stock is recomputed. The card says so with the `as_of`. No cross-stock recompute is added (a recompute of every tracked stock after an import would multiply the cost); the owner can run the recompute for all tracked stocks. | 05 12.14.6, RUNBOOK 153 |
+| RST-7 | Peer alignment: a peer with a different last bar date. | Peers are measured at this stock's last bar date and must have a bar on that date; others are left out and counted (`excluded`). No forward-fill and no tolerance window. | 05 12.14.6 |
+| RST-8 | Windows are aligned trading rows (21/63/126/252), not calendar months, to match docs/05 12.0 and the Holding periods card. | As stated; the labels say "about 1 month" etc. only through the `rows` count shown in the tooltip. | 05 12.14.2 |
+
+## B21 and F22 notes (Claude, 2026-11-12; none blocks the owner; the owner may overrule)
+
+| ID | Question or ambiguity | What B21/F22 did (default) | Where |
+|---|---|---|---|
+| RST-9 | Cost of the peer read and the block. | Measured on a throwaway Postgres 16 with a 25-year stock (6,500 bars), 12 same-sector peers and a 6,500-row NIFTY50: the one extra grouped read returned 3,708 rows in about 16 ms and `relative_strength.build` took about 9 ms, so about 25 ms on top of a `compute_analysis` of about 816 ms (3%). The stored block is under 12 KB (test RST-B04). | 05 12.14.6, RUNBOOK 153 |
+| RST-10 | `series.dates` is replaced by `[date, value]` pairs by the API, so a raw `ratio_rebased` array has no date axis in the response. | The block states that `ratio_rebased` is aligned to the dates of the `analysis.drawdown` pairs (the same last 750 rows); the web reads the dates there and draws no line (with a reason) if the lengths differ. No Go change. Owner: ask for dated pairs in the block instead if you prefer (about 15 KB more). | 03 4a.RST |
+| RST-11 | The strict field-coverage guard needs real test ids, so `docs/field-map.json` entries were added with the web commit rather than the spec commit. | Done in the F22 commit; every new field maps to a real `data-testid` or a documented conditional. | field-map |
+| RST-12 | The Go `httpx` suite takes more than the default 10 minutes under load on a Windows machine (unrelated to this item). | Ran it with `-timeout 40m`; result in the B21 report. | CI |
 ## Swing dips (SWD, Claude, 2026-11-12; none blocks the build; the owner may overrule; spec docs/05 12.13, docs/03 4a-swing, docs/06 6.4a item 4a)
 
 Request: for a stock like IDEA (peak 2017, never regained) the all-time-high Drawdown profile shows one open episode and "at least 3 recovered episodes are needed", which says nothing about how it behaved inside the decline. The owner wants falls of 10% or 20% from the recent peak, recovered or not, many times. The Drawdown profile stays unchanged; swing dips are an additional optional block and card.
