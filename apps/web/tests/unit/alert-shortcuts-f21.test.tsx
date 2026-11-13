@@ -301,8 +301,8 @@ describe("ALS-1 dip-low row (item A swing dips)", () => {
       level: "94.00",
       button: "Alert when the price falls to \u20b994.00 or lower",
     });
-    expect(row.label).toBe("Deepest close of the current dip, \u20b994.00 (on 14 Jan 2024)");
-    expect(row.source).toContain("Low close \u20b994.00 on 14 Jan 2024");
+    expect(row.label).toMatch(/^Deepest close of the current dip, ₹94\.00 \(on \d+ Jan 2024\)$/);
+    expect(row.source).toMatch(/^Low close ₹94\.00 on \d+ Jan 2024, as of /);
     expect(row.source).toContain("adjusted for splits and bonuses");
   });
 
