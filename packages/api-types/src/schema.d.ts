@@ -1654,6 +1654,11 @@ export interface components {
                     /** @enum {string} */
                     key?: "1m" | "3m" | "6m" | "1y";
                     rows?: number;
+                    /**
+                     * Format: date
+                     * @description Date of the stock's own base row of the window
+                     */
+                    base_date?: string | null;
                     stock_pct?: number | null;
                     index_pct?: number | null;
                     /** @description stock_pct minus index_pct, percentage points */
@@ -1700,9 +1705,12 @@ export interface components {
                     /** @enum {string} */
                     key?: "3m" | "6m" | "1y";
                     rows?: number;
+                    /** Format: date */
+                    base_date?: string | null;
                     stock_pct?: number | null;
                     n_peers?: number;
-                    n_total?: number;
+                    /** @description null when the stock has no return for the window */
+                    n_total?: number | null;
                     rank?: number | null;
                     /** @description 0-100, mid-rank, higher = stronger among tracked same-sector stocks */
                     percentile?: number | null;

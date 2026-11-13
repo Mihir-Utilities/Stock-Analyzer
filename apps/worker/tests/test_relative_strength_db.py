@@ -168,3 +168,19 @@ async def test_rst_b04_pruned_with_older_snapshots_and_small(pg_full: asyncpg.Po
     assert "analysis" not in doc(rows[0]["indicators"])
     assert "relative_strength" in doc(rows[1]["indicators"])["analysis"]
     assert rows[1]["as_of"] == date.fromisoformat(days[-1].isoformat())
+
+
+async def test_rst_p06b_rp3_tab_and_nbsp_sector_labels_match_like_python_trim(
+    pg_full: asyncpg.Pool,
+) -> None:
+    """N3: SQL btrim and Python strip agree on tabs, newlines and NBSP, in both directions."""
+    s = await stock(pg_full, "S", "\tBanks\u00a0", seed=1)  # the stock's own label has junk too
+    for i, label in enumerate(["BANKS", "banks\n", "\u00a0Banks", "Bank", "Banks Ltd"]):
+        await stock(pg_full, f"P{i}", label, seed=20 + i)
+    await analysis_db.compute_analysis(pg_full, "S", now=NOW)
+    peers = (await block(pg_full, s))["vs_peers"]
+    assert peers["sector"] == "Banks"
+    assert (
+        peers["peers_in_sector"] == 3
+    )  # BANKS, "banks\n", NBSP-Banks; not "Bank", not "Banks Ltd"
+    assert all(w["n_peers"] == 3 for w in peers["windows"])

@@ -391,3 +391,125 @@ def test_rst_b05_deterministic_without_a_clock() -> None:
     assert math.isfinite(
         rst.build(d, c, idx, d[-100:], peers)["vs_index"]["windows"][0]["excess_pp"]
     )
+
+
+# ---------------------------------------------------------------- review fixes (S2, S3, S7, N1-N3)
+def covered(n: int, m: int) -> tuple[list[date], F64, dict[date, float]]:
+    return synthetic(n, m)
+
+
+def test_rst_i12_real_defaults_at_252_versus_253_aligned_rows() -> None:
+    """RST-2: 252 aligned one-day returns need 253 aligned rows (kills the `m > w` mutation)."""
+    d, c, idx = covered(300, 252)
+    b252, _ = rst.vs_index(d, c, idx, d[-50:], min_windows=1)
+    assert b252 is not None
+    one_year = {r["key"]: r for r in b252["windows"]}["1y"]
+    assert one_year["reason"] == "insufficient_overlap" and one_year["excess_pp"] is None
+    assert b252["rolling_year"]["reason"] == "insufficient_overlap"
+    assert b252["rolling_year"]["windows"] == 0
+    d, c, idx = covered(300, 253)
+    b253, _ = rst.vs_index(d, c, idx, d[-50:], min_windows=1)
+    assert b253 is not None
+    one_year = {r["key"]: r for r in b253["windows"]}["1y"]
+    assert one_year["reason"] is None
+    approx(one_year["excess_pp"], ((1.002**252 - 1) - (1.001**252 - 1)) * 100)
+    assert one_year["base_date"] == d[-253].isoformat()
+    assert b253["rolling_year"]["windows"] == 1
+    assert b253["rolling_year"]["independent_periods"] == 1
+    approx(b253["rolling_year"]["share_beat_pct"], 100.0)
+    # the default minimum of 20 windows hides it with the count still shown
+    hidden, _ = rst.vs_index(d, c, idx, d[-50:])
+    assert hidden is not None and hidden["rolling_year"]["reason"] == "too_few_windows"
+    assert hidden["rolling_year"]["windows"] == 1
+
+
+def test_rst_i13_window_keys_and_row_counts() -> None:
+    d, c, idx = covered(400, 400)
+    block, _ = rst.vs_index(d, c, idx, d[-50:])
+    assert block is not None
+    assert [(r["key"], r["rows"]) for r in block["windows"]] == [
+        ("1m", 21),
+        ("3m", 63),
+        ("6m", 126),
+        ("1y", 252),
+    ]
+    assert [r["base_date"] for r in block["windows"]] == [
+        d[-1 - w].isoformat() for w in (21, 63, 126, 252)
+    ]
+    peers, _ = rst.vs_peers(d, c, PeerData(sector="Banks"))
+    assert peers is not None
+    assert [(r["key"], r["rows"]) for r in peers["windows"]] == [
+        ("3m", 63),
+        ("6m", 126),
+        ("1y", 252),
+    ]
+
+
+def test_rst_i14_min_windows_comes_from_the_setting() -> None:
+    from worker.analytics.inv_common import InvContext, InvSettings
+
+    bars = bars_for(262)  # 262 aligned rows: 10 rolling windows
+    idx = {d: 1000.0 + i for i, d in enumerate(bars.dates)}
+    default = build_snapshot(bars, idx)
+    assert default is not None
+    roll = default["analysis"]["relative_strength"]["vs_index"]["rolling_year"]
+    assert roll["windows"] == 10 and roll["reason"] == "too_few_windows"
+    ctx = InvContext(today=bars.dates[-1], settings=InvSettings(min_windows=5))
+    lowered = build_snapshot(bars, idx, inv_ctx=ctx)
+    assert lowered is not None
+    roll = lowered["analysis"]["relative_strength"]["vs_index"]["rolling_year"]
+    assert roll["reason"] is None and roll["share_beat_pct"] is not None
+    ctx = InvContext(today=bars.dates[-1], settings=InvSettings(min_windows=11))
+    raised = build_snapshot(bars, idx, inv_ctx=ctx)
+    assert raised is not None
+    assert raised["analysis"]["relative_strength"]["vs_index"]["rolling_year"]["reason"] == (
+        "too_few_windows"
+    )
+
+
+def test_rst_i15_exact_scalar_multiples_tie() -> None:
+    """N1: an index that is an exact multiple of the stock never wins or loses by float noise."""
+    rng = np.random.default_rng(3)
+    c = 100 * np.cumprod(1 + rng.normal(0.0004, 0.01, 40))
+    d = days(40)
+    for k in (3.0, 7.3, 0.1, 1234.5678):
+        al = rst.align(d, c, dict(zip(d, (c * k).tolist(), strict=True)))
+        r = rst.rolling_year(al, w=5, min_windows=4)
+        assert r["share_beat_pct"] == 0.0 and r["windows"] == 35
+
+
+def test_rst_p09_a_peer_with_exactly_w_rows_is_excluded() -> None:
+    d = days(3)
+    base = {1: (d, arr(100, 100, 120)), 2: (d, arr(100, 100, 105)), 3: (d, arr(100, 100, 115))}
+    full = PeerData(sector="Banks", closes={**base}, peers_in_sector=4)
+    short = PeerData(
+        sector="Banks", closes={**base, 4: (d[1:], arr(100, 90))}, peers_in_sector=4
+    )  # exactly w = 2 rows, ends on the stock's last date: no wrap to p_close[-1]
+    a, _ = block_p(full)
+    b, _ = block_p(short)
+    assert a is not None and b is not None
+    assert b["windows"][0]["n_peers"] == 3 and b["windows"][0]["rank"] == a["windows"][0]["rank"]
+    assert b["excluded"] == 1
+
+
+def test_rst_p10_no_stock_return_leaves_n_total_null_and_base_date_is_the_stocks() -> None:
+    """N2: without a stock return the window has no `n_total`; `n_peers` stays."""
+    d = days(3)
+    peers = PeerData(
+        sector="Banks",
+        closes={i: (d, arr(100, 100, 100 + i)) for i in (1, 2, 3)},
+        peers_in_sector=3,
+    )
+    b, _ = rst.vs_peers(d, SELF, peers, windows=(("w2", 2), ("w5", 5)))
+    assert b is not None
+    ok, short = b["windows"]
+    assert ok["base_date"] == d[0].isoformat() and ok["n_total"] == 4
+    assert short["n_total"] is None and short["base_date"] is None
+    assert short["n_peers"] == 0 and short["reason"] == "insufficient_history"
+
+
+def test_rst_p11_sector_normalisation_matches_sql_trim() -> None:
+    assert rst.norm_sector("  Banks\t") == "Banks"
+    assert rst.norm_sector("\u00a0Banks\u00a0\n") == "Banks"
+    assert rst.norm_sector(" \t\u00a0") is None and rst.norm_sector(None) is None
+    assert rst.norm_sector("Private Banks") == "Private Banks"

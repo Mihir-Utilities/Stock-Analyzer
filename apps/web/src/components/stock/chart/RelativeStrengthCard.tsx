@@ -9,18 +9,21 @@ import { DefinitionTip } from "@/components/ui/DefinitionTip";
 import { asOfText, isOlderThanExpected } from "@/lib/dashboard/state";
 import { formatCount, formatDate, formatNumber, formatPercent } from "@/lib/format";
 import {
-  INDEX_LABEL,
   NO_INDEX_HINT,
-  PEER_LABEL,
   PEER_STALE_NOTE,
+  PEER_SURVIVOR_NOTE,
   RS_NOTE,
   RS_NOT_COMPUTED,
   RS_SOURCE,
+  peerCountText,
   percentileText,
   ppText,
   rankText,
   ratioPlan,
   rsReason,
+  windowLabel,
+  windowReasons,
+  yearLabel,
 } from "@/lib/stock/rst-model";
 import {
   parseRelativeStrength,
@@ -76,7 +79,7 @@ const pctText = (v: number | null | undefined, signed = false) =>
 
 // ---- Against the Nifty 50 ------------------------------------------------------------------------
 
-function WindowsTable({ v, reasons }: { v: VsIndex; reasons: string[] }) {
+function WindowsTable({ v }: { v: VsIndex }) {
   return (
     <div
       className={scrollRegion}
@@ -91,7 +94,7 @@ function WindowsTable({ v, reasons }: { v: VsIndex; reasons: string[] }) {
         </caption>
         <thead>
           <tr>
-            {["Period", "Stock", "Nifty 50", "Difference (pp)"].map((c) => (
+            {["Period", "From", "Stock", "Nifty 50", "Difference (pp)"].map((c) => (
               <th key={c} scope="col" className={th}>
                 {c}
               </th>
@@ -100,16 +103,16 @@ function WindowsTable({ v, reasons }: { v: VsIndex; reasons: string[] }) {
         </thead>
         <tbody>
           {v.windows.map((w) => {
-            const label = INDEX_LABEL[w.key] ?? w.key;
+            const label = windowLabel(w.key, w.rows);
             const reason = w.reason ? rsReason(w.reason) : null;
-            if (reason) reasons.push(`${label}: ${reason}`);
-            const rows =
-              typeof w.rows === "number" ? `${formatCount(w.rows).text} trading days` : "";
             return (
               <tr key={w.key} data-testid={`inv-rs-window-${w.key}`}>
-                <th scope="row" className={`${th} border-t border-border`} title={rows}>
+                <th scope="row" className={`${th} border-t border-border`}>
                   {label}
                 </th>
+                <td className={td}>
+                  <Cell text={formatDate(w.base_date ?? null).text} reason={reason} />
+                </td>
                 <td className={td}>
                   <Cell text={pctText(w.stock_pct, true)} reason={reason} />
                 </td>
@@ -155,9 +158,14 @@ function YearsTable({ v }: { v: VsIndex }) {
             const span = `from ${formatDate(y.base_date ?? null).text} to ${formatDate(y.end_date ?? null).text}`;
             return (
               <tr key={y.year} data-testid={`inv-rs-year-${y.year}`}>
-                <th scope="row" className={`${th} border-t border-border`} title={span}>
-                  {y.kind === "ytd" ? `${y.year} (year to date)` : String(y.year)}
-                  <span className="sr-only">{` ${span}`}</span>
+                <th scope="row" className={`${th} border-t border-border`}>
+                  {yearLabel(y)}
+                  <span
+                    className="block text-micro font-normal"
+                    data-testid={`inv-rs-year-${y.year}-span`}
+                  >
+                    {span}
+                  </span>
                 </th>
                 <td className={td}>{pctText(y.stock_pct, true)}</td>
                 <td className={td}>{pctText(y.index_pct, true)}</td>
@@ -216,8 +224,10 @@ function IndexSection({
   dates: ReadonlyArray<string>;
   asOf: string | null;
 }) {
-  const reasons: string[] = [];
+  const reasons = useMemo(() => windowReasons(v), [v]);
   const plan = useMemo(() => ratioPlan(v, dates, asOf), [v, dates, asOf]);
+  const ends = v.last_aligned ?? null;
+  const shorter = ends !== null && asOf !== null && ends < asOf;
   return (
     <section
       className="flex flex-col gap-3"
@@ -225,10 +235,15 @@ function IndexSection({
       aria-label="Against the Nifty 50"
     >
       <h3 className="flex items-center gap-1 text-body font-medium text-text-1">
-        Against the Nifty 50
+        {ends ? `Against the Nifty 50 (to ${formatDate(ends).text})` : "Against the Nifty 50"}
         <DefinitionTip term="relative_return" />
       </h3>
-      <WindowsTable v={v} reasons={reasons} />
+      {shorter ? (
+        <p className="text-body-sm text-text-1" data-testid="inv-rs-index-ends">
+          {`Index data ends ${formatDate(ends).text}; the stock data ends ${formatDate(asOf).text}. The Nifty figures run to the earlier date.`}
+        </p>
+      ) : null}
+      <WindowsTable v={v} />
       <Reasons items={reasons} testId="inv-rs-reasons" />
       <YearsTable v={v} />
       {plan.kind === "chart" ? (
@@ -242,7 +257,7 @@ function IndexSection({
             filename="relative-strength-ratio"
           />
           <p className="text-caption text-text-2" data-testid="inv-rs-chart-summary">
-            {`Since ${formatDate(v.ratio_base_date ?? null).text} the ratio moved from 100 to ${formatNumber(plan.last, { decimals: 1 }).text}. A rising line means the stock did better than the index over that stretch; it says nothing about what comes next.`}
+            {`From ${formatDate(v.ratio_base_date ?? null).text} to ${formatDate(ends).text} the ratio moved from 100 to ${formatNumber(plan.last, { decimals: 1 }).text}. A rising line means the stock did better than the index over that stretch; it says nothing about what comes next.`}
           </p>
         </div>
       ) : (
@@ -260,7 +275,7 @@ function IndexSection({
         </div>
       ) : null}
       <p className="text-caption text-text-2" data-testid="inv-rs-aligned">
-        {`Based on ${formatCount(v.aligned_rows ?? null).text} dates present in both your stock and your NIFTY50 prices (${formatDate(v.first_aligned ?? null).text} to ${formatDate(v.last_aligned ?? null).text}). ${formatCount(v.dropped_stock_dates ?? null).text} stock dates and ${formatCount(v.dropped_index_dates ?? null).text} index dates were present in only one series and were left out.`}
+        {`Based on ${formatCount(v.aligned_rows ?? null).text} dates present in both your stock and your NIFTY50 prices (${formatDate(v.first_aligned ?? null).text} to ${formatDate(v.last_aligned ?? null).text}). ${formatCount(v.dropped_stock_dates ?? null).text} stock dates and ${formatCount(v.dropped_index_dates ?? null).text} index dates were present in only one series and were left out. Your NIFTY50 series has ${formatCount(v.index_rows ?? null).text} dates and ends ${formatDate(v.index_as_of ?? null).text}.`}
       </p>
     </section>
   );
@@ -302,7 +317,7 @@ function NoIndex({ reason }: { reason: string | null }) {
 // ---- Against sector peers ------------------------------------------------------------------------
 
 function PeerTile({ w, sector }: { w: PeerWindow; sector: string }) {
-  const label = PEER_LABEL[w.key] ?? w.key;
+  const label = windowLabel(w.key, w.rows);
   const rank = rankText(w);
   const peers = formatCount(w.n_peers ?? null).text;
   const reason = rank === null ? rsReason(w.reason) : null;
@@ -342,7 +357,7 @@ function PeerTile({ w, sector }: { w: PeerWindow; sector: string }) {
   );
 }
 
-function PeersSection({ p }: { p: VsPeers }) {
+function PeersSection({ p, indexEnd }: { p: VsPeers; indexEnd: string | null }) {
   const sector = p.sector ?? "same-sector";
   return (
     <section
@@ -360,7 +375,7 @@ function PeersSection({ p }: { p: VsPeers }) {
         ))}
       </ul>
       <p className="text-caption text-text-2" data-testid="inv-rs-peer-note">
-        {`Compared only with stocks you track in the same sector; a sector index is not available. ${PEER_STALE_NOTE(asOfText(p.as_of ?? null))}`}
+        {`Compared only with stocks you track in the same sector (${formatCount(p.peers_in_sector ?? null).text} share this label); a sector index is not available. Each stock is measured over its own trading days up to ${asOfText(p.as_of ?? null) ?? "this stock's last price date"}${indexEnd ? `; the Nifty figures above run to ${formatDate(indexEnd).text}` : ""}. ${PEER_SURVIVOR_NOTE} ${PEER_STALE_NOTE(asOfText(p.as_of ?? null))}`}
         {typeof p.excluded === "number" && p.excluded > 0
           ? ` ${formatCount(p.excluded).text} same-sector stocks were left out (no price on ${asOfText(p.as_of ?? null) ?? "that date"} or too little history).`
           : ""}
@@ -412,8 +427,8 @@ function sampleText(r: RelativeStrength): string {
       `${formatCount(r.vs_index.aligned_rows ?? null).text} dates in common with the index`,
     );
   }
-  const peers = r.vs_peers?.windows.find((w) => w.key === "1y") ?? r.vs_peers?.windows[0];
-  if (peers) parts.push(`${formatCount(peers.n_peers ?? null).text} peers`);
+  const peers = r.vs_peers ? peerCountText(r.vs_peers.windows) : null;
+  if (peers) parts.push(peers);
   return parts.length > 0 ? `Based on ${parts.join(" and ")}.` : "No figures to base this on.";
 }
 
@@ -479,7 +494,10 @@ export function RelativeStrengthCard({
   }
   const r = block.value;
   const asOf = r.as_of ?? null;
-  const stale = isOlderThanExpected(asOf, new Date()) || load.stale;
+  const stale =
+    isOlderThanExpected(asOf, new Date()) ||
+    isOlderThanExpected(r.vs_index?.index_as_of ?? null, new Date()) ||
+    load.stale;
   const missingHalf = r.vs_index === null || r.vs_index === undefined || !r.vs_peers;
   return (
     <Card
@@ -506,7 +524,7 @@ export function RelativeStrengthCard({
           <NoIndex reason={r.vs_index_reason ?? null} />
         )}
         {r.vs_peers ? (
-          <PeersSection p={r.vs_peers} />
+          <PeersSection p={r.vs_peers} indexEnd={r.vs_index?.last_aligned ?? null} />
         ) : (
           <NoPeers reason={r.vs_peers_reason ?? null} />
         )}

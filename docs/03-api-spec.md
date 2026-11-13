@@ -192,7 +192,7 @@ Additive and optional like the other 4a blocks (an older snapshot lacks it; the 
     "index_code": "NIFTY50", "index_as_of": "2024-02-15", "index_rows": 2465,
     "aligned_rows": 328, "first_aligned": "2022-11-14", "last_aligned": "2024-02-15",
     "dropped_stock_dates": 2, "dropped_index_dates": 3,
-    "windows": [ { "key": "1m", "rows": 21, "stock_pct": -3.1, "index_pct": 0.9, "excess_pp": -4.0, "reason": null } ],
+    "windows": [ { "key": "1m", "rows": 21, "base_date": "2024-01-12", "stock_pct": -3.1, "index_pct": 0.9, "excess_pp": -4.0, "reason": null } ],
     "years": [ { "year": 2023, "kind": "full", "base_date": "2022-12-30", "end_date": "2023-12-29", "stock_pct": 12.0, "index_pct": 19.4, "excess_pp": -7.4 } ],
     "rolling_year": { "windows": 76, "independent_periods": 1, "share_beat_pct": 61.84, "median_excess_pp": 3.2, "small_sample": true, "reason": null },
     "ratio_rebased": [100.0, 100.4, null, 99.1], "ratio_base_date": "2022-11-14", "ratio_reason": null
@@ -200,7 +200,7 @@ Additive and optional like the other 4a blocks (an older snapshot lacks it; the 
   "vs_index_reason": null,
   "vs_peers": {
     "sector": "Banks", "as_of": "2024-02-15", "peers_in_sector": 6, "excluded": 1,
-    "windows": [ { "key": "3m", "rows": 63, "stock_pct": 4.2, "n_peers": 5, "n_total": 6, "rank": 2, "percentile": 75.0,
+    "windows": [ { "key": "3m", "rows": 63, "base_date": "2023-11-14", "stock_pct": 4.2, "n_peers": 5, "n_total": 6, "rank": 2, "percentile": 75.0,
                    "peer_median_pct": 1.9, "vs_median_pp": 2.3, "small_sample": false, "reason": null } ]
   },
   "vs_peers_reason": null
@@ -210,9 +210,10 @@ Rules.
 - `windows` of `vs_index` has the four rows `1m|3m|6m|1y` (rows 21, 63, 126, 252); `windows` of `vs_peers` has `3m|6m|1y` (rows 63, 126, 252). `years` has at most 10 rows ascending (`kind` `full | ytd`).
 - `ratio_rebased` has the length of the stored `series.dates` (the last 750 rows). The API zips `series.dates` into `[date, value]` pairs (section 4), so position `i` belongs to the date of pair `i` of `data.analysis.drawdown` (the same rows), and is `null` where that date is not an aligned date. `ratio_base_date` is its 100.
 - `aligned_rows` is the number of dates present in both the stock and the NIFTY50 series; the two dropped counts are dates present in only one of them (docs/05 12.14.1) and are always shown. `index_rows`, `index_as_of` describe the stored index series (source: the owner's prices.csv import of the reserved symbol; the UI prints "Your imported NIFTY50").
+- `base_date` of a window is the date of the stock's own base row (`null` with the figures); every index figure ends at `vs_index.last_aligned`, which is earlier than the block's `as_of` when the imported index ends earlier. `n_total` is `null` (with `reason` `insufficient_history`) when the stock has no return for the window; `n_peers` is always present. Both sides are price return and the index must be a price index.
 - Hidden numbers: a null `rank`, `percentile`, `peer_median_pct`, `vs_median_pp` always has `reason` (`too_few_peers` below 3 peers; `insufficient_history` when the stock is shorter than the window); `n_peers` is always present.
 - A failure inside one half never fails the snapshot or the other half: that half is `null` with `compute_error` and the incident is logged (`relative_strength_failed`, symbol, half, error class).
-- Size: about 5 KB for a 750-row chart window (`ratio_rebased` dominates); the stored snapshot stays under the 200 KB budget (RET-89).
+- Size: under 12 KB for a 25-year stock with 8 peers (`ratio_rebased` dominates, test RST-B04); the stored snapshot stays under the 200 KB budget (RET-89).
 - Peer ranks are as of this stock's own last bar and update only when this stock is recomputed (RST-6).
 ### 4a-swing. `analysis.swing_dips` (decision SWD, PROPOSED; built by B18; formulas in `05` 12.13)
 

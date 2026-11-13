@@ -22,6 +22,13 @@ import numpy as np
 
 from worker.analytics.inv_common import F64, PeerData, iso, median, pctile, r4
 
+
+def norm_sector(label: str | None) -> str | None:
+    """Trimmed sector label (spaces, tabs, newlines, NBSP); ``None`` when blank."""
+    out = None if label is None else label.strip(SECTOR_TRIM)
+    return out or None
+
+
 log = logging.getLogger("worker.relative_strength")
 
 INDEX_CODE = "NIFTY50"
@@ -31,10 +38,12 @@ INDEX_WINDOWS: tuple[tuple[str, int], ...] = (("1m", 21), ("3m", 63), ("6m", 126
 PEER_WINDOWS: tuple[tuple[str, int], ...] = (("3m", 63), ("6m", 126), ("1y", 252))
 ROLLING_ROWS = 252
 MIN_ALIGNED = 22  # below this even the 1-month window is impossible: `no_index_series`
-MIN_WINDOWS = 20  # INV_MIN_WINDOWS default (docs/05 12.0)
+MIN_WINDOWS = 20  # INV_MIN_WINDOWS default (docs/05 12.0); the snapshot passes the setting
 MIN_PEERS = 3  # hidden below 3 peers (plan item E)
 SMALL_PEERS = 5  # RST-4: judgement, not evidence
 YEARS_SHOWN = 10
+TIE_TOL = 1e-12  # a win needs a margin above float noise: exact scalar multiples tie (N1)
+SECTOR_TRIM = " \t\r\n\u00a0"  # the same set as the SQL btrim in analysis_db (N3)
 
 INSUFFICIENT_HISTORY = "insufficient_history"
 INSUFFICIENT_OVERLAP = "insufficient_overlap"
@@ -90,14 +99,19 @@ def trailing_windows(al: Aligned, windows: Sequence[tuple[str, int]]) -> list[di
             "stock_pct": None,
             "index_pct": None,
             "excess_pp": None,
+            "base_date": None,
             "reason": reason,
         }
         if reason is None:
             sp = _pct(float(al.stock[-1]), float(al.stock[-1 - w]))
             ip = _pct(float(al.index[-1]), float(al.index[-1 - w]))
-            row.update(stock_pct=r4(sp), index_pct=r4(ip), excess_pp=r4(sp - ip))
-            if row["excess_pp"] is None:
-                row.update(stock_pct=None, index_pct=None, reason="n/m")
+            # prices are finite and positive (clean_index, valid bars), so these are finite
+            row.update(
+                stock_pct=r4(sp),
+                index_pct=r4(ip),
+                excess_pp=r4(sp - ip),
+                base_date=al.dates[-1 - w].isoformat(),
+            )
         out.append(row)
     return out
 
@@ -169,7 +183,7 @@ def rolling_year(
     if windows < min_windows:
         out["reason"] = "too_few_windows"
         return out
-    out["share_beat_pct"] = r4(100.0 * int(np.count_nonzero(r > b)) / windows)
+    out["share_beat_pct"] = r4(100.0 * int(np.count_nonzero(r - b > TIE_TOL)) / windows)
     out["median_excess_pp"] = r4(median((r - b) * 100.0))
     out["small_sample"] = out["independent_periods"] < 3
     return out
@@ -231,7 +245,7 @@ def vs_peers(
     min_peers: int = MIN_PEERS,
     small_peers: int = SMALL_PEERS,
 ) -> tuple[dict[str, Any] | None, str | None]:
-    if peers is None or not peers.sector:
+    if peers is None or norm_sector(peers.sector) is None:
         return None, "no_sector"
     if peers.failed:
         return None, "compute_error"
@@ -251,18 +265,21 @@ def vs_peers(
             "rows": w,
             "stock_pct": None,
             "n_peers": len(theirs),
-            "n_total": len(theirs) + 1,
+            "n_total": None,
             "rank": None,
             "percentile": None,
             "peer_median_pct": None,
             "vs_median_pp": None,
+            "base_date": None,
             "small_sample": False,
             "reason": None,
         }
         rows.append(row)
         if n <= w:
-            row["reason"] = INSUFFICIENT_HISTORY
+            row["reason"] = INSUFFICIENT_HISTORY  # no stock return: n_total stays null (N2)
             continue
+        row["n_total"] = len(theirs) + 1
+        row["base_date"] = dates[-1 - w].isoformat()
         mine = _pct(float(close[-1]), float(close[-1 - w]))
         row["stock_pct"] = r4(mine)
         if len(theirs) < min_peers:
@@ -279,7 +296,7 @@ def vs_peers(
         )
     return (
         {
-            "sector": peers.sector,
+            "sector": norm_sector(peers.sector),
             "as_of": end.isoformat(),
             "peers_in_sector": peers.peers_in_sector,
             "excluded": max(peers.peers_in_sector - len(used), 0),
@@ -297,6 +314,7 @@ def build(
     peers: PeerData | None,
     *,
     symbol: str | None = None,
+    min_windows: int = MIN_WINDOWS,
 ) -> dict[str, Any]:
     """The ``analysis.relative_strength`` block; each half is isolated (docs/05 12.14)."""
     out: dict[str, Any] = {
@@ -312,7 +330,9 @@ def build(
         )
 
     try:
-        out["vs_index"], out["vs_index_reason"] = vs_index(dates, close, bench, series_dates)
+        out["vs_index"], out["vs_index_reason"] = vs_index(
+            dates, close, bench, series_dates, min_windows=min_windows
+        )
     except Exception as exc:  # per-half isolation (RST-B01)
         fail("vs_index", exc)
         out["vs_index"], out["vs_index_reason"] = None, "compute_error"

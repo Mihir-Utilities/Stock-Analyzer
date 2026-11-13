@@ -25,6 +25,7 @@ from worker.analytics import fundamentals as fnd
 from worker.analytics.actions import qty_multiplier
 from worker.analytics.inv_common import SETTING_KEYS, InvContext, InvSettings, PeerData
 from worker.analytics.inv_months import derive_closed_days
+from worker.analytics.relative_strength import norm_sector
 from worker.analytics.scores import RiskInput, risk_scores
 from worker.analytics.snapshot import DEFAULT_RISK_FREE, VERSION, Bars, build_snapshot
 from worker.marketdate import ist_today
@@ -111,7 +112,7 @@ async def load_peers(
     """Tracked stocks of the same sector (trimmed, case-insensitive) and their valid ``adj_close``
     bars up to ``end``: ONE extra grouped read per ``compute_analysis`` (docs/05 12.14.6). ``None``
     without a sector or bars; a failing read is logged and flagged, never raised."""
-    label = None if sector is None or not sector.strip() else sector.strip()
+    label = norm_sector(sector)
     if label is None or end is None:
         return None if label is None else PeerData(sector=label)
     try:
@@ -119,7 +120,8 @@ async def load_peers(
             "SELECT i.id, p.trade_date, p.adj_close FROM instrument i "
             "LEFT JOIN price_daily p ON p.instrument_id = i.id AND NOT p.suspect "
             "AND p.adj_close > 0 AND p.trade_date <= $3 AND p.trade_date >= $4 "
-            "WHERE i.is_tracked AND i.id <> $1 AND lower(btrim(i.sector)) = lower(btrim($2)) "
+            "WHERE i.is_tracked AND i.id <> $1 "
+            "AND lower(btrim(i.sector, E' \t\r\n\u00a0')) = lower($2) "
             "ORDER BY i.id, p.trade_date",
             iid,
             label,

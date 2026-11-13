@@ -312,7 +312,9 @@ def _analysis(bars: Bars, bench: dict[date, float], ctx: InvContext) -> dict[str
         "sip_backtest": sip.sip_backtest(d, c, st),
         "risk_adjusted": inv.risk_adjusted(d, c),
         # Relative strength (docs/05 12.14, docs/03 4a.RST): vs the NIFTY50 and vs tracked peers.
-        "relative_strength": rst.build(d, c, bench, d[-window:], ctx.peers, symbol=ctx.symbol),
+        "relative_strength": rst.build(
+            d, c, bench, d[-window:], ctx.peers, symbol=ctx.symbol, min_windows=st.min_windows
+        ),
     }
 
 

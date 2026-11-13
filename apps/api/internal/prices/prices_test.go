@@ -3,6 +3,8 @@ package prices
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -289,5 +291,41 @@ func TestExpandIndicatorsPassesSwingDipsThrough(t *testing.T) {
 	}
 	if _, ok := old["analysis"].(map[string]any)["swing_dips"]; ok {
 		t.Fatal("an old snapshot must not gain the swing_dips block")
+	}
+}
+
+// RST-X01: REAL worker output (fixtures/relative_strength, written by the worker contract test)
+// goes through ExpandIndicators: the block is unchanged, ratio_rebased has one value per drawdown
+// pair, and pair i carries the date series.dates[i] (also when the history is shorter than 750).
+func TestExpandIndicatorsWithRealRelativeStrengthOutput(t *testing.T) {
+	for _, name := range []string{"real_120.json", "real_800.json"} {
+		raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "fixtures", "relative_strength", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var in map[string]any
+		if err := json.Unmarshal(raw, &in); err != nil {
+			t.Fatal(err)
+		}
+		dates := in["series"].(map[string]any)["dates"].([]any)
+		want := in["analysis"].(map[string]any)["relative_strength"]
+		got, err := ExpandIndicators(raw, []byte(`{}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		an := got["analysis"].(map[string]any)
+		if !reflect.DeepEqual(an["relative_strength"], want) {
+			t.Fatalf("%s: relative_strength changed by ExpandIndicators", name)
+		}
+		ratio := want.(map[string]any)["vs_index"].(map[string]any)["ratio_rebased"].([]any)
+		dd := an["drawdown"].([][2]any)
+		if len(dd) != len(ratio) || len(dd) != len(dates) {
+			t.Fatalf("%s: drawdown %d, ratio %d, dates %d must be equal", name, len(dd), len(ratio), len(dates))
+		}
+		for i, p := range dd {
+			if p[0] != dates[i] {
+				t.Fatalf("%s: pair %d has date %v, want %v", name, i, p[0], dates[i])
+			}
+		}
 	}
 }

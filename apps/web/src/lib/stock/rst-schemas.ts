@@ -20,6 +20,7 @@ const indexWindow = z.object({
   stock_pct: num,
   index_pct: num,
   excess_pp: num,
+  base_date: str,
   reason: str,
 });
 
@@ -74,6 +75,7 @@ const peerWindow = z.object({
   percentile: num,
   peer_median_pct: num,
   vs_median_pp: num,
+  base_date: str,
   small_sample: bool,
   reason: str,
 });

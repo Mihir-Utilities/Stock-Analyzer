@@ -9,7 +9,15 @@ import { buildDefinitions, ENTRIES, SPEC_PATH } from "../../scripts/gen-definiti
 import { AnalysisTab } from "@/components/stock/chart/AnalysisTab";
 import { RelativeStrengthCard } from "@/components/stock/chart/RelativeStrengthCard";
 import { definitions } from "@/lib/definitions";
-import { percentileText, ppText, ratioPlan } from "@/lib/stock/rst-model";
+import {
+  peerCountText,
+  percentileText,
+  ppText,
+  ratioPlan,
+  windowLabel,
+  windowReasons,
+  yearLabel,
+} from "@/lib/stock/rst-model";
 import { parseRelativeStrength } from "@/lib/stock/rst-schemas";
 import type { Load } from "@/lib/stock/load";
 import type { IndicatorsData } from "@/lib/stock/schemas";
@@ -18,10 +26,12 @@ import { drawdownPairs, relativeStrength, vsIndex, vsPeers } from "../mocks/rst-
 import "./dom-matchers";
 
 vi.setConfig({ testTimeout: 30_000 });
+const echart = vi.hoisted(() => ({ options: [] as unknown[] }));
 vi.mock("@/components/charts/EChart", () => ({
-  EChart: ({ label }: { label: string }) => (
-    <div role="img" aria-label={label} data-testid="chart-canvas" data-ready="true" />
-  ),
+  EChart: ({ label, option }: { label: string; option: unknown }) => {
+    echart.options.push(option);
+    return <div role="img" aria-label={label} data-testid="chart-canvas" data-ready="true" />;
+  },
 }));
 vi.mock("next/link", () => ({
   default: ({
@@ -149,7 +159,7 @@ describe("RST-C03 peers hidden and compute errors", () => {
   it("window reasons are visible text, not hover only", () => {
     renderCard(relativeStrength(N));
     expect(screen.getByTestId("inv-rs-reasons")).toHaveTextContent(
-      "1 year: fewer dates in common with the index than this period needs",
+      "12 months (252 trading days): fewer dates in common with the index than this period needs",
     );
     expect(screen.getByTestId("inv-rs-window-1y")).toHaveTextContent("—");
   });
@@ -395,5 +405,138 @@ describe("the Analysis tab", () => {
       "Not computed yet",
     );
     expect(await screen.findByTestId("inv-position")).toBeInTheDocument();
+  });
+});
+
+describe("review fixes (S1, S3 to S7, N4, N7)", () => {
+  it("S1: names the index end date and says when the index ends before the stock", () => {
+    const short = vsIndex(N, { last_aligned: "2024-02-09", index_as_of: "2024-02-09" });
+    renderCard(relativeStrength(N, { vs_index: short }));
+    expect(screen.getByTestId("inv-rs-index")).toHaveTextContent(
+      "Against the Nifty 50 (to 9 Feb 2024)",
+    );
+    expect(screen.getByTestId("inv-rs-index-ends")).toHaveTextContent(
+      "Index data ends 9 Feb 2024; the stock data ends 15 Feb 2024.",
+    );
+    expect(screen.getByTestId("inv-rs-chart-summary")).toHaveTextContent(
+      /to 9 Feb 2024 the ratio moved/,
+    );
+    expect(screen.getByTestId("inv-rs-aligned")).toHaveTextContent(
+      "Your NIFTY50 series has 2,465 dates and ends 9 Feb 2024.",
+    );
+    expect(screen.getByTestId("inv-rs-peer-note")).toHaveTextContent(
+      "the Nifty figures above run to 9 Feb 2024",
+    );
+  });
+
+  it("S1: no 'index ends' line when both end together; a stale index marks the card stale", () => {
+    const { unmount } = renderCard(relativeStrength(N));
+    expect(screen.queryByTestId("inv-rs-index-ends")).toBeNull();
+    expect(screen.getByTestId("inv-rs").textContent).not.toMatch(/stale/i);
+    unmount();
+    renderCard(relativeStrength(N, { vs_index: vsIndex(N, { index_as_of: "2024-01-02" }) }));
+    expect(screen.getByTestId("inv-rs").textContent).toMatch(/stale/i);
+  });
+
+  it("S3: windows show their trading-day count and base date, in the same words as the peer tiles", () => {
+    renderCard(relativeStrength(N));
+    expect(screen.getByTestId("inv-rs-window-1m")).toHaveTextContent("1 month (21 trading days)");
+    expect(screen.getByTestId("inv-rs-window-1m")).toHaveTextContent("12 Jan 2024");
+    expect(screen.getByTestId("inv-rs-window-1y")).toHaveTextContent(
+      "12 months (252 trading days)",
+    );
+    expect(screen.getByTestId("inv-rs-peer-3m")).toHaveTextContent("3 months (63 trading days)");
+    expect(screen.getByTestId("inv-rs-peer-1y")).toHaveTextContent("12 months (252 trading days)");
+    expect(windowLabel("zz", null)).toBe("zz");
+  });
+
+  it("S4: every year row shows its base-to-end dates; ytd only after a December base", () => {
+    renderCard(relativeStrength(N));
+    expect(screen.getByTestId("inv-rs-year-2023-span")).toHaveTextContent(
+      "from 30 Dec 2022 to 29 Dec 2023",
+    );
+    expect(screen.getByTestId("inv-rs-year-2024")).toHaveTextContent("2024 (year to date)");
+    expect(yearLabel({ year: 2024, kind: "ytd", base_date: "2023-11-30" })).toBe(
+      "2024 (since 30 Nov 2023)",
+    );
+    expect(yearLabel({ year: 2023, kind: "full", base_date: "2022-12-30" })).toBe("2023");
+  });
+
+  it("S5 and N7: the peer note carries the survivor-bias sentence and the sector count", () => {
+    renderCard(relativeStrength(N));
+    const note = screen.getByTestId("inv-rs-peer-note");
+    expect(note).toHaveTextContent(
+      "Stocks you track today; delisted and untracked stocks are not included; the sector label is the one you entered.",
+    );
+    expect(note).toHaveTextContent("(6 share this label)");
+    expect(note).toHaveTextContent("measured over its own trading days up to 15 Feb 2024");
+    expect(definitions.peer_rank.text).toMatch(/delisted and untracked stocks are not included/);
+  });
+
+  it("S6: the reasons list is a pure function of the windows", () => {
+    const parsed = parseRelativeStrength(analysisOf(relativeStrength(N)));
+    if (parsed.block.kind !== "ok" || !parsed.block.value.vs_index) throw new Error("fixture");
+    const v = parsed.block.value.vs_index;
+    expect(windowReasons(v)).toEqual(windowReasons(v));
+    expect(windowReasons(v)).toEqual([
+      "12 months (252 trading days): fewer dates in common with the index than this period needs",
+    ]);
+  });
+
+  it("N4: the sample line gives the smallest and largest peer count over the periods", () => {
+    expect(
+      peerCountText([
+        { key: "3m", n_peers: 5 },
+        { key: "1y", n_peers: 2 },
+      ] as never),
+    ).toBe("2 to 5 peers");
+    expect(peerCountText([{ key: "3m", n_peers: 4 }] as never)).toBe("4 peers");
+    expect(peerCountText([])).toBeNull();
+    renderCard(relativeStrength(N));
+    expect(screen.getByTestId("inv-rs-sample")).toHaveTextContent("2 to 5 peers");
+  });
+
+  it("S7: the chart draws the 100 baseline only where the ratio exists and never connects across gaps", () => {
+    echart.options.length = 0;
+    renderCard(relativeStrength(N));
+    type Opt = {
+      series: Array<{ name: string; data: Array<number | null>; connectNulls?: boolean }>;
+    };
+    const opts = echart.options as Opt[];
+    const opt = opts[opts.length - 1]!;
+    const ratio = opt.series.find((x) => x.name.startsWith("Stock divided"))!;
+    const base = opt.series.find((x) => x.name.startsWith("100 ="))!;
+    expect(ratio.data).toHaveLength(N);
+    const nulls = ratio.data.flatMap((v, i) => (v === null ? [i] : []));
+    expect(nulls).toEqual(Array.from({ length: N }, (_, i) => i).filter((i) => i % 17 === 5));
+    expect(ratio.connectNulls).toBe(false);
+    expect(base.connectNulls).toBe(false);
+    expect(base.data.map((v) => v === null)).toEqual(ratio.data.map((v) => v === null));
+    expect(base.data.every((v) => v === null || v === 100)).toBe(true);
+  });
+
+  it("S7: the web date mapping of REAL worker output lines up with the API pairs", () => {
+    for (const name of ["real_120.json", "real_800.json"]) {
+      const raw = JSON.parse(
+        readFileSync(join(process.cwd(), "../../fixtures/relative_strength", name), "utf8"),
+      ) as { series: { dates: string[] }; analysis: Record<string, unknown> };
+      // the API replaces series.dates by [date, value] pairs (apps/api/internal/prices/expand.go)
+      const dd = raw.analysis["drawdown"] as Array<number | null>;
+      const pairs = dd.map((v, i) => [raw.series.dates[i], v]);
+      const analysis = { ...raw.analysis, drawdown: pairs };
+      const parsed = parseRelativeStrength(analysis);
+      expect(parsed.dates).toEqual(raw.series.dates);
+      if (parsed.block.kind !== "ok" || !parsed.block.value.vs_index) throw new Error(name);
+      const v = parsed.block.value.vs_index;
+      const plan = ratioPlan(v, parsed.dates, parsed.block.value.as_of ?? null);
+      expect(plan.kind).toBe("chart");
+      if (plan.kind === "chart") {
+        expect(plan.dataset.series[0]?.values).toHaveLength(raw.series.dates.length);
+        expect(plan.dataset.series[0]?.values.find((x) => x !== null)).toBe(100);
+      }
+      // a length that differs (one pair lost) is refused with a reason, never mis-aligned
+      const short = parseRelativeStrength({ ...analysis, drawdown: pairs.slice(1) });
+      expect(ratioPlan(v, short.dates, null).kind).toBe("none");
+    }
   });
 });

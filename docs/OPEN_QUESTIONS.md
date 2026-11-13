@@ -1012,7 +1012,7 @@ Request: an investor wants a monthly-return heatmap with a Year column and seaso
 | RST-5 | Up and down capture ratios. | Deferred (out of scope of this item); revisit if the owner wants them. | 05 12.11 |
 | RST-6 | Staleness of peer ranks. | Ranks are stored in the stock's own snapshot; a peer's price change shows only after this stock is recomputed. The card says so with the `as_of`. No cross-stock recompute is added (a recompute of every tracked stock after an import would multiply the cost); the owner can run the recompute for all tracked stocks. | 05 12.14.6, RUNBOOK 153 |
 | RST-7 | Peer alignment: a peer with a different last bar date. | Peers are measured at this stock's last bar date and must have a bar on that date; others are left out and counted (`excluded`). No forward-fill and no tolerance window. | 05 12.14.6 |
-| RST-8 | Windows are aligned trading rows (21/63/126/252), not calendar months, to match docs/05 12.0 and the Holding periods card. | As stated; the labels say "about 1 month" etc. only through the `rows` count shown in the tooltip. | 05 12.14.2 |
+| RST-8 | Windows are aligned trading rows (21/63/126/252), not calendar months, to match docs/05 12.0 and the Holding periods card. | As stated; every label shows its trading-row count in the text ("1 month (21 trading days)") and the base date of the window. | 05 12.14.2 |
 
 ## B21 and F22 notes (Claude, 2026-11-12; none blocks the owner; the owner may overrule)
 

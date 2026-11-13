@@ -1098,7 +1098,16 @@ Worker rows (RST-I, RST-P, RST-B) are U tests in `apps/worker/tests/test_relativ
 | RST-P05 | The stock itself is shorter than the window | The window is `null`, `insufficient_history`; the other windows still compute | U |
 | RST-P06 | Sector grouping (RP3, loader) | Same sector means trimmed and case-insensitive; a stock with no sector has `vs_peers` null `no_sector` and is nobody's peer; an untracked same-sector stock is not a peer | U |
 | RST-P07 | Peer prices at or before the stock's `as_of` only | A peer with newer bars than the stock is measured at the stock's last bar date, not at its own last bar | U |
+| RST-P09 | A peer with exactly `w` rows ending on the stock's last date | Not counted (needs `w + 1`); no wrap to the last close; counted in `excluded` | U |
+| RST-P10 | The stock has no return for a window | `n_total` null, `base_date` null, `n_peers` shown, reason `insufficient_history` | U |
+| RST-P11 | Sector normalisation: tabs, line breaks and no-break spaces (Python strip and SQL btrim agree, RP3b) | Labels `	Banks `, `BANKS`, `banks
+`, ` Banks` match; `Bank` and `Banks Ltd` do not | U/I |
 | RST-P08 | The peer read is one grouped query | Exactly one extra `price_daily` read per `compute_analysis` (counted with a spy); no read when the stock has no sector | U |
+| RST-I12 | The real defaults at 252 versus 253 aligned rows | 252: 1Y and `rolling_year` null `insufficient_overlap`; 253: 1Y computed with `base_date`, 1 rolling window (`too_few_windows` under the default minimum) | U |
+| RST-I13 | Window keys, row counts and `base_date` of the four index and three peer windows | 21/63/126/252 and 63/126/252, `base_date` = the aligned row `w` back | U |
+| RST-I14 | `INV_MIN_WINDOWS` is read from the setting | A non-default value (5 and 11) changes `too_few_windows` for the same 10 rolling windows | U |
+| RST-I15 | Exact scalar multiples (index = k x stock) | 0 wins, `share_beat_pct` 0.0 (tolerance 1e-12) | U |
+| RST-X01 | Real worker output through the layers | `fixtures/relative_strength/real_*.json` equals fresh worker output; Go `ExpandIndicators` leaves the block unchanged and gives one drawdown pair per `ratio_rebased` value with `series.dates[i]`; the web maps the dates and refuses a different length | U/I |
 | RST-B01 | Block isolation | An exception inside `vs_index` gives `vs_index` null `compute_error` with `vs_peers` intact and the snapshot still written (the other analysis blocks unchanged), and the failure is logged without prices or secrets; the same for `vs_peers` | U |
 | RST-B02 | Existing blocks untouched | The existing `analysis` keys and their values for a fixture are identical with and without the new block; the new key is additive | U |
 | RST-B03 | Peer load failure | A database error while reading peers gives `vs_peers` null `compute_error` and the snapshot is written | I |
@@ -1112,6 +1121,8 @@ Worker rows (RST-I, RST-P, RST-B) are U tests in `apps/worker/tests/test_relativ
 | RST-C04 | Small sample and stale | Chip under 5 peers and under 3 independent periods; as-of chip amber when stale | U |
 | RST-C05 | Missing block and wrong-shaped fields | "Not computed yet" for a missing block; a bad field shows an em dash with a reason and does not throw; other halves render | U |
 | RST-C06 | Honesty | No 0, NaN or Infinity text; no verdict wording; no colour classes outside tokens; numbers through `format.ts`; the chart only through `ChartFrame` | U |
+| RST-C08 | Index ends before the stock; stale index; labels; years; survivor note | `inv-rs-index-ends` line, header and summary name `last_aligned`, the card is stale when `index_as_of` is old; "(21 trading days)" labels and `From` dates; every year row has its dates, `ytd` only after a December base; the peer note has the survivor sentence, `peers_in_sector` and both spans; the sample line shows "2 to 5 peers" | U |
+| RST-C09 | The chart option | The 100 baseline exists only where the ratio exists, nulls stay gaps and nothing connects across them | U |
 | RST-C07 | Definitions | `definitions.ts` carries `relative_return`, `relative_line`, `beat_share`, `peer_rank` generated from docs/05 (`gen:definitions --check` clean) | U |
 | RST-E01 | Playwright: the Analysis tab with the card | axe has no serious or critical violation in both themes at 375 and 1440 px; no horizontal page scroll; keyboard reaches the How to read, the reasons and the chart's Show data | E |
 | RST-E02 | Playwright: no index imported | The hint and the Import link are visible and reachable by keyboard | E |

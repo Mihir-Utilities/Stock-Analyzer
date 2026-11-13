@@ -4672,6 +4672,11 @@ components:
                       - "1y"
                   rows:
                     type: "integer"
+                  base_date:
+                    type: "string"
+                    format: "date"
+                    nullable: true
+                    description: "Date of the stock's own base row of the window"
                   stock_pct:
                     type: "number"
                     nullable: true
@@ -4773,6 +4778,10 @@ components:
                       - "1y"
                   rows:
                     type: "integer"
+                  base_date:
+                    type: "string"
+                    format: "date"
+                    nullable: true
                   stock_pct:
                     type: "number"
                     nullable: true
@@ -4780,6 +4789,8 @@ components:
                     type: "integer"
                   n_total:
                     type: "integer"
+                    nullable: true
+                    description: "null when the stock has no return for the window"
                   rank:
                     type: "integer"
                     nullable: true

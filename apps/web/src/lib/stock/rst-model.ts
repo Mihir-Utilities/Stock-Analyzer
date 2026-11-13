@@ -15,18 +15,53 @@ export const RS_SOURCE =
 export const RS_NOT_COMPUTED = "Not computed yet. It will appear after the next price import.";
 export const PEER_STALE_NOTE = (asOf: string | null): string =>
   `Peer ranks are as of ${asOf ?? "the stock's last price date"}; they update when this stock is recomputed.`;
+export const PEER_SURVIVOR_NOTE =
+  "Stocks you track today; delisted and untracked stocks are not included; the sector label is the one you entered.";
 
-export const INDEX_LABEL: Record<string, string> = {
+const WINDOW_LABEL: Record<string, string> = {
   "1m": "1 month",
-  "3m": "3 months",
-  "6m": "6 months",
-  "1y": "1 year",
-};
-export const PEER_LABEL: Record<string, string> = {
   "3m": "3 months",
   "6m": "6 months",
   "1y": "12 months",
 };
+
+/** Same wording for the index table and the peer tiles: `1 month (21 trading days)`. */
+export function windowLabel(key: string, rows: number | null | undefined): string {
+  const name = WINDOW_LABEL[key] ?? key;
+  return typeof rows === "number"
+    ? `${name} (${formatNumber(rows, { decimals: 0 }).text} trading days)`
+    : name;
+}
+
+/** Reasons of the blank windows as readable sentences; pure, no rendering side effects. */
+export function windowReasons(v: VsIndex): string[] {
+  return v.windows.flatMap((w) =>
+    w.reason ? [`${windowLabel(w.key, w.rows)}: ${rsReason(w.reason)}`] : [],
+  );
+}
+
+/** `year to date` only when the base is a December close; otherwise the real start is named. */
+export function yearLabel(y: {
+  year: number;
+  kind?: string | null;
+  base_date?: string | null;
+}): string {
+  if (y.kind !== "ytd") return String(y.year);
+  const base = y.base_date ?? "";
+  return base.slice(5, 7) === "12"
+    ? `${y.year} (year to date)`
+    : `${y.year} (since ${formatDate(base || null).text})`;
+}
+
+/** `5 peers` or `3 to 5 peers`: the smallest and largest count over the periods. */
+export function peerCountText(windows: ReadonlyArray<PeerWindow>): string | null {
+  const n = windows.flatMap((w) => (typeof w.n_peers === "number" ? [w.n_peers] : []));
+  if (n.length === 0) return null;
+  const lo = Math.min(...n);
+  const hi = Math.max(...n);
+  const f = (x: number) => formatNumber(x, { decimals: 0 }).text;
+  return lo === hi ? `${f(lo)} peers` : `${f(lo)} to ${f(hi)} peers`;
+}
 
 const RS_REASONS: Record<string, string> = {
   no_index_series: "your NIFTY50 series is missing or has too few dates in common with this stock",

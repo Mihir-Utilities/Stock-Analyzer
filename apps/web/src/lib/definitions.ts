@@ -278,7 +278,7 @@ export const definitions = {
   "relative_return": {
     label: "Return against the Nifty 50",
     section: "",
-    text: "How much the stock's price rose or fell over the period minus how much the Nifty 50 index did over the same days, in percentage points. A positive number means the stock did better than the index in that period. Only dates where both have a closing price are used, and the price change excludes dividends.",
+    text: "How much the stock's price rose or fell over the period minus how much the Nifty 50 index did over the same days, in percentage points. The index must be the price index you imported, not a total-return one. A positive number means the stock did better than the index in that period. Only dates where both have a closing price are used, and the price change excludes dividends.",
   },
   "relative_line": {
     label: "Stock divided by the Nifty 50",
@@ -293,7 +293,7 @@ export const definitions = {
   "peer_rank": {
     label: "Rank among tracked sector peers",
     section: "",
-    text: "How this stock's price change over 3, 6 and 12 months ranks among the other stocks you track in the same sector. Rank 1 is the biggest gain. It only compares stocks you track, it is not the whole sector, and no sector index is used.",
+    text: "How this stock's price change over 3, 6 and 12 months ranks among the other stocks you track in the same sector. Rank 1 is the biggest gain. It only compares stocks you track today; delisted and untracked stocks are not included, the sector label is the one you entered, and no sector index is used.",
   },
 } as const satisfies Record<string, Definition>;
 
