@@ -188,6 +188,20 @@ async function noPageScroll(page: Page) {
   expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
 }
 
+async function smallTargets(page: Page) {
+  return page.evaluate(() =>
+    Array.from(
+      document.querySelectorAll(
+        "button[data-testid], a[data-testid], input[data-testid], select[data-testid], textarea[data-testid]",
+      ),
+    )
+      .filter((el) => el.getAttribute("data-testid") !== "skip-link")
+      .map((el) => ({ id: el.getAttribute("data-testid"), r: el.getBoundingClientRect() }))
+      .filter((x) => x.r.width > 0 && x.r.height > 0 && (x.r.width < 43.5 || x.r.height < 43.5))
+      .map((x) => `${x.id}: ${Math.round(x.r.width)}x${Math.round(x.r.height)}`),
+  );
+}
+
 const activeId = (page: Page) =>
   page.evaluate(() => document.activeElement?.getAttribute("data-testid") ?? "");
 
@@ -213,7 +227,10 @@ test.describe("Journal tab", () => {
         await expect(page.getByTestId("jrn-form")).toBeVisible();
         await setTheme(page, theme);
         expect(await axeViolations(page)).toEqual([]);
-        if (width === 375) await noPageScroll(page);
+        if (width === 375) {
+          await noPageScroll(page);
+          expect(await smallTargets(page)).toEqual([]);
+        }
       });
 
       test(`axe, empty state: ${theme} at ${width}`, async ({ page }) => {
@@ -225,7 +242,10 @@ test.describe("Journal tab", () => {
         await setTheme(page, theme);
         await expect(page.getByTestId("jrn-empty")).toBeVisible();
         expect(await axeViolations(page)).toEqual([]);
-        if (width === 375) await noPageScroll(page);
+        if (width === 375) {
+          await noPageScroll(page);
+          expect(await smallTargets(page)).toEqual([]);
+        }
       });
     }
   }
@@ -296,6 +316,7 @@ test.describe("Alert shortcuts in the Analysis tab", () => {
         }
         await setTheme(page, theme);
         expect(await axeViolations(page)).toEqual([]);
+        if (width === 375) expect(await smallTargets(page)).toEqual([]); // the card, before the drawer
         await page.getByTestId("als-btn-below-10").click();
         await expect(page.getByTestId("alert-form")).toBeVisible();
         await setTheme(page, theme);

@@ -12,7 +12,7 @@ import type { Load } from "@/lib/stock/load";
 type IndLoad = Load<IndicatorsData>;
 
 const BUTTON =
-  "touch-target inline-flex min-h-9 items-center rounded-control border border-border px-3 py-1 text-left text-body-sm hover:bg-surface-3";
+  "touch-target inline-flex items-center rounded-control border border-border px-3 py-2 text-left text-body-sm hover:bg-surface-3";
 
 function Rows({ symbol, position }: { symbol: string; position: Position }) {
   const toast = useToast();
