@@ -299,7 +299,7 @@ func TestExpandIndicatorsPassesSwingDipsThrough(t *testing.T) {
 // pair, and pair i carries the date series.dates[i] (also when the history is shorter than 750).
 func TestExpandIndicatorsWithRealRelativeStrengthOutput(t *testing.T) {
 	for _, name := range []string{"real_120.json", "real_800.json"} {
-		raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "fixtures", "relative_strength", name))
+		raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "fixtures", "relative_strength", name)) //nolint:gosec // fixed fixture names
 		if err != nil {
 			t.Fatal(err)
 		}
