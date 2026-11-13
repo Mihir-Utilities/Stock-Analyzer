@@ -27,6 +27,11 @@ export interface NoteBody {
   portfolio_txn_id?: number;
 }
 
+// Bidirectional overrides and isolates can reorder surrounding text (N5, JRN-7). Zero-width joiners
+// stay allowed (emoji sequences), but a note made only of invisible characters is blank.
+const BIDI = /[\u202A-\u202E\u2066-\u2069]/;
+const INVISIBLE = /[\u200B-\u200D\u2060\uFEFF]/g;
+
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/;
@@ -35,7 +40,10 @@ const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/;
 export function validateNote(d: NoteDraft): { errors: NoteErrors; body: NoteBody | null } {
   const errors: NoteErrors = {};
   const note = d.note.trim();
-  if (note === "") errors.note = "Write a short note first.";
+  if (note === "" || note.replace(INVISIBLE, "").trim() === "") {
+    errors.note = "Write a short note first.";
+  } else if (BIDI.test(note))
+    errors.note = "Remove text-direction control characters from the note.";
   else if (charCount(note) > NOTE_MAX) {
     errors.note = `Use at most ${NOTE_MAX.toLocaleString("en-US")} characters (now ${charCount(note).toLocaleString("en-US")}).`;
   } else if (CONTROL.test(note)) errors.note = "Remove control characters from the note.";

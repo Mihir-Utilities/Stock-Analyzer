@@ -435,7 +435,9 @@ export function AnalysisTab({
         <PositionCard load={indicatorsLoad} blocks={inv} />
         <VolRegimeCard load={indicatorsLoad} blocks={inv} />
       </div>
-      {symbol ? <AlertShortcuts symbol={symbol} load={indicatorsLoad} blocks={inv} /> : null}
+      {symbol ? (
+        <AlertShortcuts symbol={symbol} load={indicatorsLoad} blocks={inv} swing={swing.block} />
+      ) : null}
       <ChartSlot
         title="Drawdown from the running peak (peak within the last 750 trading days)"
         testId="chart-drawdown"

@@ -12,6 +12,8 @@ import type { Load } from "@/lib/stock/load";
 import type { IndicatorsData } from "@/lib/stock/schemas";
 import { fail, ok } from "../mocks/imports-fixtures";
 import { indicatorsWithInv } from "../mocks/inv-fixtures";
+import { swingDips } from "../mocks/swing-fixtures";
+import { parseSwingDips } from "@/lib/stock/swing-schemas";
 import { createMockFetch, type Handler } from "../mocks/mock-fetch";
 import "./dom-matchers";
 
@@ -131,7 +133,7 @@ describe("ALS-02 / ALS-03 / ALS-04 rows", () => {
 
   it("each button carries the exact level, each row its source and as-of, and no advice words", () => {
     const rows = shortcutRows(position({ high_52w_close: 1150, close: 1100, sma200: 1000 }));
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(4);
     const b10 = rows.find((r) => r.key === "below-10")!;
     expect(b10.action?.button).toBe("Alert when the price falls to ₹1,035.00 or lower");
     expect(b10.source).toContain("52-week highest close ₹1,150.00");
@@ -140,7 +142,6 @@ describe("ALS-02 / ALS-03 / ALS-04 rows", () => {
       expect(
         `${r.label} ${r.action?.button ?? ""} ${r.source ?? ""} ${r.reason ?? ""}`,
       ).not.toMatch(/\b(buy|sell|target|recommend)/i);
-      expect(`${r.label} ${r.reason ?? ""}`).not.toMatch(/current dip/i); // ALS-08
     }
   });
 });
@@ -208,9 +209,9 @@ describe("ALS-05 / ALS-06 / ALS-07 the alert form from a shortcut", () => {
     );
   });
 
-  it("a level that is already met shows the existing plain message and keeps the button", async () => {
+  it("the server rule stays the backstop: a 422 THRESHOLD_ALREADY_MET still shows the plain message", async () => {
     const user = userEvent.setup();
-    const { mock } = renderCard(position({ high_52w_close: 1150, close: 900, sma200: 1000 }), {
+    const { mock } = renderCard(position({ high_52w_close: 1150, close: 1100, sma200: 1000 }), {
       "POST /alerts": fail(422, "THRESHOLD_ALREADY_MET", "already met", {
         kind: "price_below",
         threshold: 1035,
@@ -225,7 +226,6 @@ describe("ALS-05 / ALS-06 / ALS-07 the alert form from a shortcut", () => {
       await within(form).findByText(/Already true at the last imported bar of 10 Nov 2026/),
     ).toBeInTheDocument();
     expect(mock.calls.filter((c) => c.method === "POST")).toHaveLength(1);
-    expect((screen.getByTestId("als-btn-below-10") as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("the Alerts page form is unchanged and starts empty (no prefill)", async () => {
@@ -253,5 +253,108 @@ describe("ALS-05 / ALS-06 / ALS-07 the alert form from a shortcut", () => {
     });
     await waitFor(() => expect(screen.queryByTestId("alert-form")).toBeNull());
     expect(mock.calls.filter((c) => c.method === "POST")).toHaveLength(0);
+  });
+});
+
+describe("S2 levels the last close already satisfies get no button", () => {
+  it("drops the price_below button when close is at or below the level and says why", () => {
+    const rows = shortcutRows(
+      position({ high_52w_close: 1150, close: 1000, sma200: 900, as_of: "2026-11-10" }),
+    );
+    const b10 = rows.find((r) => r.key === "below-10")!; // level 1035.00
+    expect(b10.action).toBeNull();
+    expect(b10.reason).toBe(
+      "The last close (\u20b91,000.00, as of 10 Nov 2026) is already at or below this level.",
+    );
+    expect(rows.find((r) => r.key === "below-20")!.action).not.toBeNull(); // level 920.00
+    const equal = shortcutRows(position({ high_52w_close: 1150, close: 1035, sma200: 900 })).find(
+      (r) => r.key === "below-10",
+    )!;
+    expect(equal.action).toBeNull();
+  });
+});
+
+describe("S3 source label", () => {
+  it("says the prices are adjusted for splits and bonuses", () => {
+    const rows = shortcutRows(position({ high_52w_close: 1150, close: 1100, sma200: 1000 }));
+    for (const r of rows.filter((x) => x.source && x.key !== "dip-low")) {
+      expect(r.source).toContain("adjusted for splits and bonuses");
+    }
+  });
+});
+
+describe("ALS-1 dip-low row (item A swing dips)", () => {
+  const swingOf = (patch?: (d: Record<string, unknown>) => void) => {
+    const d = swingDips();
+    patch?.(d);
+    return parseSwingDips({ swing_dips: d }).block;
+  };
+  const pos = (close: number) => position({ close, high_52w_close: 120, sma200: 50 });
+  const dip = (rows: ReturnType<typeof shortcutRows>) => rows.find((r) => r.key === "dip-low")!;
+  const rec0 = (d: Record<string, unknown>) =>
+    (d["thresholds"] as Array<{ records: Array<Record<string, unknown>> }>)[0]!.records[0]!;
+
+  it("an open dip with the close above its low offers price_below at the low", () => {
+    const row = dip(shortcutRows(pos(100), swingOf())); // low_close 94 on 2024-01-14
+    expect(row.action).toEqual({
+      kind: "price_below",
+      level: "94.00",
+      button: "Alert when the price falls to \u20b994.00 or lower",
+    });
+    expect(row.label).toBe("Deepest close of the current dip, \u20b994.00 (on 14 Jan 2024)");
+    expect(row.source).toContain("Low close \u20b994.00 on 14 Jan 2024");
+    expect(row.source).toContain("adjusted for splits and bonuses");
+  });
+
+  it("no open dip: no button, a reason", () => {
+    const row = dip(
+      shortcutRows(
+        pos(100),
+        swingOf((d) => {
+          rec0(d)["status"] = "recovered";
+        }),
+      ),
+    );
+    expect(row.action).toBeNull();
+    expect(row.reason).toContain("no open dip");
+  });
+
+  it("close equal to the low: no button, a reason", () => {
+    const row = dip(shortcutRows(pos(94), swingOf()));
+    expect(row.action).toBeNull();
+    expect(row.reason).toContain("equals the dip low");
+  });
+
+  it("missing or malformed swing block degrades to a reason", () => {
+    expect(dip(shortcutRows(pos(100))).reason).toContain("not computed yet");
+    expect(dip(shortcutRows(pos(100), parseSwingDips({}).block)).action).toBeNull();
+    expect(dip(shortcutRows(pos(100), parseSwingDips({ swing_dips: "x" }).block)).reason).toContain(
+      "unexpected shape",
+    );
+  });
+
+  it("an unknown status (for example superseded) offers no button", () => {
+    const row = dip(
+      shortcutRows(
+        pos(100),
+        swingOf((d) => {
+          rec0(d)["status"] = "superseded";
+        }),
+      ),
+    );
+    expect(row.action).toBeNull();
+    expect(row.reason).toContain("not known");
+  });
+
+  it("no 10% threshold row or no records: a reason", () => {
+    const row = dip(
+      shortcutRows(
+        pos(100),
+        swingOf((d) => {
+          (d["thresholds"] as unknown[]).length = 0;
+        }),
+      ),
+    );
+    expect(row.action).toBeNull();
   });
 });

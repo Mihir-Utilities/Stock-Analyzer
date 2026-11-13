@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Drawer, useToast } from "@/components/ui/overlays";
 import { prefillFor, shortcutRows, type ShortcutKey } from "@/lib/alerts/levels";
 import type { Block, InvBlocks, Position } from "@/lib/stock/inv-schemas";
+import type { SwingDips } from "@/lib/stock/swing-schemas";
 import type { IndicatorsData } from "@/lib/stock/schemas";
 import type { Load } from "@/lib/stock/load";
 
@@ -14,9 +15,17 @@ type IndLoad = Load<IndicatorsData>;
 const BUTTON =
   "touch-target inline-flex items-center rounded-control border border-border px-3 py-2 text-left text-body-sm hover:bg-surface-3";
 
-function Rows({ symbol, position }: { symbol: string; position: Position }) {
+function Rows({
+  symbol,
+  position,
+  swing,
+}: {
+  symbol: string;
+  position: Position;
+  swing: Block<SwingDips> | undefined;
+}) {
   const toast = useToast();
-  const rows = shortcutRows(position);
+  const rows = shortcutRows(position, swing);
   const [open, setOpen] = useState<ShortcutKey | null>(null);
   const triggers = useRef<Partial<Record<ShortcutKey, HTMLButtonElement | null>>>({});
   const current = rows.find((r) => r.key === open) ?? null;
@@ -93,10 +102,13 @@ export function AlertShortcuts({
   symbol,
   load,
   blocks,
+  swing,
 }: {
   symbol: string;
   load: IndLoad;
   blocks: Pick<InvBlocks, "position">;
+  /** The swing-dips block (item A) for the dip-low row; absent means not computed. */
+  swing?: Block<SwingDips>;
 }) {
   const block: Block<Position> = blocks.position;
   const common = { title: "Alert at a level", testId: "als-card" } as const;
@@ -136,7 +148,7 @@ export function AlertShortcuts({
         Opens the alert form with the level filled in. You still choose to create it. Alerts are
         checked against the last price import, not live prices.
       </p>
-      <Rows symbol={symbol} position={block.value} />
+      <Rows symbol={symbol} position={block.value} swing={swing} />
     </Card>
   );
 }

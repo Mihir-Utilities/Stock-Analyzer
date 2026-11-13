@@ -128,7 +128,11 @@ export function useDeleteTxn() {
   return useMutation({
     mutationFn: (id: number) =>
       apiRequest(`/portfolio/txns/${id}`, { schema: deletedSchema, method: "DELETE" }),
-    onSuccess: () => invalidatePortfolio(qc),
+    onSuccess: () => {
+      invalidatePortfolio(qc);
+      // A journal note linked to this transaction loses its link on the server (N9).
+      void qc.invalidateQueries({ queryKey: ["journal"] });
+    },
   });
 }
 

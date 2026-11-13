@@ -207,6 +207,13 @@ describe("JRN-26 the form", () => {
     expect(validateNote({ note: "a\u0007b", reviewOn: "", txnId: "" }).errors.note).toContain(
       "control",
     );
+    // N5: bidi overrides and invisible-only notes are refused, ZWJ emoji stay
+    const noteErr = (note: string) => validateNote({ note, reviewOn: "", txnId: "" }).errors.note;
+    expect(noteErr("a‮b")).toContain("direction");
+    expect(noteErr("x⁦y⁩")).toContain("direction");
+    expect(noteErr("﻿")).toBeTruthy();
+    expect(noteErr("​‍")).toBeTruthy();
+    expect(noteErr("\u{1F468}‍\u{1F469}")).toBeUndefined();
     expect(
       validateNote({ note: "ok", reviewOn: "12/11/2026", txnId: "" }).errors.reviewOn,
     ).toBeTruthy();
@@ -478,3 +485,106 @@ function fireInput(el: HTMLElement, value: string) {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
+
+describe("review fixes", () => {
+  it("S1: typing in the note while the review date is invalid does not steal the focus", async () => {
+    const user = userEvent.setup();
+    mount({
+      "POST /stocks/ACME/journal": fail(422, "UNPROCESSABLE", "Validation failed", {
+        fields: [{ field: "review_on", message: "must be today or later" }],
+      }),
+    });
+    await screen.findByTestId("jrn-empty");
+    await user.click(screen.getByTestId("jrn-add"));
+    const box = screen.getByTestId("jrn-note") as HTMLTextAreaElement;
+    await user.type(box, "first");
+    fireInput(screen.getByTestId("jrn-review-on"), "2026-01-01");
+    await user.click(screen.getByTestId("jrn-submit"));
+    await screen.findByText(/must be today or later/);
+    expect(document.activeElement).toBe(screen.getByTestId("jrn-review-on")); // focus moved on submit
+    await user.click(box);
+    await user.type(box, " and more words");
+    expect(document.activeElement).toBe(box); // typing keeps the focus
+    expect(box.value).toBe("first and more words");
+  });
+
+  it("N3: a 404 on delete counts as deleted", async () => {
+    const user = userEvent.setup();
+    let rows = [note(1)];
+    mount({
+      "GET /stocks/ACME/journal": () => page(rows),
+      "DELETE /journal/1": () => {
+        rows = [];
+        return fail(404, "NOT_FOUND", "Journal note not found");
+      },
+    });
+    await user.click(await screen.findByTestId("jrn-delete-1"));
+    const d = document.querySelector('dialog[data-testid="confirm-dialog"][open]') as HTMLElement;
+    await user.click(within(d).getByTestId("confirm-ok"));
+    await waitFor(() => expect(screen.queryByTestId("jrn-item-1")).toBeNull());
+    expect(screen.queryByTestId("jrn-error-action")).toBeNull();
+    expect(screen.getByTestId("jrn-live")).toHaveTextContent("Note deleted");
+  });
+
+  it("N6: all pages of transactions are offered and the linked one is always an option", async () => {
+    const user = userEvent.setup();
+    const tx = (id: number) => ({ ...txnRow, id, trade_date: "2026-09-01" });
+    const linked = {
+      id: 7,
+      side: "sell",
+      qty: "3.0000",
+      price: "10.0000",
+      trade_date: "2026-01-02",
+    };
+    mount({
+      "GET /stocks/ACME/journal": page([note(1, { portfolio_txn_id: 7, txn: linked })]),
+      "GET /portfolio/txns": (c) =>
+        c.query.get("cursor")
+          ? ok({ items: [tx(43)], next_cursor: null })
+          : ok({ items: [tx(42)], next_cursor: "p2" }),
+    });
+    await user.click(await screen.findByTestId("jrn-edit-1"));
+    await waitFor(() =>
+      expect(screen.getByTestId("jrn-txn").querySelectorAll("option")).toHaveLength(4),
+    );
+    const sel = screen.getByTestId("jrn-txn") as HTMLSelectElement;
+    expect(sel.value).toBe("7"); // the current link survives although it is not in the list
+    expect(Array.from(sel.options).map((o) => o.value)).toEqual(["", "7", "42", "43"]);
+  });
+
+  it("N7: the over-limit announcement lives in an always-mounted polite region", async () => {
+    const user = userEvent.setup();
+    mount({});
+    await screen.findByTestId("jrn-empty");
+    await user.click(screen.getByTestId("jrn-add"));
+    const live = screen.getByTestId("jrn-count-live");
+    expect(live.getAttribute("aria-live")).toBe("polite");
+    expect(live.textContent).toBe("");
+    await user.click(screen.getByTestId("jrn-note"));
+    await user.paste("x".repeat(1003));
+    expect(screen.getByTestId("jrn-count-live").textContent).toContain(
+      "Over the limit by 3 characters",
+    );
+  });
+
+  it("N9: deleting a portfolio transaction refreshes the journal queries", async () => {
+    const { useDeleteTxn } = await import("@/lib/portfolio/api");
+    const client = new QueryClient();
+    const spy = vi.spyOn(client, "invalidateQueries");
+    vi.stubGlobal(
+      "fetch",
+      createMockFetch({ "DELETE /portfolio/txns/5": ok({ id: 5, deleted: true }) }).impl,
+    );
+    function Probe() {
+      const m = useDeleteTxn();
+      return <button type="button" data-testid="go" onClick={() => m.mutate(5)} />;
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Probe />
+      </QueryClientProvider>,
+    );
+    await userEvent.setup().click(screen.getByTestId("go"));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: ["journal"] }));
+  });
+});
