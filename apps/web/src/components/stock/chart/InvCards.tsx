@@ -45,14 +45,14 @@ type IndLoad = Load<IndicatorsData>;
 
 // `relative` makes the region the containing block of the visually hidden reasons inside its cells,
 // so a scrolled-away cell never widens the page.
-const scrollRegion = "relative overflow-x-auto rounded-control border border-border";
-const th = "px-2 py-1 text-left text-caption font-medium text-text-2";
-const td = "num border-t border-border px-2 py-1 text-right text-body-sm text-text-1";
-const selectCls =
+export const scrollRegion = "relative overflow-x-auto rounded-control border border-border";
+export const th = "px-2 py-1 text-left text-caption font-medium text-text-2";
+export const td = "num border-t border-border px-2 py-1 text-right text-body-sm text-text-1";
+export const selectCls =
   "h-9 touch-target rounded-control border border-border bg-surface-1 px-2 text-body-sm text-text-1";
 
 /** An unknown value: an em dash, the reason as a tooltip and as text a screen reader (or a phone) can read. */
-function Blank({ reason }: { reason: string }) {
+export function Blank({ reason }: { reason: string }) {
   return (
     <span title={reason}>
       {"—"}
@@ -61,7 +61,7 @@ function Blank({ reason }: { reason: string }) {
   );
 }
 
-function Cell({ text, reason }: { text: string; reason: string | null }) {
+export function Cell({ text, reason }: { text: string; reason: string | null }) {
   return reason === null ? <>{text}</> : <Blank reason={reason} />;
 }
 
@@ -88,7 +88,7 @@ function Stat({
 }
 
 /** Visible list of why some cells are blank (phones have no hover). */
-function Reasons({ items, testId }: { items: string[]; testId: string }) {
+export function Reasons({ items, testId }: { items: string[]; testId: string }) {
   const unique = [...new Set(items)];
   if (unique.length === 0) return null;
   return (
@@ -121,7 +121,7 @@ interface ShellProps<T> {
 }
 
 /** The shared parts of every INV card: definition, source and as-of, sample size, How to read, note, states. */
-function InvCard<T>({
+export function InvCard<T>({
   card,
   testId,
   title,
@@ -207,8 +207,10 @@ function InvCard<T>({
   );
 }
 
-const pctText = (v: number | null | undefined, o: { signed?: boolean; decimals?: number } = {}) =>
-  formatPercent(v ?? null, { decimals: 1, ...o });
+export const pctText = (
+  v: number | null | undefined,
+  o: { signed?: boolean; decimals?: number } = {},
+) => formatPercent(v ?? null, { decimals: 1, ...o });
 
 // ---- Entry context -------------------------------------------------------------------------------
 

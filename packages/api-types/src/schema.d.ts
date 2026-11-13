@@ -1541,6 +1541,80 @@ export interface components {
             price_basis?: string;
             variants: components["schemas"]["InvSipVariant"][];
         };
+        /** @description One dip of analysis.swing_dips.thresholds[].records (docs/05 12.13 rule A). depth_pct is a negative percent number; days are calendar days between bar dates. */
+        InvSwingDipRecord: {
+            /** Format: date */
+            peak_date: string;
+            peak_close?: number;
+            /** Format: date */
+            start_date?: string;
+            /** Format: date */
+            low_date: string;
+            low_close?: number;
+            depth_pct: number;
+            days_peak_to_low?: number;
+            /** Format: date */
+            recovery_date?: string | null;
+            days_low_to_recovery?: number | null;
+            /** @description open_dip while the dip has not recovered. */
+            days_low_to_recovery_reason?: string | null;
+            /** @enum {string} */
+            status: "recovered" | "open";
+        };
+        /** @description Rule A summary for one threshold (peak-recovery dips, docs/05 12.13). When the history is shorter than 252 rows every count and statistic is null and reason is insufficient_history. */
+        InvSwingDipRow: {
+            threshold_pct: number;
+            dips?: number | null;
+            recovered?: number | null;
+            open?: number | null;
+            recovered_share_pct?: number | null;
+            recovered_share_reason?: string | null;
+            median_depth_pct?: number | null;
+            median_depth_reason?: string | null;
+            worst_depth_pct?: number | null;
+            /** @description no_dips | insufficient_history */
+            worst_depth_reason?: string | null;
+            median_days_peak_to_low?: number | null;
+            median_days_peak_to_low_reason?: string | null;
+            /** @description Median over recovered (completed) dips only. */
+            median_days_to_recover?: number | null;
+            median_days_to_recover_reason?: string | null;
+            longest_open_days?: number | null;
+            /** @description no_open_dip | insufficient_history */
+            longest_open_reason?: string | null;
+            small_sample: boolean;
+            /** @description insufficient_history when fewer than 252 rows exist. */
+            reason?: string | null;
+            /** @description The last 8 dips, newest first. */
+            records?: components["schemas"]["InvSwingDipRecord"][];
+        };
+        /** @description Rule B summary for one threshold (zig-zag swing legs, docs/05 12.13). A bounce of X percent is not a recovery of the old peak. */
+        InvSwingLegRow: {
+            threshold_pct: number;
+            legs?: number | null;
+            bounced?: number | null;
+            open?: number | null;
+            median_depth_pct?: number | null;
+            median_depth_reason?: string | null;
+            worst_depth_pct?: number | null;
+            worst_depth_reason?: string | null;
+            median_days_peak_to_low?: number | null;
+            median_days_peak_to_low_reason?: string | null;
+            /** @description Median over bounced legs only. */
+            median_days_to_bounce?: number | null;
+            median_days_to_bounce_reason?: string | null;
+            small_sample: boolean;
+            reason?: string | null;
+        };
+        /** @description analysis.swing_dips (docs/05 12.13, docs/03 4a-swing): falls of at least 10 and 20 percent from the recent 52-week high, recovered or not, plus zig-zag swing legs. Additive and optional; drawdown_profile is unchanged. Past prices only. */
+        InvSwingDips: {
+            /** Format: date */
+            as_of: string;
+            bars: number;
+            window_rows?: number;
+            thresholds: components["schemas"]["InvSwingDipRow"][];
+            zigzag: components["schemas"]["InvSwingLegRow"][];
+        };
         /** @description analysis.risk_adjusted (docs/05 12.9): Calmar-style ratio and downside-deviation ratio over the calendar 3-year window. No risk-free rate, no Sharpe. */
         InvRiskAdjusted: {
             /** Format: date */
@@ -1564,6 +1638,9 @@ export interface components {
             seasonality?: components["schemas"]["InvSeasonality"];
             position?: components["schemas"]["InvPricePosition"];
             drawdown_profile?: components["schemas"]["InvDrawdownProfile"];
+            swing_dips?: components["schemas"]["InvSwingDips"];
+            /** @description compute_error when swing_dips is null because the block failed to compute (docs/05 12.13, SWD-7). */
+            swing_dips_reason?: string | null;
             holding_periods?: components["schemas"]["InvHoldingPeriods"];
             entry_study?: components["schemas"]["InvEntryStudy"];
             vol_regime?: components["schemas"]["InvVolRegime"];
