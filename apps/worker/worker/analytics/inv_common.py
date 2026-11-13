@@ -94,6 +94,18 @@ def _number(v: Any) -> float | None:
 
 
 @dataclass(frozen=True)
+class PeerData:
+    """Inputs of the sector-peer ranks (docs/05 12.14.6), read by ``analysis_db``: this stock's
+    sector (``None`` = unclassified) and the valid ``adj_close`` bars (ascending) of the tracked
+    same-sector peers. ``failed`` means the read raised (the block then says ``compute_error``)."""
+
+    sector: str | None
+    closes: Mapping[int, tuple[list[date], F64]] = field(default_factory=dict)
+    peers_in_sector: int = 0
+    failed: bool = False
+
+
+@dataclass(frozen=True)
 class InvContext:
     """What the blocks need besides the prices: the IST date of the computation (an argument,
     never read from the clock here), the trading holidays and the settings."""
@@ -102,6 +114,9 @@ class InvContext:
     holidays: Collection[date] = field(default_factory=frozenset)
     market_closed: Collection[date] = field(default_factory=frozenset)  # derived from the data
     settings: InvSettings = field(default_factory=InvSettings)
+    # Relative strength (docs/05 12.14): the log label and the sector peers' prices.
+    symbol: str | None = None
+    peers: PeerData | None = None
 
 
 def r4(v: float) -> float | None:

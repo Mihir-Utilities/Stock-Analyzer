@@ -1074,6 +1074,93 @@ Types: U unit, I integration (Postgres), E Playwright. Vectors C1, C2, S1, TW1..
 | PRK-U06 | Definitions | the five owner texts (`pf_*`) exist in docs/05 8.6.5 and in the generated `definitions.ts`; none contains ids or section numbers | U |
 | PRK-U07 | Formatting | all figures go through `format.ts` (INR, percent with sign, plain index); no ad-hoc colours; charts only through `ChartFrame` | U |
 | PRK-E01 | Playwright | axe clean in both themes at 375 and 1440 px for the section in All, Equity and Mutual funds; keyboard (arrow keys) on the view switch updates the section; no horizontal page scroll at 375 px; "Show data" opens for both charts | E |
+## JRN / ALS: decision journal and alert shortcuts (plan Item D; API B20, web F21; docs/03 section 13a, docs/06 6.4b, docs/02 migration 0015)
+Types: U unit, I integration (throwaway Postgres), E Playwright, CI pipeline. Dates in tests come from an injected clock (IST), never the wall clock.
+
+| ID | Case | Expected | Type |
+|---|---|---|---|
+| JRN-01 | Migration 0015 up, down, up | Table `journal_note`, its 5 constraints and 2 indexes exist after up and are gone after down; docs/02 lists the same objects (`TestMigrateUpDownUp`) | I |
+| JRN-02 | Constraint guards | Direct SQL: blank text, 1,001 characters, price without a date, a status other than open/reviewed, `reviewed` without `reviewed_at` are all refused by the database | I |
+| JRN-03 | Create a note | 201; `note` trimmed; `noted_on` is the injected IST date (a clock at 18:31 UTC on 31 Dec gives 1 Jan); `status` open; `price_at_note` equals the latest non-suspect close on or before that day with its `price_as_of` and `price_source` | I |
+| JRN-04 | No imported price | A stock with no bars: 201, `price_at_note` and `price_as_of` null, `price_reason = "no_price_imported"`, never 0 | I |
+| JRN-05 | Suspect and later bars ignored | A suspect bar and a bar after the note date are never used for the price | I |
+| JRN-06 | Note length boundary | 1,000 characters (multi-byte characters counted as characters) accepted; 1,001 is 422 on `note`; empty and whitespace-only are 422 | U/I |
+| JRN-07 | Control characters | NUL, BEL and other control characters are 422 on `note`; newline and tab are kept | U |
+| JRN-08 | Untrusted text round trip | A note with `<script>alert(1)</script>` and `M&M` is stored and returned byte for byte; the web renders it as text (no element is created) | I/U |
+| JRN-09 | `review_on` rules | A past date on create is 422; today is accepted; more than 10 years ahead is 422; an invalid date is 422; on PATCH a past date is accepted only when equal to the stored value | U/I |
+| JRN-10 | Review due, boundaries | With today 2026-11-12: open + review_on 2026-11-11 is due; open + 2026-11-12 is due (the date counts); open + 2026-11-13 is not; reviewed + a past date is not; open without `review_on` is not; `review_due_count` counts all due open notes regardless of paging and filter | U/I |
+| JRN-11 | Review due follows the injected IST date | The same stored note is not due at 18:29 UTC on the day before and due at 18:30 UTC (IST midnight) | I |
+| JRN-12 | Transaction link | A transaction of the same stock is accepted and returned in `txn`; one of another stock is 422 on `portfolio_txn_id`; an unknown id is 422; deleting the transaction later leaves the note with `portfolio_txn_id` null | I |
+| JRN-13 | PATCH semantics | `note`, `review_on` (date or null), `status`, `portfolio_txn_id` (id or null) change independently; at least one key is required; `price_at_note`, `noted_on`, `symbol` are unknown keys (400); `reviewed` sets `reviewed_at`, `open` clears it | I |
+| JRN-14 | Status filter and order | `status=open` and `status=reviewed` filter; an unknown value is 422; the order is `(noted_on desc, id desc)`; keyset paging over 120 notes returns each exactly once; `limit` above 200 is clamped | I |
+| JRN-15 | Idempotency | The same `Idempotency-Key` and body returns the stored 201 with `Idempotent-Replayed: true` and creates one row; the same key with a different body is 409 `CONFLICT`; a malformed key is 422 | I |
+| JRN-16 | Delete | 200 `{id, deleted: true}`; a second delete and a non-numeric id are 404 | I |
+| JRN-17 | Per-stock cap | 500 notes accepted, the 501st is 409 `CONFLICT`; another stock is unaffected | I |
+| JRN-18 | Auth and CSRF | Every journal route is 401 without a session; POST, PATCH and DELETE without the CSRF header are refused like other routes | I |
+| JRN-19 | Unknown symbol and alias | Unknown symbol is 404 on GET and POST; a renamed symbol resolves through `symbol_alias` | I |
+| JRN-20 | Contract | The four routes are in `openapi.yaml` and `routes.go` (`TestRoutesMatchOpenAPI`); every operation answers with the envelope | I |
+| JRN-21 | Backup lists the table | `journal_note` is in the backup `TABLES` after `portfolio_txn`, its columns equal the schema (guard test), it carries no forbidden column, and `_REFERENCED_INSTRUMENTS` includes its instruments | U |
+| JRN-22 | Backup and restore round trip | Dump and restore into an emptied database keep every `id`, the text, price, dates, status and link, re-sync the identity sequence (the next insert gets max id + 1) and the verify step reports no problem | I |
+| JRN-23 | Housekeeping | An opened-only stock with a journal note is not untracked by the LRU eviction (owner data) | I |
+| JRN-24 | Never exported elsewhere | No CSV or other export route includes notes; the Telegram and alert texts never contain note text; logs do not contain note text (the request log has no bodies) | I |
+| JRN-25 | Journal tab states | Loading, empty, filtered empty, partial (an item whose price fields are malformed still shows its note; an item without an id is dropped with the visible count), error with Retry and request id | U |
+| JRN-26 | Journal form | Counter, over-limit message, API field errors under the fields, first invalid control focused, typed text kept on error, hint text present, one `Idempotency-Key` per form opening reused on retry | U |
+| JRN-27 | Journal focus and live regions | Focus goes to the textarea on open and back to Add note on close; after delete to the next entry's text, else the previous, else Add note; the polite region announces add, save, delete, reviewed, reopened | U/E |
+| JRN-28 | Review due marker in the UI | The chip "Review due" is shown from `review_due` only (text plus icon), `jrn-due-count` shows the API count and is hidden at 0 | U |
+| JRN-29 | Escaping in the UI | The `<script>` and `M&M` notes render as literal text; `white-space: pre-wrap` keeps newlines; no `dangerouslySetInnerHTML` in the journal components (grep test) | U |
+| JRN-30 | Playwright | Axe clean in both themes at 375 and 1440 px for the tab (list, form open, empty); keyboard-only path: Tab to Add note, type, set review date, submit, see the new entry, mark reviewed, delete with confirmation; no page-level horizontal scroll at 375 px | E |
+| ALS-01 | Levels | From `high_52w_close` 1150: 10% below is 1035.00, 20% below 920.00; rounding half up to 2 decimals on decimal strings (1150.05 x 0.9 = 1035.045 gives 1035.05; no floating error such as 1.005); `sma200` is used as given, rounded the same way | U |
+| ALS-02 | Direction of the 200-day row | Last close above the average gives `price_below` and "falls to"; last close below gives `price_above` and "rises to"; equal gives no button (a level equal to the close is already met either way) and the reason line | U |
+| ALS-03 | Missing facts | `high_52w_close` null: the two high-based rows show their reason, no button; `sma200` null: the reason line "needs 200 days of prices"; `position` missing: "Not computed yet" | U |
+| ALS-04 | Labels carry level and source | Each button text contains the exact level and each row its source fact value and as-of date; no row says buy, sell or target | U |
+| ALS-05 | Prefill | A shortcut opens the alert form in a drawer with symbol, kind and price filled; changing the kind afterwards still works; the Alerts page form is unchanged and starts empty | U |
+| ALS-06 | Create from a shortcut | Submit sends `POST /alerts` with `{target:{type:"stock",symbol}, kind, params:{price: 1035}, one_shot:true}` (the existing form body: the price is sent as the number the validated decimal text prints back to); success closes the drawer, shows the toast and returns focus to the shortcut button | U/E |
+| ALS-07 | Threshold already met | A 422 `THRESHOLD_ALREADY_MET` shows the existing plain message inside the drawer and creates nothing; the shortcut button stays enabled | U |
+| ALS-08 | Dip-low row absent | No row mentions "current dip" while the data has no dip-low close (ALS-1) | U |
+| ALS-09 | Playwright | Keyboard path: focus a shortcut, Enter opens the drawer with the price filled, submit creates the alert (mocked), Escape closes without creating; axe clean in both themes at 375 and 1440 px | E |
+| JRN-Z01 | Safe Edition | No new egress and no new dependency; deny-list, SAF-13 and licence scan pass | CI |
+## RST: relative strength against the Nifty 50 and sector peers (decision RST, PROPOSED; worker and API B21, web F22; formulas docs/05 12.14, API docs/03 4a.RST, card docs/06 6.4a.RST)
+
+Worker rows (RST-I, RST-P, RST-B) are U tests in `apps/worker/tests/test_relative_strength.py` (pure, vectors RA1..RA3, RP1..RP3 in the Case column) and, with `TEST_DATABASE_URL`, `tests/test_relative_strength_db.py`; API rows (RST-W) are I tests in `apps/api/internal/httpx`; web rows (RST-C, RST-E) are U/E tests.
+
+| ID | Case | Expected | Type |
+|---|---|---|---|
+| RST-I01 | Alignment (RA1): stock and index share 4 of their dates | `aligned_rows` 4, `dropped_stock_dates` 1, `dropped_index_dates` 1 (an index date after the stock's last bar is not counted) | U |
+| RST-I02 | Trailing windows on the aligned series (RA1, `w` 1, 2, 3) | `excess_pp` -9.0909, -10.0, -11.0; stock and index percents as in docs/05 12.14 | U |
+| RST-I03 | Window limits (RA1) | `w = 4`: `null`, `insufficient_overlap`; `w = 6`: `null`, `insufficient_history`; never 0 | U |
+| RST-I04 | Rebased ratio (RA1) | `[100, 100, null, 100, 90]` against the stock's own dates, `ratio_base_date` 2024-01-01; length equals `series.dates` | U |
+| RST-I05 | Rolling 1-year win share, a stock that lags then leads (RA2) | 6 windows, share 83.3333, median excess 12.2727, independent 3, not small | U |
+| RST-I06 | Same, short history (RA2 truncated) | 4 windows, share 75.0, independent 2, `small_sample` true; with `INV_MIN_WINDOWS` 5: `null`, `too_few_windows` | U |
+| RST-I07 | A tie is not a win | A stock equal to the index on every row: 0 wins, share 0.0 with its window count | U |
+| RST-I08 | Short index (RA3) | 10 aligned rows: `vs_index` null `no_index_series`; 100 aligned rows against 300 stock rows: 1M and 3M computed, 6M, 1Y and `rolling_year` `insufficient_overlap`, block present; no index rows: `no_index_series` | U |
+| RST-I09 | Non-finite or non-positive index values are ignored | A NaN, 0 or negative index value is not an aligned row and is not counted as dropped | U |
+| RST-I10 | Calendar years | Base is the last aligned row of the previous year, end the last aligned row of the year, the last year is `ytd`, a year with no previous-year row has no row, at most 10 rows; values match a hand computation on a two-year fixture | U |
+| RST-I11 | Unit and rounding | Percents and points have 4 decimals, no `-0.0`, no NaN or Infinity in the JSON (`allow_nan=False` passes) | U |
+| RST-P01 | 2-peer sector (RP1) | `n_peers` 2, `rank`, `percentile`, `peer_median_pct`, `vs_median_pp` null, reason `too_few_peers` | U |
+| RST-P02 | 3-peer sector (RP2) | `rank` 3 of 4, percentile 37.5, peer median 15.0, `vs_median_pp` -5.0, `small_sample` true | U |
+| RST-P03 | Tie with a peer (RP2 tie variant) | `rank` 2 (ties share the better rank), percentile 50.0, `vs_median_pp` 0.0 | U |
+| RST-P04 | A peer without a bar dated on the stock's last bar date, or with fewer than `w + 1` bars | Not counted for that window; `excluded` counts peers that qualify for no window | U |
+| RST-P05 | The stock itself is shorter than the window | The window is `null`, `insufficient_history`; the other windows still compute | U |
+| RST-P06 | Sector grouping (RP3, loader) | Same sector means trimmed and case-insensitive; a stock with no sector has `vs_peers` null `no_sector` and is nobody's peer; an untracked same-sector stock is not a peer | U |
+| RST-P07 | Peer prices at or before the stock's `as_of` only | A peer with newer bars than the stock is measured at the stock's last bar date, not at its own last bar | U |
+| RST-P08 | The peer read is one grouped query | Exactly one extra `price_daily` read per `compute_analysis` (counted with a spy); no read when the stock has no sector | U |
+| RST-B01 | Block isolation | An exception inside `vs_index` gives `vs_index` null `compute_error` with `vs_peers` intact and the snapshot still written (the other analysis blocks unchanged), and the failure is logged without prices or secrets; the same for `vs_peers` | U |
+| RST-B02 | Existing blocks untouched | The existing `analysis` keys and their values for a fixture are identical with and without the new block; the new key is additive | U |
+| RST-B03 | Peer load failure | A database error while reading peers gives `vs_peers` null `compute_error` and the snapshot is written | I |
+| RST-B04 | Pruning and size | The newest snapshot keeps `relative_strength`; older snapshots drop it with `analysis` (RET-90 rule); a 25-year stock stays under the 200 KB snapshot budget (RET-89) | I |
+| RST-B05 | No wall clock | Re-running with the same inputs and `today` gives byte-identical JSON; nothing reads the clock | U |
+| RST-W01 | `GET /stocks/{symbol}/indicators` passes `relative_strength` through unchanged | The block and both reasons appear in `data.analysis`; absent in an older snapshot; the `expand` step does not drop or reshape it | I |
+| RST-W02 | Contract | `openapi.yaml` has `InvRelativeStrength`, the generated types are current (`check:generated`), `docs/field-map.json` maps every field to a real `data-testid`; no new route (`TestRoutesMatchOpenAPI` untouched) | CI |
+| RST-C01 | Card renders both halves with the fixture | Window table, years table, chart, beat share with the overlap sentence, peer strip, source chip, note line "Beating the index in the past is not a forecast." | U |
+| RST-C02 | `no_index_series` | The hint "Import NIFTY50 history in prices.csv (the reserved symbol)" and the Import Center link; no numbers; the peers half still renders | U |
+| RST-C03 | `no_sector`, `too_few_peers`, `compute_error` | Each shows its own sentence with the reason as visible, focusable text; never a rank for fewer than 3 peers | U |
+| RST-C04 | Small sample and stale | Chip under 5 peers and under 3 independent periods; as-of chip amber when stale | U |
+| RST-C05 | Missing block and wrong-shaped fields | "Not computed yet" for a missing block; a bad field shows an em dash with a reason and does not throw; other halves render | U |
+| RST-C06 | Honesty | No 0, NaN or Infinity text; no verdict wording; no colour classes outside tokens; numbers through `format.ts`; the chart only through `ChartFrame` | U |
+| RST-C07 | Definitions | `definitions.ts` carries `relative_return`, `relative_line`, `beat_share`, `peer_rank` generated from docs/05 (`gen:definitions --check` clean) | U |
+| RST-E01 | Playwright: the Analysis tab with the card | axe has no serious or critical violation in both themes at 375 and 1440 px; no horizontal page scroll; keyboard reaches the How to read, the reasons and the chart's Show data | E |
+| RST-E02 | Playwright: no index imported | The hint and the Import link are visible and reachable by keyboard | E |
+| RST-Z01 | Safe Edition | No new egress, no new dependency, no NSE/BSE or sector-index source; deny-list, SAF-13 and licence scan pass | CI |
 ## SWD: swing dips (decision SWD, PROPOSED; worker B18, web F19; formulas docs/05 12.13, API docs/03 4a-swing, card docs/06 6.4a item 4a)
 
 Worker rows (SWD-W) are U tests in `apps/worker/tests/test_swing_dips.py` with the hand-computed vectors SW1-SW4 of docs/05 12.13; API rows (SWD-A) are I tests in `apps/api/internal/httpx`; web rows (SWD-U) are U tests in `apps/web/tests/unit/swd-f19.test.tsx`; E rows are Playwright (`tests/e2e/swd-f19.spec.ts`). Prices are on consecutive calendar days in the vectors; there is no wall clock and no network.

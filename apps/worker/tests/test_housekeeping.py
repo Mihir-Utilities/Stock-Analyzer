@@ -553,6 +553,31 @@ async def test_hkx04_owner_entered_data_exempts_a_stock_from_the_lru(
     assert await _scalar(pg_full, "SELECT count(*) FROM alert") == 1
 
 
+@pytest.mark.integration
+async def test_jrn23_a_journal_note_exempts_a_stock_from_the_lru(
+    pg_full: asyncpg.Pool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """JRN-23 (B20): the decision journal is owner data, so its stock is not untracked."""
+    monkeypatch.setenv("OPENED_STOCKS_LRU_CAP", "1")
+    ids: dict[str, int] = {}
+    for sym in ("NOTED", "FREE", "NEW"):
+        ids[sym] = int(
+            await pg_full.fetchval(
+                "INSERT INTO instrument (symbol, name, is_tracked, tracked_reason, last_opened_at) "
+                "VALUES ($1,$1,true,'opened', now() - interval '900 days') RETURNING id",
+                sym,
+            )
+        )
+    await pg_full.execute("UPDATE instrument SET last_opened_at = now() WHERE symbol = 'NEW'")
+    await pg_full.execute(
+        "INSERT INTO journal_note (instrument_id, noted_on, note_text) VALUES ($1,'2026-01-05','why')",
+        ids["NOTED"],
+    )
+    out = await run_housekeeping(pg_full, JobContext(job="housekeeping"), FakeNotifier())
+    assert out["lru_untracked"] == ["FREE"]
+    assert await _scalar(pg_full, "SELECT count(*) FROM journal_note") == 1
+
+
 class _SpyPool:
     """Records the statements a function sends, then forwards them to the real pool."""
 

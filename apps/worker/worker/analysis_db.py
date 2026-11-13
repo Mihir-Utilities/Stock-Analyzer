@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Sequence
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -23,7 +23,7 @@ import numpy as np
 from worker import actions_db
 from worker.analytics import fundamentals as fnd
 from worker.analytics.actions import qty_multiplier
-from worker.analytics.inv_common import SETTING_KEYS, InvContext, InvSettings
+from worker.analytics.inv_common import SETTING_KEYS, InvContext, InvSettings, PeerData
 from worker.analytics.inv_months import derive_closed_days
 from worker.analytics.scores import RiskInput, risk_scores
 from worker.analytics.snapshot import DEFAULT_RISK_FREE, VERSION, Bars, build_snapshot
@@ -35,6 +35,9 @@ MAX_SCREENER_ERRORS_LOGGED = 50
 
 KEEP_SNAPSHOTS = 30
 BENCHMARK = "NIFTY50"
+PEER_LOOKBACK_DAYS = (
+    430  # calendar days of peer prices: covers the 252-row window (docs/05 12.14.6)
+)
 
 # Price metrics owned by D05a in screener_row.metrics (docs/03 section 9 whitelist).
 SCREENER_PRICE_KEYS = ("price", "rsi14", "dist_52w_high_pct", "ret_1m", "ret_6m", "ret_1y")
@@ -102,8 +105,57 @@ async def load_market_closed(pool: asyncpg.Pool, first: date) -> frozenset[date]
     return derive_closed_days({r["trade_date"]: int(r["n"]) for r in rows}, first)
 
 
+async def load_peers(
+    pool: asyncpg.Pool, iid: int, sector: str | None, end: date | None
+) -> PeerData | None:
+    """Tracked stocks of the same sector (trimmed, case-insensitive) and their valid ``adj_close``
+    bars up to ``end``: ONE extra grouped read per ``compute_analysis`` (docs/05 12.14.6). ``None``
+    without a sector or bars; a failing read is logged and flagged, never raised."""
+    label = None if sector is None or not sector.strip() else sector.strip()
+    if label is None or end is None:
+        return None if label is None else PeerData(sector=label)
+    try:
+        rows = await pool.fetch(
+            "SELECT i.id, p.trade_date, p.adj_close FROM instrument i "
+            "LEFT JOIN price_daily p ON p.instrument_id = i.id AND NOT p.suspect "
+            "AND p.adj_close > 0 AND p.trade_date <= $3 AND p.trade_date >= $4 "
+            "WHERE i.is_tracked AND i.id <> $1 AND lower(btrim(i.sector)) = lower(btrim($2)) "
+            "ORDER BY i.id, p.trade_date",
+            iid,
+            label,
+            end,
+            end - timedelta(days=PEER_LOOKBACK_DAYS),
+        )
+        by_id: dict[int, tuple[list[date], list[float]]] = {}
+        for r in rows:
+            d_list, v_list = by_id.setdefault(int(r["id"]), ([], []))
+            if r["trade_date"] is not None and np.isfinite(float(r["adj_close"])):
+                d_list.append(r["trade_date"])
+                v_list.append(float(r["adj_close"]))
+        return PeerData(
+            sector=label,
+            closes={
+                pid: (d_list, np.array(v_list, dtype=np.float64))
+                for pid, (d_list, v_list) in by_id.items()
+                if d_list
+            },
+            peers_in_sector=len(by_id),
+        )
+    except Exception as exc:  # the block says compute_error; the snapshot is still written
+        log.warning(
+            "relative_strength_peers_failed",
+            extra={"iid": iid, "error": type(exc).__name__},
+        )
+        return PeerData(sector=label, failed=True)
+
+
 async def load_inv_context(
-    pool: asyncpg.Pool, now: datetime | None = None, first: date | None = None
+    pool: asyncpg.Pool,
+    now: datetime | None = None,
+    first: date | None = None,
+    *,
+    symbol: str | None = None,
+    peers: PeerData | None = None,
 ) -> InvContext:
     """The IST date of this computation, the trading holidays, the market-closed days derived
     from the data since ``first`` (the stock's first bar) and the ``INV_*`` settings with the
@@ -123,6 +175,8 @@ async def load_inv_context(
         holidays=holidays,
         market_closed=frozenset() if first is None else await load_market_closed(pool, first),
         settings=InvSettings.from_mapping(raw),
+        symbol=symbol,
+        peers=peers,
     )
 
 
@@ -222,7 +276,7 @@ async def compute_analysis(
     pool: asyncpg.Pool, symbol: str, *, now: datetime | None = None
 ) -> dict[str, Any]:
     """One symbol: build and store the snapshot. Returns a small summary for the job result."""
-    inst = await pool.fetchrow("SELECT id FROM instrument WHERE symbol = $1", symbol)
+    inst = await pool.fetchrow("SELECT id, sector FROM instrument WHERE symbol = $1", symbol)
     if inst is None:
         return {"status": "unknown_symbol"}
     iid = int(inst["id"])
@@ -233,7 +287,15 @@ async def compute_analysis(
         await load_benchmark(pool),
         risk_free=await load_risk_free(pool),
         warnings=warnings,
-        inv_ctx=await load_inv_context(pool, now, bars.dates[0] if bars.dates else None),
+        inv_ctx=await load_inv_context(
+            pool,
+            now,
+            bars.dates[0] if bars.dates else None,
+            symbol=symbol,
+            peers=await load_peers(
+                pool, iid, inst["sector"], bars.dates[-1] if bars.dates else None
+            ),
+        ),
     )
     scores: dict[str, Any] = {}
     if snap is not None:

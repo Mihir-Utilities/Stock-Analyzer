@@ -86,6 +86,11 @@ export const ENTRIES = [
   ["pf_stress", "Position stress (what-if)", "8.6.2", "**Owner text (pf_stress):**"],
   ["pf_twr", "Portfolio return line", "8.6.3", "**Owner text (pf_twr):**"],
   ["pf_drawdown", "Portfolio drawdown", "8.6.3", "**Owner text (pf_drawdown):**"],
+  // Relative strength (RST, F22): docs/05 12.14.
+  ["relative_return", "Return against the Nifty 50", "", "**Owner text (relative_return):**"],
+  ["relative_line", "Stock divided by the Nifty 50", "", "**Owner text (relative_line):**"],
+  ["beat_share", "One-year periods that beat the index", "", "**Owner text (beat_share):**"],
+  ["peer_rank", "Rank among tracked sector peers", "", "**Owner text (peer_rank):**"],
 ];
 
 function strip(md) {

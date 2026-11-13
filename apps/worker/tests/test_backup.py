@@ -94,6 +94,28 @@ def test_mf_ledger_tables_are_exported_in_dependency_order() -> None:
     )
 
 
+def test_jrn21_journal_notes_are_exported_after_the_transactions_they_link() -> None:
+    """JRN-21 (B20): the decision journal is owner data, exported with its instruments, no secrets."""
+    names = [t.name for t in TABLES]
+    assert "journal_note" in names
+    for dep in ("instrument", "portfolio_txn"):
+        assert names.index(dep) < names.index("journal_note")  # restore order = dependency order
+    spec = next(t for t in TABLES if t.name == "journal_note")
+    assert spec.identity and spec.pk == "id"  # ids and the identity sequence survive a restore
+    assert {
+        "note_text",
+        "price_at_note",
+        "price_as_of",
+        "review_on",
+        "status",
+        "portfolio_txn_id",
+    } <= set(spec.columns)
+    assert not backup.FORBIDDEN_COLUMNS.intersection(spec.columns)
+    assert (
+        "FROM journal_note" in backup._REFERENCED_INSTRUMENTS
+    )  # a note keeps its stock in the dump
+
+
 def test_only_allow_listed_settings_are_backed_up() -> None:
     for key in ("BROKER_TOKEN_KEY", "api_secret", "ADMIN_PASSWORD", "DB_WARN_NOTIFIED", "new_key"):
         assert not backup.is_backed_up_setting_key(key)
@@ -308,6 +330,25 @@ async def _seed_owner_data(pool: asyncpg.Pool) -> dict[str, int]:
         "($1,'sell',2.0000,130.0000,0,'2026-02-05',NULL)",
         ids["AAA"],
     )
+    # B20: decision journal. DDD is referenced only by a note (the dump must keep it); one note links a txn.
+    ids["DDD"] = int(
+        await pool.fetchval(
+            "INSERT INTO instrument (symbol, name, is_tracked, tracked_reason) "
+            "VALUES ('DDD','DDD',true,'opened') RETURNING id"
+        )
+    )
+    buy_id = int(await pool.fetchval("SELECT id FROM portfolio_txn WHERE side='buy'"))
+    await pool.execute(
+        "INSERT INTO journal_note (instrument_id, noted_on, note_text, price_at_note, price_as_of, "
+        "review_on, status, reviewed_at, portfolio_txn_id) VALUES "
+        "($1,'2026-01-05','Bought for the margin recovery <b>thesis</b> & M&M',123.4500,'2026-01-02',"
+        "'2026-07-01','open',NULL,$2), "
+        "($1,'2026-02-06','Second note, reviewed',NULL,NULL,NULL,'reviewed','2026-03-01T10:00:00+00',NULL), "
+        "($3,'2026-02-07','Only watching',NULL,NULL,NULL,'open',NULL,NULL)",
+        ids["AAA"],
+        buy_id,
+        ids["DDD"],
+    )
     ca = int(
         await pool.fetchval(
             "INSERT INTO corporate_action (instrument_id, ex_date, action_type, status, ratio_num, "
@@ -377,7 +418,10 @@ async def test_backup_has_no_broker_token_or_password_hash(pg_full: asyncpg.Pool
     )  # corporate_actions + mf_statement; the prices batch is not owner data
     assert dump.counts["corporate_action"] == 1  # the detected row is a heuristic
     assert dump.counts["fundamental_value"] == 1  # derived rows are recomputed
-    assert dump.counts["instrument"] == 2  # AAA and CCC; BBB is only in a detected row
+    assert (
+        dump.counts["instrument"] == 3
+    )  # AAA, CCC and DDD (a journal note); BBB is only a detected row
+    assert dump.counts["journal_note"] == 3  # JRN-21
     assert dump.counts["mf_scheme"] == 2  # the watchlisted scheme and the scheme of the MF ledger
     assert dump.counts["mf_txn"] == 3 and dump.counts["mf_fund_name_map"] == 1  # MFH-F61
 
@@ -484,7 +528,7 @@ async def test_backup_job_dry_run_needs_no_key_and_writes_nothing(
 
 
 _WIPE = (
-    "TRUNCATE alert, portfolio_adjustment, corporate_action, portfolio_txn, mf_txn, mf_fund_name_map, watchlist_item, "
+    "TRUNCATE alert, portfolio_adjustment, corporate_action, journal_note, portfolio_txn, mf_txn, mf_fund_name_map, watchlist_item, "
     "fundamental_value, shareholding, import_batch, instrument, mf_scheme, app_setting, app_user, "
     "price_daily RESTART IDENTITY CASCADE"
 )
@@ -591,6 +635,32 @@ async def test_sys08_restore_drill_encrypted_dump_counts_and_values(
     assert user["telegram_chat_id"] == 4242 and "light" in user["d"]
     # prices are not part of the backup
     assert await pg_full.fetchval("SELECT count(*) FROM price_daily") == 0
+    # JRN-22: the journal keeps ids, text, price, dates, status and the link; its sequence continues
+    notes = await pg_full.fetch(
+        "SELECT id, instrument_id, note_text, price_at_note::text p, price_as_of::text pd, "
+        "review_on::text r, status, reviewed_at IS NOT NULL done, portfolio_txn_id FROM journal_note ORDER BY id"
+    )
+    assert [n["id"] for n in notes] == [1, 2, 3]
+    assert notes[0]["note_text"] == "Bought for the margin recovery <b>thesis</b> & M&M"
+    assert (notes[0]["p"], notes[0]["pd"], notes[0]["r"], notes[0]["status"]) == (
+        "123.4500",
+        "2026-01-02",
+        "2026-07-01",
+        "open",
+    )
+    assert notes[0]["portfolio_txn_id"] == await pg_full.fetchval(
+        "SELECT id FROM portfolio_txn WHERE side='buy'"
+    )
+    assert notes[1]["status"] == "reviewed" and notes[1]["done"] and notes[1]["p"] is None
+    assert notes[2]["instrument_id"] == await pg_full.fetchval(
+        "SELECT id FROM instrument WHERE symbol='DDD'"
+    )
+    jid = await pg_full.fetchval(
+        "INSERT INTO journal_note (instrument_id, noted_on, note_text) "
+        "VALUES ($1,'2026-06-01','after restore') RETURNING id",
+        ids["AAA"],
+    )
+    assert jid == 4
     # identity sequences continue after the restored ids
     nid = await pg_full.fetchval(
         "INSERT INTO portfolio_txn (instrument_id, side, qty, price, trade_date) "

@@ -6,9 +6,9 @@ Each file is a self-contained work package: goal, scope, out-of-scope, deliverab
 | Track | Folder | Tasks | What it covers |
 |---|---|---|---|
 | Foundation | `foundation/` | T00-T02 | Repo, CI, safety guards, spikes, migrations |
-| Backend (Go API) | `backend/` | B01-B14 (+ B15 proposed, D-MF; + B16 proposed, INV) | HTTP API, auth, imports, portfolio, alerts API, MF API |
+| Backend (Go API) | `backend/` | B01-B14 (+ B15 proposed, D-MF; + B16 proposed, INV; + B21 proposed, RST) | HTTP API, auth, imports, portfolio, alerts API, MF API |
 | Data/Worker (Python) | `data/` | D01-D08 | Ingestion jobs (`post_import`), analytics, alerts, ML, housekeeping (broker adapter D02 removed) |
-| Frontend (Next.js) | `frontend/` | F01-F15 (+ F16 proposed, D-MF; + F17 proposed, INV) | Design system, screens, visualisations |
+| Frontend (Next.js) | `frontend/` | F01-F15 (+ F16 proposed, D-MF; + F17 proposed, INV; + F22 proposed, RST) | Design system, screens, visualisations |
 
 ## Recommended order (sequential waves; tasks inside a wave can run in parallel)
 | Wave | Tasks | Notes |
@@ -27,6 +27,7 @@ Each file is a self-contained work package: goal, scope, out-of-scope, deliverab
 | 11 (PROPOSED, D-MF) | S18 spike, B15, then F16 | Mutual fund holdings: backend ledger/API/importer (B15, needs B11, B06a, B10; `.xlsx` reader gated by S18), then the web views (F16, needs F11, F13, B15). Not started until the owner answers MFH-2..MFH-5, MFH-14, MFH-15 |
 | 12 (PROPOSED, INV) | B16, then F17 | Investment-context analytics ("best time to buy", honest edition): worker blocks (seasonality, position, drawdown profile, holding periods, entry-point study, volatility regime, SIP vs lump sum, risk-adjusted) and `stocks[].seasonality` on `GET /watchlist` (B16, needs D05, B04, B11), then the Analysis cards, heatmap Year column and Home tile "This month, across the years" (F17, needs F04, F06, F03, B16). Spec: docs/05 section 12, docs/03 4a and 11, docs/06 6.2a and 6.4a, docs/07 `INV-*`. Not started until the owner answers or accepts the defaults of INV-1..INV-28 |
 | 14 (PROPOSED, PRK) | B19, then F20 | Portfolio-level risk (investor additions, Item C): `GET /portfolio/risk` with concentration, position stress and the time-weighted value history with drawdown (B19, needs B11, B15), then the lazy-loaded Portfolio risk section on `/portfolio` (F20, needs F16, F02, B19). Spec: docs/05 8.6, docs/03 12b, docs/06 6.7b, docs/07 `PRK-*`, docs/PLAN-investor-additions.md. Defaults PRK-1..PRK-8 in OPEN_QUESTIONS |
+| 14 (PLAN, Item D) | B20, then F21 | Process tools (`docs/PLAN-investor-additions.md`): decision journal (migration 0015, CRUD API, backup; B20) and the stock page Journal tab plus alert shortcuts in the Analysis tab (F21; needs B20, F12, F17). |
 | 13 (PROPOSED, SWD) | B18, then F19 | Swing dips (plan item A, `docs/PLAN-investor-additions.md`): worker block `analysis.swing_dips` (falls of 10% and 20% from the 252-row high, recovered or open, plus zig-zag swing legs) next to the unchanged Drawdown profile (B18, needs B16), then the Analysis card (F19, needs F17, B18). Spec: docs/05 12.13, docs/03 4a-swing, docs/06 6.4a item 4a, docs/07 `SWD-*`. Questions SWD-1..SWD-8 have proposed defaults; none blocks the build |
 
 ## Contract-first rule (lets frontend and backend run in parallel)
@@ -43,6 +44,9 @@ T00 -> T01, T02
 T00,T02 -> B01 -> B02 -> B03,B08(status only),B10,B12 ; B03 -> B04,B05,B11 ; D01 -> B09 ; B03,B09 -> B06a ; B05,B06a -> B06b -> B07
 T00,T02 -> D01 -> D03 -> D05 -> D07 ; D01 -> D04 ; D03,B12 -> D06 ; D01,D03..D07 -> D08      (D02 removed)
 B11,B06a,B10 -> B15 -> F16 (D-MF, proposed)      D05,B04,B11 -> B16 -> F17 (INV, proposed); F04,F06,F03 -> F17      B11,B15 -> B19 -> F20 (PRK, proposed); F16,F02,F03 -> F20      F11,F13a,F13b -> F16
+B11,B03,D08 -> B20 -> F21 (plan Item D; F12,F17 -> F21)      B11,B06a,B10 -> B15 -> F16 (D-MF, proposed)      D05,B04,B11 -> B16 -> F17 (INV, proposed); F04,F06,F03 -> F17      F11,F13a,F13b -> F16
+B11,B06a,B10 -> B15 -> F16 (D-MF, proposed)      D05,B04,B11 -> B16 -> F17 (INV, proposed); F04,F06,F03 -> F17      F11,F13a,F13b -> F16      B16,B06a -> B21 -> F22 (RST, proposed; F17,F02,F03 -> F22)
+B11,B06a,B10 -> B15 -> F16 (D-MF, proposed)      D05,B04,B11 -> B16 -> F17 (INV, proposed); F04,F06,F03 -> F17      F11,F13a,F13b -> F16
 B16 -> B18 -> F19 (SWD, proposed); F17 -> F19
 T00,B01 -> F01 -> F02 -> F03 -> F04..F14 -> F15 ; F13a needs B06a, F13b needs B06b
 ```
