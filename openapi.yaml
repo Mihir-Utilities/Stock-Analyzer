@@ -2098,6 +2098,50 @@ paths:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/ErrorEnvelope"
+  "/portfolio/risk":
+    get:
+      operationId: "getPortfolioRisk"
+      tags:
+        - "portfolio"
+      summary: "Portfolio-level risk for view=all|equity|mf (default all): concentration (weights per holding and group, top-1/3/5, HHI as a fraction, effective holdings), position stress (what-if 10 and 20 percent fall of one holding, arithmetic only) and the reconstructed daily value history with a time-weighted return index, current and maximum drawdown and days under water. Money fields are strings with 4 decimals (INR); percent fields are percent numbers; unknown values are null with a sibling *_reason; an unpriced holding nulls every weight (never a partial total); a date without a price is a gap, not a partial sum. (docs/03 section 12b, docs/05 section 8.6)"
+      parameters:
+        - name: "view"
+          in: "query"
+          required: false
+          description: "Asset-class filter of one ledger: all (default), equity or mf. Other values are 422."
+          schema:
+            type: "string"
+            enum:
+              - "all"
+              - "equity"
+              - "mf"
+            default: "all"
+        - name: "as_of"
+          in: "query"
+          required: false
+          description: "Valuation date (market date, IST); default today; a future date or a bad format is 422."
+          schema:
+            type: "string"
+            format: "date"
+      responses:
+        "200":
+          description: "Success"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
   "/portfolio/adjustments":
     get:
       operationId: "getPortfolioAdjustments"
@@ -4404,16 +4448,13 @@ components:
         - "variants"
     InvSwingDipRecord:
       type: "object"
-      description: "One dip of analysis.swing_dips.thresholds[].records (docs/05 12.13 rule A). depth_pct is a negative percent number; days are calendar days between bar dates."
+      description: "One dip of analysis.swing_dips.thresholds[].records (docs/05 12.13 rule A, Dips from the 52-week high). depth_pct is a negative percent number; days are calendar days between bar dates. A null reason key is omitted (absent = null)."
       properties:
         peak_date:
           type: "string"
           format: "date"
         peak_close:
           type: "number"
-        start_date:
-          type: "string"
-          format: "date"
         low_date:
           type: "string"
           format: "date"
@@ -4433,20 +4474,27 @@ components:
         days_low_to_recovery_reason:
           type: "string"
           nullable: true
-          description: "open_dip while the dip has not recovered."
+          description: "open_dip or superseded while the dip is not recovered; omitted when recovered."
         status:
           type: "string"
           enum:
             - "recovered"
             - "open"
+            - "superseded"
+          description: "superseded: the reference peak left the 252-row window before it was regained (not regained within a year; D-SWD)."
       required:
         - "peak_date"
+        - "peak_close"
         - "low_date"
+        - "low_close"
         - "depth_pct"
+        - "days_peak_to_low"
+        - "recovery_date"
+        - "days_low_to_recovery"
         - "status"
     InvSwingDipRow:
       type: "object"
-      description: "Rule A summary for one threshold (peak-recovery dips, docs/05 12.13). When the history is shorter than 252 rows every count and statistic is null and reason is insufficient_history."
+      description: "Rule A summary for one threshold (Dips from the 52-week high, docs/05 12.13). dips = recovered + superseded + open; at most one dip is open. When the history is shorter than 252 rows every count and statistic is null and reason is insufficient_history. A null reason or *_reason key is omitted (absent = null)."
       properties:
         threshold_pct:
           type: "integer"
@@ -4456,6 +4504,10 @@ components:
         recovered:
           type: "integer"
           nullable: true
+        superseded:
+          type: "integer"
+          nullable: true
+          description: "Dips closed because their reference peak left the 252-row window before it was regained."
         open:
           type: "integer"
           nullable: true
@@ -4562,7 +4614,7 @@ components:
         - "small_sample"
     InvSwingDips:
       type: "object"
-      description: "analysis.swing_dips (docs/05 12.13, docs/03 4a-swing): falls of at least 10 and 20 percent from the recent 52-week high, recovered or not, plus zig-zag swing legs. Additive and optional; drawdown_profile is unchanged. Past prices only."
+      description: "analysis.swing_dips (docs/05 12.13, docs/03 4a-swing): Dips from the 52-week high (falls of at least 10 and 20 percent, recovered, superseded or open) plus Swings (fall then bounce, zig-zag). Additive and optional; drawdown_profile is unchanged. A reason or *_reason key that would be null is omitted (absent = null). Past prices only."
       properties:
         as_of:
           type: "string"
@@ -4571,6 +4623,9 @@ components:
           type: "integer"
         window_rows:
           type: "integer"
+        min_episodes:
+          type: "integer"
+          description: "The minimum count below which medians are hidden (INV_MIN_EPISODES, default 3)."
         thresholds:
           type: "array"
           items:
@@ -4582,6 +4637,8 @@ components:
       required:
         - "as_of"
         - "bars"
+        - "window_rows"
+        - "min_episodes"
         - "thresholds"
         - "zigzag"
     InvRiskAdjusted:
@@ -4837,11 +4894,13 @@ components:
         drawdown_profile:
           "$ref": "#/components/schemas/InvDrawdownProfile"
         swing_dips:
-          "$ref": "#/components/schemas/InvSwingDips"
+          allOf:
+            - "$ref": "#/components/schemas/InvSwingDips"
+          nullable: true
         swing_dips_reason:
           type: "string"
           nullable: true
-          description: "compute_error when swing_dips is null because the block failed to compute (docs/05 12.13, SWD-7)."
+          description: "compute_error when swing_dips is null because the block failed to compute (docs/05 12.13, SWD-7). Omitted when it would be null (absent = null)."
         holding_periods:
           "$ref": "#/components/schemas/InvHoldingPeriods"
         entry_study:

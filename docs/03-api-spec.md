@@ -177,7 +177,7 @@ Rules.
 - `sip_backtest.variants` has 29 entries: `day: null` (first trading day) and `day: 1..28`; `reason` `history_under_12_months` nulls every figure of a variant. INR figures are hypothetical, 2 decimals, JSON numbers. To keep the stored size under budget a variant omits `reason` and `xirr_reason` when they are null (absent means null), its percent fields have 2 decimals (`value_ratio` 4) and XIRR is a percent number with 2 decimals (error below 1e-4 as a fraction).
 - `position`: when fewer than 252 rows exist `high_52w_close`, `low_52w_close`, `range_pos_52w_pct`, `range_band` and `dist_high_52w_pct` are all null and `range_pos_52w_reason` (`insufficient_history`) explains them; `flat_range` nulls only `range_pos_52w_pct` and `range_band`. `max_dd` carries `reason` (`no_drawdown` with `depth_pct` 0, null dates and `recovered` null) and `drawdown_profile` carries `avg_underwater_depth_reason` (`no_drawdown`). `vol_regime`, `sip_backtest` and `risk_adjusted` carry `bars` like the other blocks. The statistics of a block are rounded to 4 decimals (percent numbers), not to the 2 decimals of the examples.
 - `holding_periods.windows[*].key` is `1m|3m|6m|1y|3y`; `entry_study.rows` has the 4 combinations `drawdown_pct` 10/20 x `horizon` `3m`/`6m`; `drawdown_profile.recovery` has the thresholds 10 and 20.
-- All new blocks together add roughly 12 KB to the stored snapshot (the 29 SIP variants dominate); the snapshot stays under the 200 KB budget (RET-89). The expansion step of B04 (`prices/expand.go`) passes the new blocks through unchanged (they carry their own dates; nothing is aligned to `series.dates`).
+- All new blocks together add roughly 12 KB to the stored snapshot (the 29 SIP variants dominate); the snapshot stays under the 250 KB budget (RET-89, raised from 200 KB by SWD-9; the swing dips block adds about 5 KB, the new blocks together under 25 KB). The expansion step of B04 (`prices/expand.go`) passes the new blocks through unchanged (they carry their own dates; nothing is aligned to `series.dates`).
 - Errors and `DATA_UNAVAILABLE` reasons are those of `/indicators` above. No endpoint takes a parameter for these blocks.
 
 ### 4a.RST. `data.analysis.relative_strength` (decision RST, PROPOSED; built by B21; formulas in `05` section 12.14)
@@ -221,9 +221,9 @@ An additive, optional block next to `drawdown_profile` (which is unchanged). No 
 
 ```json
 "swing_dips": {
-  "as_of": "2024-01-15", "bars": 15, "window_rows": 252,
+  "as_of": "2024-01-22", "bars": 22, "window_rows": 252, "min_episodes": 3,
   "thresholds": [
-    { "threshold_pct": 10, "dips": 3, "recovered": 2, "open": 1,
+    { "threshold_pct": 10, "dips": 3, "recovered": 2, "superseded": 0, "open": 1,
       "recovered_share_pct": 66.6667, "recovered_share_reason": null,
       "median_depth_pct": -11.5385, "median_depth_reason": null,
       "worst_depth_pct": -15.0, "worst_depth_reason": null,
@@ -232,14 +232,14 @@ An additive, optional block next to `drawdown_profile` (which is unchanged). No 
       "longest_open_days": 2, "longest_open_reason": null,
       "small_sample": true, "reason": null,
       "records": [
-        { "peak_date": "2024-01-13", "peak_close": 105.0, "start_date": "2024-01-14",
-          "low_date": "2024-01-14", "low_close": 94.0, "depth_pct": -10.4762, "days_peak_to_low": 1,
+        { "peak_date": "2024-01-20", "peak_close": 105.0,
+          "low_date": "2024-01-21", "low_close": 94.0, "depth_pct": -10.4762, "days_peak_to_low": 1,
           "recovery_date": null, "days_low_to_recovery": null, "days_low_to_recovery_reason": "open_dip", "status": "open" },
-        { "peak_date": "2024-01-10", "peak_close": 104.0, "start_date": "2024-01-11",
-          "low_date": "2024-01-12", "low_close": 92.0, "depth_pct": -11.5385, "days_peak_to_low": 2,
-          "recovery_date": "2024-01-13", "days_low_to_recovery": 1, "days_low_to_recovery_reason": null, "status": "recovered" }
+        { "peak_date": "2024-01-17", "peak_close": 104.0,
+          "low_date": "2024-01-19", "low_close": 92.0, "depth_pct": -11.5385, "days_peak_to_low": 2,
+          "recovery_date": "2024-01-20", "days_low_to_recovery": 1, "days_low_to_recovery_reason": null, "status": "recovered" }
       ] },
-    { "threshold_pct": 20, "dips": 0, "recovered": 0, "open": 0, "worst_depth_pct": null, "worst_depth_reason": "no_dips",
+    { "threshold_pct": 20, "dips": 0, "recovered": 0, "superseded": 0, "open": 0, "worst_depth_pct": null, "worst_depth_reason": "no_dips",
       "longest_open_days": null, "longest_open_reason": "no_open_dip", "records": [], "...": "medians null with too_few_episodes" }
   ],
   "zigzag": [
@@ -252,8 +252,9 @@ An additive, optional block next to `drawdown_profile` (which is unchanged). No 
 ```
 
 Rules.
-- `thresholds` has the entries `threshold_pct` 10 and 20 (rule A, peak-recovery dips); `zigzag` has the same two thresholds (rule B, swing legs, summaries only). `records` lists the last 8 dips of rule A, newest first, `status` is `recovered | open`; `days_low_to_recovery` and `recovery_date` are null with `days_low_to_recovery_reason: "open_dip"` while open. Counts and statistics of an entry are all null with `reason: "insufficient_history"` when fewer than 252 rows exist (rule A) or 2 rows (rule B). `median_depth_pct`, `median_days_peak_to_low` and `recovered_share_pct` are null with `too_few_episodes` below `INV_MIN_EPISODES` (3) dips; `median_days_to_recover` (completed dips only) is null with `too_few_episodes` below 3 recovered; `worst_depth_pct` is null with `no_dips` when there is no dip; `longest_open_days` is null with `no_open_dip` when none is open. Days are calendar days between bar dates.
-- Sample sizes (`dips`, `recovered`, `open`, `legs`, `bounced`) and `small_sample` (fewer than `INV_SMALL_EPISODES` = 10) travel with the figures. To keep the stored size down (RET-89), a `reason` or `*_reason` that would be null is **omitted** (absent means null), as for the SIP variants; the examples above show them for clarity. The block is about 5 KB for a 25-year stock with many dips (8 records per threshold); see SWD-9 for the snapshot budget.
+- `thresholds` has the entries `threshold_pct` 10 and 20 (rule A, "Dips from the 52-week high"); `zigzag` has the same two thresholds (rule B, "Swings (fall then bounce)", summaries only). `records` lists the last 8 dips of rule A, newest first. `status` is `recovered | open | superseded`: a dip is **superseded** when its reference peak dropped out of the 252-row window before it was regained ("not regained within a year"); it is neither recovered nor open, keeps its low and depth, and the next dip is measured from the new 52-week high (D-SWD, `05` 12.13). `dips = recovered + superseded + open`; at most one dip is open. `recovery_date` and `days_low_to_recovery` are null, with `days_low_to_recovery_reason` `open_dip` or `superseded`, unless recovered. A record carries no start date.
+- Counts and statistics of an entry are all null with `reason: "insufficient_history"` when fewer than 252 rows exist (rule A) or 2 rows (rule B). `median_depth_pct`, `median_days_peak_to_low` (both over all dips, the open one so far) and `recovered_share_pct` (recovered over all dips) are null with `too_few_episodes` below `min_episodes` (the block carries it; default `INV_MIN_EPISODES` 3) dips; `median_days_to_recover` (recovered dips only) is null with `too_few_episodes` below that many recovered; `worst_depth_pct` is null with `no_dips` when there is no dip; `longest_open_days` (days from the open dip's peak to `as_of`) is null with `no_open_dip` when none is open. Days are calendar days between bar dates.
+- Sample sizes (`dips`, `recovered`, `superseded`, `open`, `legs`, `bounced`) and `small_sample` (fewer than `INV_SMALL_EPISODES` = 10) travel with the figures. To keep the stored size down (RET-89), a `reason` or `*_reason` that would be null is **omitted** (absent means null), as for the SIP variants, and so is `analysis.swing_dips_reason` when it would be null; the examples above show them for clarity. `swing_dips` itself is nullable: null with `swing_dips_reason: "compute_error"` when the block failed. The block is about 5 KB for a 25-year stock with many dips (8 records per threshold); the whole stored `indicators` value stays under **250 KB** and the new blocks grow it by under 25 KB (RET-89, SWD-9).
 - The expansion step of B04 passes the block through unchanged; `data.analysis` passes unknown blocks through, so the API has no code change (a test pins it).
 
 ### 4b. GET `/stocks/seasonality?scope=all|watchlist` (decision D-INV2 / INVA, PROPOSED; built by B17; answers INV-9)
@@ -448,6 +449,45 @@ The statement carries only a fund name, so the scheme of every distinct name is 
 
 ### Import
 Kind `mf_statement` is added to `POST /imports/{kind}/validate`, `POST /imports/{kind}/commit` and `GET /imports/templates/{kind}` (section 14); format and parser rules in `01` section 7.9 (columns `Date | Fund Name | Transaction Type | Folio No | Units Traded | NAV | Amount | Stamp Duty`, CSV or `.xlsx`, blank rows skipped, no ISIN). Limits for this kind: 2 MB and 5,000 rows, type checked by content, read-only parsing (MFH-15, MFH-21). `.xlsx` is accepted only when the server runs with `MF_XLSX_ENABLED=true` (default off, B15R-1); otherwise an `.xlsx` is `422` with the message "xlsx not enabled" and CSV is unaffected. Only the 8 logical columns are kept in the upload store (`01` section 7.9). `validate` returns the usual envelope (row errors include `UNMAPPED_FUND`; warnings include `DUPLICATE_IN_FILE`, `AMOUNT_MISMATCH`, `NON_BUSINESS_DAY`; every preview row carries its file line `row`, the normalised fields, `fund_name` and `scheme_code` when mapped) plus `mf: { date_from, date_to, rows_by_type: {purchase, sip, ...}, funds: [{fund_name, fund_name_key, rows, mapped, scheme_code, scheme_name, plan, option}], unmapped_funds: [{fund_name, fund_name_key, rows, candidates: [{scheme_code, name, fund_house, plan, option, isin, on_watchlist, has_nav}]}], fund_mappings: [...the mapped entries of funds], duplicate_groups: [{rows: [5, 9], count: 2}], duplicates_in_db: 0 }` (a row already imported, by `dedupe_key`, is counted in `duplicates_in_db` and skipped at commit, so re-uploading the same statement inserts 0). `POST /imports/mf_statement/revalidate` body `{ "upload_id": "uuid" }` re-runs the validation of a stored upload against the current mappings and returns the same body as `validate` with the same `upload_id` (404 when the upload expired; the 1 h TTL is not extended). `commit` body `{ "upload_id", "note"?, "excluded_rows"?: [5] }` (`excluded_rows` = file lines the owner unticked, for example one of a `DUPLICATE_IN_FILE` group or a row with errors; they are not imported and the errors of an excluded row do not block the commit; an unknown line is 422; a header problem cannot be excluded) returns `{batch_id, inserted, skipped_duplicates, warnings}` and no `post_import_job_id` (holdings are computed on read); any remaining row error (including `UNMAPPED_FUND`) rejects the commit 422. Undo (`POST /imports/batches/{id}/undo`) is allowed within 30 days for this kind, deletes the batch's rows and answers `409 UNDO_BREAKS_HOLDINGS` (`details {scheme_code, folio, date}`) when a later redemption would then exceed held units; nothing changes in that case (MFH-20).
+
+## 12b. Portfolio risk (decision PRK, PROPOSED; built by B19; formulas in `05` section 8.6, screen in `06` 6.7b; questions PRK-1..PRK-8)
+
+`GET /portfolio/risk?view=all|equity|mf&as_of=` is one read-only endpoint (session required, no CSRF header) that serves concentration, position stress and the reconstructed value history with drawdown for one view. **Name:** `/portfolio/risk` (not `/portfolio/value-history`) because the three blocks share one ledger read and one set of reasons (PRK-5). `view` defaults to `all` (the Portfolio page default; the legacy `summary` default of `equity` exists only for compatibility, MFH-14); an unknown `view` is `422 UNPROCESSABLE` (`details.fields` `view`); `as_of` is `YYYY-MM-DD`, default today (IST), a future date or a bad format is `422` (field `as_of`). Conventions of sections 1, 12 and 12a: money as decimal strings with 4 decimals (INR), percent fields are percent numbers, unknown is `null` with a sibling `*_reason`, never `0`/`NaN`/`Infinity`. `meta.source` = `"mixed"` (`all`), `"owner transactions + imported prices"` (`equity`) or `"mfapi.in"` (`mf`); `meta.stale` is true when any component price or NAV is stale (as the summary); `warnings[]` carries `HOLDINGS_INCONSISTENT`, `HISTORY_STEP_SKIPPED`, `MISSING_PRICE`, `NAV_STALE` (one per cause).
+
+```json
+{ "data": {
+  "view": "all", "as_of": "2026-11-12", "currency": "INR",
+  "concentration": {
+    "total_value": "10000.0000", "total_value_reason": null,
+    "holdings_count": 4,
+    "top1_pct": 50.0, "top3_pct": 95.0, "top5_pct": 100.0, "shares_reason": null,
+    "hhi": 0.365, "effective_holdings": 2.74, "hhi_reason": null,
+    "group_hhi": 0.665, "group_top1_pct": 80.0, "group_reason": null,
+    "by_holding": [ { "key": "A", "name": "A Ltd", "asset_class": "equity", "group": "Banks", "value": "5000.0000", "weight_pct": 50.0, "weight_reason": null } ],
+    "by_group": [ { "key": "Banks", "kind": "sector", "value": "8000.0000", "weight_pct": 80.0, "holdings": 2 } ]
+  },
+  "stress": {
+    "label": "What if this one holding fell and nothing else moved. Arithmetic on today's values, not a forecast.",
+    "falls_pct": [10, 20],
+    "items": [ { "key": "A", "name": "A Ltd", "asset_class": "equity", "value": "5000.0000",
+      "impact_10": "-500.0000", "impact_10_pct": -5.0, "impact_20": "-1000.0000", "impact_20_pct": -10.0, "impact_reason": null } ]
+  },
+  "history": {
+    "basis": "time_weighted_index", "base": 100,
+    "series_reason": null, "from": "2016-04-01", "to": "2026-11-12", "points_count": 2480,
+    "points": [ { "date": "2016-04-01", "value": "100000.0000", "index": 100.0, "drawdown_pct": 0.0 } ],
+    "gaps": [ { "from": "2016-01-04", "to": "2016-03-31", "dates": 61, "reason": "missing_price: A" } ],
+    "gap_dates_total": 61, "gaps_truncated": false, "skipped_steps": 0,
+    "current_drawdown_pct": -4.5, "peak_date": "2026-10-01", "peak_index": 183.2, "days_under_water": 42, "drawdown_reason": null,
+    "max_drawdown": { "depth_pct": -31.2, "peak_date": "2020-01-14", "trough_date": "2020-03-23", "recovery_date": "2020-11-05", "recovered": true },
+    "twr_since_start_pct": 83.2
+  } }, "meta": { "as_of": "...", "source": "mixed", "stale": false, "stale_age_hours": 0 }, "warnings": [] }
+```
+- `concentration`: `total_value` is the summed value of the view's **open** holdings, `null` with `total_value_reason` (`missing_price: ...`, `missing_nav: ...`, `no_open_holdings`, `zero_value`) when any holding is unpriced or none is open; in that case `top1_pct`, `top3_pct`, `top5_pct`, `hhi`, `effective_holdings`, `group_hhi`, `group_top1_pct` and every `weight_pct` are `null` with the shared reason in `shares_reason`, `hhi_reason`, `group_reason`, `weight_reason` (never a partial sum as a total). `hhi` is a fraction in (0, 1] and `effective_holdings = 1/hhi` (2 decimals); `holdings_count` counts open holdings (priced or not); top-N with fewer than N holdings is the share of all of them. `by_holding` is ordered by value descending (unpriced last, ties by key); `key` is the stock symbol or the scheme code as a string; `group` repeats the holding's group key (`Unclassified` when the owner imported no sector or category). `by_group[].kind` is `sector`, `category`, `mutual_funds` or `unclassified`; in `all` every fund is in the single `Mutual funds` slice. Lists are `[]` when empty.
+- `stress.items[]`: one row per open holding in `by_holding` order; `impact_10`/`impact_20` are negative money strings (`value x f / 100`), `impact_*_pct` are negative percent numbers of the current total, both `null` with `impact_reason` (`no_price`, `no_nav`, or the total's reason for the percent only). `label` is fixed copy and `falls_pct` is `[10, 20]`.
+- `history`: `points` holds **only valid dates** in ascending order; `value` (money string; **includes the owner's deposits and withdrawals**, a full-exit day carries `"0.0000"`), `index` (time-weighted return index, base 100, 4 decimals), `drawdown_pct` (percent number, <= 0, 2 decimals). `gaps[]` are ranges of dates that could not be valued (`reason` `missing_price: SYM, ...` or `nav_gap: scheme name, ...`), at most the 50 most recent ranges (`gaps_truncated`, `gap_dates_total` always the exact count). `series_reason` is `no_transactions` or `no_priced_dates` when `points` is empty, else `null`. `skipped_steps` counts index steps that could not be computed because a transaction fell inside a price gap (`05` 8.6.3). `current_drawdown_pct`, `peak_date`, `peak_index`, `days_under_water`, `max_drawdown`, `twr_since_start_pct` are `null` with `drawdown_reason = too_few_points` when there are fewer than 2 points. `max_drawdown.recovery_date` is `null` with `recovered=false` while open; an index that never fell has `depth_pct` 0 and null `peak_date`, `trough_date`. Size: about 2,500 points for 10 years (about 250 KB of JSON before gzip; `Content-Encoding` is the gateway's job); a past `as_of` truncates the series.
+- Cost: the handler reads transactions, adjustments and the held instruments' bars once and computes in memory; target under 500 ms for about 200 transactions and 10 years of daily prices (B19 measures it and records the number in `docs/OPEN_QUESTIONS.md` PRK-8); no cache is added unless the measurement misses the budget.
+- Errors: 401 without a session; 422 for `view` or `as_of`; 429 as everywhere. A view with no data is a 200 with the reasons above (not an error).
 
 ## 13. Alerts and Telegram
 

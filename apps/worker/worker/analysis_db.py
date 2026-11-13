@@ -298,6 +298,7 @@ async def compute_analysis(
                 pool, iid, inst["sector"], bars.dates[-1] if bars.dates else None
             ),
         ),
+        symbol=symbol,
     )
     scores: dict[str, Any] = {}
     if snap is not None:

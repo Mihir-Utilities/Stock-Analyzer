@@ -243,7 +243,7 @@ export const definitions = {
   "swing_dips": {
     label: "Swing dips",
     section: "",
-    text: "How often the price fell at least 10% or 20% below its recent 52-week high, how deep each fall went, how long it took to reach the bottom and how long it took to get back to that earlier high, counting falls that never recovered. The swing rows count every fall of that size followed by an equal bounce, so they show repeated ups and downs inside a long decline. These are past episodes only, and often there are few of them.",
+    text: "Two views of repeated falls. \"Dips from the 52-week high\" follows one earlier high at a time: how deep the price fell below it (10% or 20% and more), how long it took to reach the bottom, and whether it got back to that high; if the high is more than a year old and was not regained, that dip is closed as not regained within a year and the next dip is measured from the new 52-week high. \"Swings (fall then bounce)\" counts every fall of that size followed by a bounce of the same size, which shows the repeated ups and downs inside a long decline. These are past episodes only, and often there are few of them.",
   },
   "holding_period": {
     label: "Holding periods",
@@ -274,6 +274,31 @@ export const definitions = {
     label: "Growth per unit of downside",
     section: "",
     text: "Yearly price growth divided by how large the falling days were, counting only days when the price fell. It ignores dividends and has no risk-free rate.",
+  },
+  "pf_concentration": {
+    label: "Concentration",
+    section: "8.6.1",
+    text: "How your money is spread over what you hold. The share of the biggest holding, of the biggest three and of the biggest five, and one number that says how many equal-sized holdings your spread is equivalent to. It describes today's values only. It is not advice about what to hold.",
+  },
+  "pf_hhi": {
+    label: "Effective number of holdings",
+    section: "8.6.1",
+    text: "Add up the square of each holding's share of your portfolio, as a fraction. It is 1 for a single holding and gets smaller the more evenly you spread. One divided by it is the effective number of holdings.",
+  },
+  "pf_stress": {
+    label: "Position stress (what-if)",
+    section: "8.6.2",
+    text: "A what-if, not a forecast. If only this one holding fell by 10% or 20% from today's value and nothing else changed, this is how much your portfolio value would change in rupees and in percent. It is simple arithmetic on today's values.",
+  },
+  "pf_twr": {
+    label: "Portfolio return line",
+    section: "8.6.3",
+    text: "Your portfolio's own return line starting at 100, built from the price moves of what you held each day. Money you add or take out is left out, so adding money cannot hide a fall and taking money out cannot create one. Dividends are not included for stocks.",
+  },
+  "pf_drawdown": {
+    label: "Portfolio drawdown",
+    section: "8.6.3",
+    text: "How far the return line is below its own highest point so far, the deepest such fall and how many days it has been below that point. It describes the past of your portfolio. It does not say what happens next.",
   },
   "relative_return": {
     label: "Return against the Nifty 50",

@@ -80,6 +80,12 @@ export const ENTRIES = [
   ["sip_vs_lump", "Monthly plan versus lump sum", "", "**Owner text (sip_vs_lump):**"],
   ["calmar", "Growth per unit of deepest fall", "", "**Owner text (calmar):**"],
   ["downside_risk", "Growth per unit of downside", "", "**Owner text (downside_risk):**"],
+  // Portfolio risk (PRK, docs/05 8.6.5)
+  ["pf_concentration", "Concentration", "8.6.1", "**Owner text (pf_concentration):**"],
+  ["pf_hhi", "Effective number of holdings", "8.6.1", "**Owner text (pf_hhi):**"],
+  ["pf_stress", "Position stress (what-if)", "8.6.2", "**Owner text (pf_stress):**"],
+  ["pf_twr", "Portfolio return line", "8.6.3", "**Owner text (pf_twr):**"],
+  ["pf_drawdown", "Portfolio drawdown", "8.6.3", "**Owner text (pf_drawdown):**"],
   // Relative strength (RST, F22): docs/05 12.14.
   ["relative_return", "Return against the Nifty 50", "", "**Owner text (relative_return):**"],
   ["relative_line", "Stock divided by the Nifty 50", "", "**Owner text (relative_line):**"],
