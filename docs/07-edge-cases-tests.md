@@ -1040,7 +1040,7 @@ Types: U unit, I integration (throwaway Postgres), E Playwright, CI pipeline. Da
 | JRN-04 | No imported price | A stock with no bars: 201, `price_at_note` and `price_as_of` null, `price_reason = "no_price_imported"`, never 0 | I |
 | JRN-05 | Suspect and later bars ignored | A suspect bar and a bar after the note date are never used for the price | I |
 | JRN-06 | Note length boundary | 1,000 characters (multi-byte characters counted as characters) accepted; 1,001 is 422 on `note`; empty and whitespace-only are 422 | U/I |
-| JRN-07 | Control characters | NUL, BEL and other control characters are 422 on `note`; newline and tab are kept | U |
+| JRN-07 | Control and direction characters | NUL, BEL and other control characters are 422 on `note`; newline and tab are kept; bidi overrides, embeddings and isolates (U+202A-202E, U+2066-2069) are 422; a note of only U+FEFF or zero-width characters is blank (422); a ZWJ emoji sequence is kept; the same rules run in the web form (N5) | U/I |
 | JRN-08 | Untrusted text round trip | A note with `<script>alert(1)</script>` and `M&M` is stored and returned byte for byte; the web renders it as text (no element is created) | I/U |
 | JRN-09 | `review_on` rules | A past date on create is 422; today is accepted; more than 10 years ahead is 422; an invalid date is 422; on PATCH a past date is accepted only when equal to the stored value | U/I |
 | JRN-10 | Review due, boundaries | With today 2026-11-12: open + review_on 2026-11-11 is due; open + 2026-11-12 is due (the date counts); open + 2026-11-13 is not; reviewed + a past date is not; open without `review_on` is not; `review_due_count` counts all due open notes regardless of paging and filter | U/I |
@@ -1071,7 +1071,11 @@ Types: U unit, I integration (throwaway Postgres), E Playwright, CI pipeline. Da
 | ALS-05 | Prefill | A shortcut opens the alert form in a drawer with symbol, kind and price filled; changing the kind afterwards still works; the Alerts page form is unchanged and starts empty | U |
 | ALS-06 | Create from a shortcut | Submit sends `POST /alerts` with `{target:{type:"stock",symbol}, kind, params:{price: 1035}, one_shot:true}` (the existing form body: the price is sent as the number the validated decimal text prints back to); success closes the drawer, shows the toast and returns focus to the shortcut button | U/E |
 | ALS-07 | Threshold already met | A 422 `THRESHOLD_ALREADY_MET` shows the existing plain message inside the drawer and creates nothing; the shortcut button stays enabled | U |
-| ALS-08 | Dip-low row absent | No row mentions "current dip" while the data has no dip-low close (ALS-1) | U |
+| ALS-08 | Dip-low row (ALS-1) | Open 10% dip with the close above `low_close`: a `price_below` button at the low (2 decimals) with the low date and as-of; no open dip, an unknown status, a missing or malformed swing block, or the close equal to or below the low: no button and a visible reason | U |
+| ALS-10 | Already met | A `price_below` level at or above the last close shows no button and "The last close (X, as of D) is already at or below this level."; the server rule is the backstop | U |
+| ALS-11 | Source label | Every source line says "adjusted for splits and bonuses" | U |
+| JRN-31 | Focus while typing | With an invalid review date after a failed submit, typing in the note keeps the focus in the note | U |
+| JRN-32 | Delete of a missing note, links, count | A 404 on delete counts as deleted; all pages of transactions and the current link are options; the over-limit announcement is an always-mounted polite region; deleting a transaction refreshes the journal queries; the 500-note cap holds under concurrent creates; a backup-and-LRU test lists every owner table whose `instrument_id` foreign key blocks deletion (S5) | U/I |
 | ALS-09 | Playwright | Keyboard path: focus a shortcut, Enter opens the drawer with the price filled, submit creates the alert (mocked), Escape closes without creating; axe clean in both themes at 375 and 1440 px | E |
 | JRN-Z01 | Safe Edition | No new egress and no new dependency; deny-list, SAF-13 and licence scan pass | CI |
 ## RST: relative strength against the Nifty 50 and sector peers (decision RST, PROPOSED; worker and API B21, web F22; formulas docs/05 12.14, API docs/03 4a.RST, card docs/06 6.4a.RST)

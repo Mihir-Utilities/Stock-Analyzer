@@ -490,7 +490,7 @@ CREATE TABLE flag_dismissals (
 -- row; the stored response is replayed for 24 h (older rows are ignored and purged on the next claim).
 CREATE TABLE idempotency_key (
   key          uuid PRIMARY KEY,
-  scope        text NOT NULL,                     -- 'portfolio_txn' or 'mf_txn'
+  scope        text NOT NULL,                     -- 'portfolio_txn', 'mf_txn' or 'journal_note'
   request_hash text NOT NULL,                     -- sha256 of the normalised request; a different body under the same key is a 409
   response     jsonb,
   created_at   timestamptz NOT NULL DEFAULT now()
