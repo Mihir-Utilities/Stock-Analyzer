@@ -259,8 +259,8 @@ func TestExpandIndicatorsPassesRelativeStrengthThrough(t *testing.T) {
 func TestExpandIndicatorsPassesSwingDipsThrough(t *testing.T) {
 	for name, blocks := range map[string]string{
 		"block": `"swing_dips":{"as_of":"2026-10-07","bars":15,"window_rows":252,
-		  "thresholds":[{"threshold_pct":10,"dips":3,"recovered":2,"open":1,"median_days_to_recover":null,
-		    "median_days_to_recover_reason":"too_few_episodes","records":[{"status":"open","recovery_date":null}]}],
+		  "thresholds":[{"threshold_pct":10,"dips":3,"recovered":2,"superseded":1,"open":1,"median_days_to_recover":null,
+		    "median_days_to_recover_reason":"too_few_episodes","records":[{"status":"open","recovery_date":null},{"status":"superseded","days_low_to_recovery_reason":"superseded"}]}],
 		  "zigzag":[{"threshold_pct":10,"legs":4,"bounced":3,"open":1}]},"swing_dips_reason":null`,
 		"compute_error": `"swing_dips":null,"swing_dips_reason":"compute_error"`,
 	} {

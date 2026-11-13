@@ -6,7 +6,7 @@ import * as ix from "../mocks/inv-fixtures";
 import type { MockReply } from "../mocks/imports-fixtures";
 import { ok } from "../mocks/imports-fixtures";
 import * as fx from "../mocks/stock-fixtures";
-import { swingDips } from "../mocks/swing-fixtures";
+import { swingDips, swingDipsDecline } from "../mocks/swing-fixtures";
 
 // F19 (SWD-E01, SWD-E02): the Swing dips card on the Analysis tab in a real browser: axe in both
 // themes at 375 and 1440 px, no horizontal page scroll, 44 px targets, keyboard.
@@ -27,7 +27,7 @@ function reply(route: Route, r: MockReply) {
   });
 }
 
-async function mockApi(page: Page) {
+async function mockApi(page: Page, decline = false) {
   await page.route("**/api/v1/**", (route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname.replace("/api/v1", "");
@@ -36,7 +36,7 @@ async function mockApi(page: Page) {
       "GET /stocks/TCS/prices": fx.prices({ n: 70 }),
       "GET /stocks/TCS/indicators": ix.indicatorsWithInv((a) => ({
         ...a,
-        swing_dips: swingDips(),
+        swing_dips: decline ? swingDipsDecline() : swingDips(),
       })),
       "GET /stocks/TCS/events": fx.events,
       "GET /stocks/TCS/links": fx.links,
@@ -96,7 +96,7 @@ async function noPageScroll(page: Page) {
 test.describe("Analysis tab: Swing dips card", () => {
   test.use({ bypassCSP: true });
   for (const theme of ["dark", "light"] as const) {
-    for (const width of [375, 1440]) {
+    for (const width of [375, 1280, 1440]) {
       test(`SWD-E01 axe, targets and no page scroll: ${theme} at ${width}`, async ({ page }) => {
         await signIn(page);
         await mockApi(page);
@@ -112,10 +112,8 @@ test.describe("Analysis tab: Swing dips card", () => {
         }
         await setTheme(page, theme);
         expect(await axeViolations(page)).toEqual([]);
-        if (width === 375) {
-          expect(await smallTargets(page)).toEqual([]);
-          await noPageScroll(page);
-        }
+        if (width === 375) expect(await smallTargets(page)).toEqual([]);
+        await noPageScroll(page); // 375, 1280 and 1440 px: no horizontal page scroll
       });
     }
   }
@@ -128,7 +126,9 @@ test.describe("Analysis tab: Swing dips card", () => {
     await page.setViewportSize({ width: 375, height: 900 });
     await page.goto("/stocks/TCS?tab=analysis");
     await expect(page.getByTestId("inv-swing")).toHaveAttribute("data-state", "ready");
-    const region = page.getByRole("region", { name: "Swing dips by size of fall, scrollable" });
+    const region = page.getByRole("region", {
+      name: "Dips from the 52-week high by size of fall, scrollable",
+    });
     await expect(region).toHaveAttribute("tabindex", "0");
     expect(await region.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
     await expect(page.getByRole("region", { name: "Last swing dips, scrollable" })).toHaveAttribute(
@@ -157,5 +157,21 @@ test.describe("Analysis tab: Swing dips card", () => {
     await howto.locator("summary").focus();
     await page.keyboard.press("Enter");
     await expect(howto).toHaveAttribute("open", "");
+  });
+
+  test("SWD-E03 a long decline: superseded dips, axe and no page scroll at 1280 px", async ({
+    page,
+  }) => {
+    await signIn(page);
+    await mockApi(page, true);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/stocks/TCS?tab=analysis");
+    await expect(page.getByTestId("inv-swing")).toHaveAttribute("data-state", "ready");
+    await expect(page.getByTestId("inv-swing-superseded")).toHaveCount(3);
+    await expect(page.getByTestId("inv-swing-open")).toHaveCount(1);
+    expect(await axeViolations(page)).toEqual([]);
+    await noPageScroll(page);
+    // the Drawdown profile still renders its own table, in its own column wrapper
+    await expect(page.getByTestId("inv-drawdown-table")).toBeVisible();
   });
 });

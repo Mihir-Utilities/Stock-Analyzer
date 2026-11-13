@@ -446,7 +446,7 @@ export function AnalysisTab({
         info={<DefinitionTip term="max_drawdown" />}
         filename="drawdown"
       />
-      <div className="grid min-w-0 gap-4 xl:grid-cols-2">
+      <div className="grid min-w-0 gap-4 2xl:grid-cols-2">
         <div className="min-w-0">
           <DrawdownProfileCard load={indicatorsLoad} blocks={inv} />
         </div>
