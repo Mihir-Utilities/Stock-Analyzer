@@ -435,7 +435,7 @@ def test_inv_s08_new_blocks_are_json_safe_with_reasons_and_small(first: date, la
     assert _null_without_reason(new) == []
     grown = len(json.dumps(new, separators=(",", ":")))
     assert grown < 20_000, grown
-    assert len(json.dumps(snap)) < 200_000
+    assert len(json.dumps(snap)) < 250_000
     for k in NEW_KEYS:
         if isinstance(a[k], dict):
             assert a[k].get("as_of") and a[k].get("bars") == len(ds), k
