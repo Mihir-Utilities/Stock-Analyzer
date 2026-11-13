@@ -111,7 +111,7 @@ def test_snapshot_stays_small_enough_for_the_free_tier() -> None:
     idx = 20000 * np.cumprod(1 + np.random.default_rng(1).normal(0, 0.01, 1000))
     snap = build_snapshot(bars, {d: float(v) for d, v in zip(bars.dates, idx, strict=True)})
     assert snap is not None
-    assert len(json.dumps(snap)) < 200_000
+    assert len(json.dumps(snap)) < 250_000
 
 
 def test_ind89_52w_high_low_are_scaled_by_adj_close_over_close() -> None:

@@ -37,7 +37,7 @@ Compute the investment-context blocks from the stock's own imported prices and s
 - [ ] Every row `INV-M01..M09`, `INV-S01..S08`, `INV-P01..P04`, `INV-D01..D07`, `INV-H01..H02`, `INV-E01..E06`, `INV-V01..V03`, `INV-L01..L05`, `INV-R01..R04`, `INV-A01..A06`, `INV-W01..W08`, `INV-Z01` passes.
 - [ ] All golden vectors of docs/05 section 12 pass (tolerance 1e-4 on rates, 1e-3 on the downside deviation, exact on counts and dates).
 - [ ] Missing history gives `null` with a reason (never 0, NaN, Infinity); a 14-month history shows no share anywhere; nothing is computed from fewer rows than its window.
-- [ ] The snapshot grows by less than 20 KB and stays under 200 KB; `compute_analysis` for a 25-year stock stays within its existing time budget.
+- [ ] The snapshot grows by less than 20 KB (25 KB with swing dips, SWD-9) and stays under 200 KB (250 KB after SWD-9); `compute_analysis` for a 25-year stock stays within its existing time budget.
 - [ ] `GET /watchlist` is unchanged apart from the new optional field (INV-W07); no new route; no new egress host; deny-list, SAF-13 and licence scan pass.
 - [ ] `docs/03`, `openapi.yaml`, `docs/field-map.json` and `packages/api-types` agree.
 

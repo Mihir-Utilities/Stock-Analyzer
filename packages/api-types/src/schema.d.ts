@@ -1505,31 +1505,34 @@ export interface components {
             price_basis?: string;
             variants: components["schemas"]["InvSipVariant"][];
         };
-        /** @description One dip of analysis.swing_dips.thresholds[].records (docs/05 12.13 rule A). depth_pct is a negative percent number; days are calendar days between bar dates. */
+        /** @description One dip of analysis.swing_dips.thresholds[].records (docs/05 12.13 rule A, Dips from the 52-week high). depth_pct is a negative percent number; days are calendar days between bar dates. A null reason key is omitted (absent = null). */
         InvSwingDipRecord: {
             /** Format: date */
             peak_date: string;
-            peak_close?: number;
-            /** Format: date */
-            start_date?: string;
+            peak_close: number;
             /** Format: date */
             low_date: string;
-            low_close?: number;
+            low_close: number;
             depth_pct: number;
-            days_peak_to_low?: number;
+            days_peak_to_low: number;
             /** Format: date */
-            recovery_date?: string | null;
-            days_low_to_recovery?: number | null;
-            /** @description open_dip while the dip has not recovered. */
+            recovery_date: string | null;
+            days_low_to_recovery: number | null;
+            /** @description open_dip or superseded while the dip is not recovered; omitted when recovered. */
             days_low_to_recovery_reason?: string | null;
-            /** @enum {string} */
-            status: "recovered" | "open";
+            /**
+             * @description superseded: the reference peak left the 252-row window before it was regained (not regained within a year; D-SWD).
+             * @enum {string}
+             */
+            status: "recovered" | "open" | "superseded";
         };
-        /** @description Rule A summary for one threshold (peak-recovery dips, docs/05 12.13). When the history is shorter than 252 rows every count and statistic is null and reason is insufficient_history. */
+        /** @description Rule A summary for one threshold (Dips from the 52-week high, docs/05 12.13). dips = recovered + superseded + open; at most one dip is open. When the history is shorter than 252 rows every count and statistic is null and reason is insufficient_history. A null reason or *_reason key is omitted (absent = null). */
         InvSwingDipRow: {
             threshold_pct: number;
             dips?: number | null;
             recovered?: number | null;
+            /** @description Dips closed because their reference peak left the 252-row window before it was regained. */
+            superseded?: number | null;
             open?: number | null;
             recovered_share_pct?: number | null;
             recovered_share_reason?: string | null;
@@ -1570,12 +1573,14 @@ export interface components {
             small_sample: boolean;
             reason?: string | null;
         };
-        /** @description analysis.swing_dips (docs/05 12.13, docs/03 4a-swing): falls of at least 10 and 20 percent from the recent 52-week high, recovered or not, plus zig-zag swing legs. Additive and optional; drawdown_profile is unchanged. Past prices only. */
+        /** @description analysis.swing_dips (docs/05 12.13, docs/03 4a-swing): Dips from the 52-week high (falls of at least 10 and 20 percent, recovered, superseded or open) plus Swings (fall then bounce, zig-zag). Additive and optional; drawdown_profile is unchanged. A reason or *_reason key that would be null is omitted (absent = null). Past prices only. */
         InvSwingDips: {
             /** Format: date */
             as_of: string;
             bars: number;
-            window_rows?: number;
+            window_rows: number;
+            /** @description The minimum count below which medians are hidden (INV_MIN_EPISODES, default 3). */
+            min_episodes: number;
             thresholds: components["schemas"]["InvSwingDipRow"][];
             zigzag: components["schemas"]["InvSwingLegRow"][];
         };
@@ -1602,8 +1607,8 @@ export interface components {
             seasonality?: components["schemas"]["InvSeasonality"];
             position?: components["schemas"]["InvPricePosition"];
             drawdown_profile?: components["schemas"]["InvDrawdownProfile"];
-            swing_dips?: components["schemas"]["InvSwingDips"];
-            /** @description compute_error when swing_dips is null because the block failed to compute (docs/05 12.13, SWD-7). */
+            swing_dips?: components["schemas"]["InvSwingDips"] | null;
+            /** @description compute_error when swing_dips is null because the block failed to compute (docs/05 12.13, SWD-7). Omitted when it would be null (absent = null). */
             swing_dips_reason?: string | null;
             holding_periods?: components["schemas"]["InvHoldingPeriods"];
             entry_study?: components["schemas"]["InvEntryStudy"];

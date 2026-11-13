@@ -18,7 +18,6 @@ const int = z.number().int().nonnegative().nullish().catch(null);
 const record = z.object({
   peak_date: str,
   peak_close: num,
-  start_date: str,
   low_date: str,
   low_close: num,
   depth_pct: num,
@@ -26,7 +25,7 @@ const record = z.object({
   recovery_date: str,
   days_low_to_recovery: int,
   days_low_to_recovery_reason: str,
-  status: z.enum(["recovered", "open"]).nullish().catch(null),
+  status: z.enum(["recovered", "open", "superseded"]).nullish().catch(null),
 });
 export type SwingRecord = z.infer<typeof record>;
 
@@ -34,6 +33,7 @@ const dipRow = z.object({
   threshold_pct: z.number().int(),
   dips: int,
   recovered: int,
+  superseded: int,
   open: int,
   recovered_share_pct: num,
   recovered_share_reason: str,
@@ -75,6 +75,7 @@ export const swingDipsSchema = z.object({
   as_of: str,
   bars: int,
   window_rows: int,
+  min_episodes: int,
   thresholds: z.array(dipRow.nullable().catch(null)).transform(compact).catch([]),
   zigzag: z.array(legRow.nullable().catch(null)).transform(compact).catch([]),
 });

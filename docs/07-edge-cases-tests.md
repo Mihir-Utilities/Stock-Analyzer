@@ -570,7 +570,7 @@ Rule: every row needs an automated test before its feature is done. Rows marked 
 | RET-86 | Beta/correlation (D05a) | Inner join on dates; >= 120 aligned returns; reasons `no_benchmark` / `insufficient_overlap` / `n/m` | U |
 | RET-87 | Sharpe-like (D05a) | `(CAGR_3y - RISK_FREE_RATE)/vol_3y`; null without 3 years or with zero vol | U |
 | RET-88 | Liquidity (D05a) | `mean(close*volume)` over 60 rows in INR crore; null below 60 rows | U |
-| RET-89 | No NaN/Infinity (D05a) | Snapshot is strict-JSON safe; every null scalar has a reason in `null_reasons`; latest snapshot stays under 200 KB | U |
+| RET-89 | No NaN/Infinity (D05a) | Snapshot is strict-JSON safe; every null scalar has a reason in `null_reasons`; latest snapshot stays under 250 KB (SWD-9; was 200 KB) | U |
 | RET-90 | Snapshot lifecycle (D05a) | Idempotent per `as_of`, scores untouched, latest 30 kept, only newest holds series, stale snapshots removed after delete/trim | I |
 | RET-91 | Stock warnings (D05a) | `UNCONFIRMED_ACTION` / `ADJUSTMENT_CONFLICT` come from `actions_db.stock_warnings()` | I |
 | RET-92 | screener_row price metrics (D05a) | Only whitelisted price keys replaced; D05b keys kept; nulls omitted | I |
@@ -941,7 +941,7 @@ Worker rows (INV-M, INV-S, INV-P, INV-D, INV-H, INV-E, INV-V, INV-L, INV-R) are 
 | INV-S05 | Year column summary (VS3) | n 4, green 3, 75.00, avg 7.00, median 8.00, best +20.0 (2021), worst -8.0 (2020); partial first year and YTD excluded | U |
 | INV-S06 | All history, not only the displayed 10 years | A 14-year series: `seasonality.months[*].n_years` counts all years while `month_year` and `year_returns` return the last 10 calendar years | U |
 | INV-S07 | Data depth | `first_bar`, `last_bar`, `years_of_history` correct; a 14-month history has `n_years` of at most 2 per month (the first month has no return, so one month appears twice) and no share anywhere (corrected by B16: the earlier text said at most 1) | U |
-| INV-S08 | `analysis` stays strict-JSON safe | No NaN/Infinity in any new block; every null scalar has its sibling `*_reason`; the snapshot grows by less than 20 KB and stays under 200 KB (extends RET-89) | U |
+| INV-S08 | `analysis` stays strict-JSON safe | No NaN/Infinity in any new block; every null scalar has its sibling `*_reason`; the new blocks (with swing dips) grow the snapshot by less than 25 KB and it stays under 250 KB (SWD-9; extends RET-89) | U |
 | INV-P01 | Price position vector (VP1) | Range position 80.0 (band `upper`), distance from the 52-week highest close -6.6667, `pctile_52w` 70.0, `pctile_all` 50.0, distance from the highest close in history -30.0, extension over the average 5.0 | U |
 | INV-P02 | Band edges | Position exactly 100/3 is `middle`, just under is `lower`; exactly 200/3 is `upper` | U |
 | INV-P03 | Flat range and short history | High equals low: `null` (`flat_range`); under 252 rows: 52-week values `null` (`insufficient_history`); under 504 rows: `pctile_all` `null`; under 200 bars: extension `null` | U |
@@ -1035,38 +1035,46 @@ Worker rows (SWD-W) are U tests in `apps/worker/tests/test_swing_dips.py` with t
 
 | ID | Case | Expected | Type |
 |---|---|---|---|
-| SWD-W01 | SW1 rule A, X = 10 (two falls under one peak, three dips) | `dips` 3, `recovered` 2, `open` 1; the second fall to 85 under the 100 peak is part of dip 1 (low 85 on 01-07, depth -15.0, 4 days peak to low, recovery 01-09, 2 days); dip 2 depth -11.5385, 2 and 1 days; dip 3 open, depth -10.4762 | U |
-| SWD-W02 | SW1 summary X = 10 at the default minimum 3 | `recovered_share_pct` 66.6667, `median_depth_pct` -11.5385, `worst_depth_pct` -15.0, `median_days_peak_to_low` 2.0, `longest_open_days` 2, `small_sample` true; `median_days_to_recover` null with `too_few_episodes` (2 recovered) | U |
-| SWD-W03 | SW1 with `INV_MIN_EPISODES` 2 | `median_days_to_recover` 1.5 (completed dips only; the open dip is excluded) | U |
+| SWD-W01 | SW1 rule A, X = 10 (a second fall under one peak, three dips; `w = 10`, padded) | `dips` 3, `recovered` 2, `superseded` 0, `open` 1; the second fall to 85 under the 100 peak is part of dip 1 (low 85, depth -15.0, 4 days peak to low, recovered after 2 days); dip 2 depth -11.5385, 2 and 1 days; dip 3 open, depth -10.4762 | U |
+| SWD-W02 | SW1 summary X = 10 at the default minimum 3 | `recovered_share_pct` 66.6667, `median_depth_pct` -11.5385, `worst_depth_pct` -15.0, `median_days_peak_to_low` 2.0, `longest_open_days` 2 (peak to as-of), `small_sample` true; `median_days_to_recover` null with `too_few_episodes` (2 recovered) | U |
+| SWD-W03 | SW1 with `INV_MIN_EPISODES` 2 | `median_days_to_recover` 1.5 (recovered dips only; the open dip is excluded) | U |
 | SWD-W04 | SW1 X = 20 (no dip) | `dips` 0, medians null `too_few_episodes`, `worst_depth_pct` null `no_dips`, `longest_open_days` null `no_open_dip`, `records` empty | U |
-| SWD-W05 | SW2: a stock that never recovers and a fall that starts before `w` rows exist | The dip starts at row `w-1` (01-03) with peak 01-01; `dips` 1, `open` 1, `recovered` 0, depth -50.0, `longest_open_days` 6, status open, `days_low_to_recovery` null with `open_dip`; medians hidden | U |
-| SWD-W06 | SW3: a fall recovered inside the first `w-1` rows | Not counted: `dips` 0 | U |
+| SWD-W05 | SW2: a stock that never recovers while its peak is still in the window (X = 10 and 20) | `dips` 1, `open` 1, `superseded` 0, depth -50.0, `longest_open_days` 6, status open, `days_low_to_recovery` null with `open_dip`; medians hidden | U |
+| SWD-W05b | SW3 (D-SWD): a long decline from the first window | 3 dips: A superseded (peak 100, low 60, -40.0, 3 days), B superseded (peak 80, -25.0, 2 days), C open (peak 65, -23.0769); `recovered` 0, `superseded` 2; `median_depth_pct` -25.0, `worst_depth_pct` -40.0, `recovered_share_pct` 0.0; superseded rows carry `days_low_to_recovery_reason` `superseded` | U |
+| SWD-W06 | SW6: a fall recovered inside the first `w-1` rows | Not counted: `dips` 0 | U |
 | SWD-W07 | `N < w` | Counts and statistics null, `reason` `insufficient_history`, `records` empty, no 0 | U |
 | SWD-W08 | Threshold tolerance and equal recovery | A close exactly 10% below the high (`100, 90`, `w = 2`) starts a dip at X = 10; a close exactly equal to the reference high recovers it | U |
 | SWD-W09 | Ties for the low and for the peak | The earliest equal low is kept; the peak is the latest of equal highs in the window | U |
 | SWD-W10 | Records limit and order | With more than 8 dips `records` has 8, newest first, while the summary counts all dips | U |
-| SWD-W11 | SW4 rule A on a long decline | One open dip with `ref` 95 (X = 10, depth -47.3684, 7 days) and one with `ref` 90 (X = 20, depth -44.4444, 5 days) | U |
-| SWD-W12 | SW4 rule B, X = 10 (the zig-zag swings) | `legs` 4, `bounced` 3, `open` 1, `median_depth_pct` -22.1501, `worst_depth_pct` -24.2424, `median_days_peak_to_low` 1.0, `median_days_to_bounce` 1.0; the bounce of exactly +10.0% counts | U |
+| SWD-W11 | SW5 (D-SWD): rule A on a long decline | X = 10: `dips` 4 (3 superseded, 1 open), peaks 95, 90, 77, 66, `median_depth_pct` -29.8246, `worst_depth_pct` -35.0649, `median_days_peak_to_low` 3.0, `longest_open_days` 1; X = 20: 3 dips (2 superseded, 1 open), median -33.3333 | U |
+| SWD-W11b | SW7: a new fall under a new window high | Dip A (ref 100) superseded at row 3, dip B (ref 80) starts on the same row and is recovered at row 4; `recovered` 1, `superseded` 1 | U |
+| SWD-W11c | Order and boundary of the steps; weekend gap | At the row where the peak leaves the window, a close at or above the reference recovers the dip (recovery first); a lower close supersedes it; days count calendar days across a weekend (peak to low 1, low to recovery 4) | U |
+| SWD-W12 | SW4 rule B, X = 10 (the swings) | `legs` 4, `bounced` 3, `open` 1, `median_depth_pct` -22.1501, `worst_depth_pct` -24.2424, `median_days_peak_to_low` 1.0, `median_days_to_bounce` 1.0; the bounce of exactly +10.0% counts | U |
 | SWD-W13 | SW4 rule B, X = 20 and SW1 rule B | X = 20: `legs` 1, `open` 1, depth -50.0; SW1 X = 10: `legs` 3, `bounced` 2, `open` 1, `median_days_to_bounce` null (`too_few_episodes`), 1.0 with the minimum 2; SW1 X = 20: `legs` 0 | U |
-| SWD-W14 | Percent and day units | `depth_pct` is a negative percent number; days are calendar days between bar dates, a weekend gap counts its calendar days; no NaN, Infinity or `-0.0` anywhere (`json.dumps(allow_nan=False)`) | U |
-| SWD-W15 | Block failure isolation | When `swing_dips` raises, `_analysis` still returns every other block, `swing_dips` is null, `swing_dips_reason` is `compute_error` and the error is logged without secrets | U |
-| SWD-W16 | The existing drawdown profile is unchanged | VD1 (INV-D01..D03) still passes and `drawdown_profile` is byte-identical with and without the new block | U |
-| SWD-W17 | Snapshot wiring | `compute_analysis` output carries `analysis.swing_dips` with the contract keys, JSON-safe, and the snapshot size grows by under 6 KB for a 25-year stock | U |
-| SWD-W18 | Integration | With `TEST_DATABASE_URL`: a stored snapshot of a seeded stock contains the block and `GET`-shaped JSON round-trips | I |
+| SWD-W14 | Percent and day units; JSON safety | `depth_pct` is a negative percent number; days are calendar days between bar dates; no NaN, Infinity or `-0.0` anywhere (the whole block is walked) | U |
+| SWD-W14b | Null reasons omitted | No `reason` or `*_reason` key holds null; records carry no start date | U |
+| SWD-W14c | Invariants on noisy series (second shape) | `dips = recovered + superseded + open`, at most one open dip, every depth at least X deep, for six random walks | U |
+| SWD-W15 | Block failure isolation and logging | When `swing_dips` raises, `_analysis` returns every other block, `swing_dips` is null, `swing_dips_reason` is `compute_error`; the log line has the symbol, the bar count, the exception type and the innermost frame (file:line) and not the message | U |
+| SWD-W16 | The existing drawdown profile is unchanged | The VD1 result (INV-D01..D03) is asserted literally and the key set of `drawdown_profile` is unchanged | U |
+| SWD-W17 | Snapshot wiring and realistic size | `compute_analysis` output carries `analysis.swing_dips` with the contract keys, no `swing_dips_reason` when null; for 6,500 bars the block is under 7 KB and the whole snapshot under 250 KB; `swing_dips` is in the INV-S08 checks (null reasons, `bars`) | U |
+| SWD-W18 | Integration | With `TEST_DATABASE_URL`: a stored snapshot of a seeded stock contains the block and the JSON round-trips | I |
 | SWD-A01 | Contract: passthrough | `GET /stocks/{symbol}/indicators` returns `analysis.swing_dips` and `swing_dips_reason` unchanged (incl. the null plus `compute_error` shape); an old snapshot without them still answers 200 | I |
 | SWD-A02 | Contract: field map and types | `openapi.yaml`, `packages/api-types` (`npm run check:generated`) and `docs/field-map.json` agree; every new field is mapped to a real test id | CI |
 | SWD-U01 | Card renders the block | Title "Swing dips" next to "Drawdown profile" (which still renders unchanged), per-row counts, medians and the last-dips table from the fixture | U |
-| SWD-U02 | Open dip is visibly labelled | The open dip's row has the text chip "Open" and "not recovered yet"; the summary shows "still open" with its count; it is never absent | U |
+| SWD-U02 | Open and superseded dips are visibly labelled | The open dip's row has the text chip "Open" and "not recovered yet"; a superseded row has the chip "Not regained within a year" and "reference peak {date} is older than a year"; the summary shows still-open and not-regained counts; neither is ever absent; at most one "Open" chip | U |
 | SWD-U03 | Hidden medians show reasons | A null median is an em dash with visually hidden reason text, a tooltip and an entry in `inv-swing-reasons` ("at least 3 are needed"); never 0, NaN or Infinity | U |
 | SWD-U04 | Sample size, Small sample chip, How to read, note | `inv-swing-sample` states the counts, `inv-swing-small` shows below 10 dips, `inv-swing-howto` is a native details, the line "Past behaviour is not a forecast." is present | U |
-| SWD-U05 | "How this differs" sentence | `inv-swing-differs` is present and mentions the all-time-high view of the Drawdown profile | U |
+| SWD-U05 | "How this differs" sentence (B1) | `inv-swing-differs` says the dip table follows one reference peak at a time until it is regained or drops out of the 52-week window, that the repeated swings of a long decline are in the swings table, and does not claim a long decline shows its repeated falls in the dip table; `inv-swing-sizes` names 10% and 20% | U |
 | SWD-U06 | Missing block, `compute_error`, wrong shape, insufficient history | "Not computed yet" for a missing block; the `compute_error` message for null plus reason; a card-level error for a wrong shape without affecting other cards; the 252-day sentence for `insufficient_history` | U |
 | SWD-U07 | Per-field degradation | A string where a number is expected degrades that cell to an em dash with a reason; one bad record does not blank the table | U |
 | SWD-U08 | 10% / 20% choice (select) | The native select switches the last-dips table between the two thresholds and says "Showing the last {k} of {n} dips" | U |
 | SWD-U09 | Swing legs table | Rule B rows show legs, bounced, open and the medians, with the caption that a bounce is not a recovery | U |
 | SWD-U10 | Definitions | `definitions.swing_dips` equals the owner text of docs/05 12.13 (generated; `npm run gen:definitions` leaves no diff) and contains no ids | U |
-| SWD-U11 | Lazy loading and bundle | The card is loaded with `next/dynamic`; `npm run check:bundle` stays within budget | CI |
-| SWD-U12 | Field coverage guard | `f15-polish` UI-09 passes with the five mapped ids | U |
-| SWD-E01 | axe in both themes at 375 and 1440 px | No serious or critical violation on the Analysis tab with the card visible | E |
+| SWD-U11 | Long-decline fixture (SW5) | Counts 4 / 0 / 3 / 1 (dips, recovered, not regained within a year, open), median depth -29.8%, worst -35.1%, statuses open then three superseded, one "Open" chip | U |
+| SWD-U12 | Header wording, minimum from the block, pure reasons | Headers say "(open dip so far included)", "(recovered dips only)", "Open for (days since peak)"; names "Dips from the 52-week high" and "Swings (fall then bounce)"; the swing caption says the median depth is measured to the lowest close before the bounce; the "at least N" text uses `min_episodes`; `swingReasons` is a pure function of the block | U |
+| SWD-U13 | Layout wrapper (S8) | The Drawdown profile renders its own table unchanged inside a `min-w-0` wrapper in a `2xl:grid-cols-2` grid | U |
+| SWD-U14 | Field coverage guard | `f15-polish` UI-09 passes with the mapped ids | U |
+| SWD-E01 | axe in both themes at 375, 1280 and 1440 px | No serious or critical violation on the Analysis tab with the card visible; no horizontal page scroll at any of the three widths | E |
 | SWD-E02 | Keyboard and no page scroll | The tables' regions and the 10/20 select are reachable and operable by keyboard; no horizontal page scroll at 375 px | E |
+| SWD-E03 | Long decline at 1280 px | Superseded and open chips render, axe clean, no page scroll, the Drawdown profile table is visible | E |
 | SWD-Z01 | Safe Edition | No new egress, no new dependency; deny-list, SAF-13 and licence scan pass | CI |

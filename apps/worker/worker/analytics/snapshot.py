@@ -100,6 +100,7 @@ def build_snapshot(
     risk_free: float = DEFAULT_RISK_FREE,
     warnings: list[str] | None = None,
     inv_ctx: InvContext | None = None,
+    symbol: str | None = None,
 ) -> dict[str, Any] | None:
     """The ``indicators`` jsonb of one stock, or ``None`` below ``MIN_BARS`` valid bars."""
     bars, dropped = _drop_invalid_prices(bars)
@@ -117,7 +118,7 @@ def build_snapshot(
     with np.errstate(all="ignore"):  # unknown stays null with a reason, never NaN/inf/raise
         technicals, series = _technicals(bars, hi, lo, col)
         returns = _returns(bars, bench, risk_free, col)
-        analysis = _analysis(bars, bench, inv_ctx or InvContext(today=bars.dates[-1]))
+        analysis = _analysis(bars, bench, inv_ctx or InvContext(today=bars.dates[-1]), symbol)
     return {
         "version": VERSION,
         "as_of": bars.dates[-1].isoformat(),
@@ -272,7 +273,9 @@ def _returns(
     return {"trading": trading, "calendar": calendar, "risk": risk}
 
 
-def _analysis(bars: Bars, bench: dict[date, float], ctx: InvContext) -> dict[str, Any]:
+def _analysis(
+    bars: Bars, bench: dict[date, float], ctx: InvContext, symbol: str | None = None
+) -> dict[str, Any]:
     c, d = bars.adj_close, bars.dates
     window = ser.SERIES_ROWS
     beta_by_date = dict(rt.rolling_beta(d, c, bench))
@@ -280,7 +283,7 @@ def _analysis(bars: Bars, bench: dict[date, float], ctx: InvContext) -> dict[str
     model = inm.MonthModel(d, c, ctx.today, ctx.holidays, ctx.market_closed)
     cells, cell_reasons = inm.month_cells(model)
     st = ctx.settings
-    swing, swing_reason = swd.swing_dips_safe(d, c, st)  # isolated: a failure never aborts
+    swing, swing_reason = swd.swing_dips_safe(d, c, st, symbol)  # isolated: never aborts
     return {
         "format": "columnar",  # drawdown/rolling_* align to `series.dates` (the last 750 rows)
         "drawdown": ser.drawdown_column(c),
@@ -304,7 +307,7 @@ def _analysis(bars: Bars, bench: dict[date, float], ctx: InvContext) -> dict[str
         "drawdown_profile": inv.drawdown_profile(d, c, st),
         # Swing dips (docs/05 12.13): an additional block next to the unchanged drawdown profile.
         "swing_dips": swing,
-        "swing_dips_reason": swing_reason,
+        **({"swing_dips_reason": swing_reason} if swing_reason else {}),  # null reason: omitted
         "holding_periods": inv.holding_periods(d, c, st),
         "entry_study": inv.entry_study(d, c, st),
         "vol_regime": inv.vol_regime(d, vol21, st),

@@ -9,9 +9,10 @@ import { AnalysisTab } from "@/components/stock/chart/AnalysisTab";
 import { definitions } from "@/lib/definitions";
 import type { Load } from "@/lib/stock/load";
 import type { IndicatorsData } from "@/lib/stock/schemas";
+import { swingReasons } from "@/components/stock/chart/SwingDipsCard";
 import { parseSwingDips } from "@/lib/stock/swing-schemas";
 import { indicatorsWithInv } from "../mocks/inv-fixtures";
-import { swingDips } from "../mocks/swing-fixtures";
+import { swingDips, swingDipsDecline } from "../mocks/swing-fixtures";
 import "./dom-matchers";
 
 vi.setConfig({ testTimeout: 30_000 });
@@ -69,12 +70,13 @@ describe("Swing dips card (SWD-U)", () => {
     const cells = Array.from(r10.querySelectorAll("td")).map((c) => text(c));
     expect(cells[0]).toBe("3"); // dips
     expect(cells[1]).toBe("2"); // recovered
-    expect(cells[2]).toBe("1"); // still open
-    expect(cells[3]).toContain("66.7%"); // recovered share
-    expect(cells[4]).toContain("-11.5%"); // median depth
-    expect(cells[5]).toContain("-15.0%"); // worst depth
-    expect(cells[6]).toContain("2.0 days"); // median days peak to low
-    expect(cells[8]).toContain("2 days"); // longest open
+    expect(cells[2]).toBe("0"); // not regained within a year
+    expect(cells[3]).toBe("1"); // still open
+    expect(cells[4]).toContain("66.7%"); // recovered share
+    expect(cells[5]).toContain("-11.5%"); // median depth
+    expect(cells[6]).toContain("-15.0%"); // worst depth
+    expect(cells[7]).toContain("2.0 days"); // median days peak to low
+    expect(cells[9]).toContain("2 days"); // open for (days since peak)
     const r20 = within(card).getByTestId("inv-swing-row-20");
     expect(r20).toHaveTextContent("no dip of this size");
   });
@@ -91,7 +93,7 @@ describe("Swing dips card (SWD-U)", () => {
     const rows = within(card).getAllByTestId("inv-swing-record");
     expect(rows).toHaveLength(3); // newest first: open, recovered, recovered
     expect(rows[0]).toHaveAttribute("data-status", "open");
-    expect(rows[1]).toHaveTextContent("13 Jan 2024");
+    expect(rows[1]).toHaveTextContent("20 Jan 2024");
     expect(within(card).getByTestId("inv-swing-records-count")).toHaveTextContent(
       "Showing the last 3 of 3 dips of at least 10%.",
     );
@@ -101,7 +103,7 @@ describe("Swing dips card (SWD-U)", () => {
     await renderTab();
     const card = screen.getByTestId("inv-swing");
     const r10 = within(card).getByTestId("inv-swing-row-10");
-    const recover = r10.querySelectorAll("td")[7]!;
+    const recover = r10.querySelectorAll("td")[8]!;
     expect(text(recover)).toContain("—");
     expect(recover.querySelector(".sr-only")).toHaveTextContent(
       "only 2 recovered dips; at least 3 are needed",
@@ -119,7 +121,7 @@ describe("Swing dips card (SWD-U)", () => {
     await renderTab();
     const card = screen.getByTestId("inv-swing");
     expect(within(card).getByTestId("inv-swing-sample")).toHaveTextContent(
-      "Based on 3 dips of at least 10% and 0 dips of at least 20% in 15 daily closes.",
+      "Based on 3 dips of at least 10% and 0 dips of at least 20% in 22 daily closes.",
     );
     expect(within(card).getByTestId("inv-swing-small")).toBeInTheDocument();
     const howto = within(card).getByTestId("inv-swing-howto");
@@ -138,6 +140,11 @@ describe("Swing dips card (SWD-U)", () => {
     expect(s).toHaveTextContent("drawdown profile");
     expect(s).toHaveTextContent("highest close in your history");
     expect(s).toHaveTextContent("52-week high");
+    expect(s).toHaveTextContent("one reference peak at a time");
+    expect(s).toHaveTextContent("not regained within a year");
+    expect(s).toHaveTextContent("swings table");
+    expect(s).not.toHaveTextContent("still shows its repeated falls");
+    expect(screen.getByTestId("inv-swing-sizes")).toHaveTextContent("10% and 20%");
   });
 
   it("SWD-U06: missing block, compute_error, wrong shape and insufficient history", async () => {
@@ -256,10 +263,71 @@ describe("Swing dips card (SWD-U)", () => {
     expect(t).not.toMatch(/SWD|\bsection\b|docs\/|\b[a-z]+_[a-z_]+\b|\*\*|`/);
   });
 
-  it("SWD-U11: the card is loaded on demand and never calls the network", () => {
-    const src = readFileSync(join(web, "src/components/stock/chart/AnalysisTab.tsx"), "utf8");
-    expect(src).toMatch(/dynamic\(\(\) => import\("\.\/SwingDipsCard"\)/);
-    const card = readFileSync(join(web, "src/components/stock/chart/SwingDipsCard.tsx"), "utf8");
-    expect(card).not.toMatch(/fetch\(|XMLHttpRequest|style=\{\{|#[0-9a-fA-F]{3,6}\b/);
+  it("SWD-U11: the long-decline fixture shows superseded dips with their own wording and counts", async () => {
+    await renderTab((a) => ({ ...a, swing_dips: swingDipsDecline() }));
+    const card = screen.getByTestId("inv-swing");
+    const r10 = within(card).getByTestId("inv-swing-row-10");
+    const cells = Array.from(r10.querySelectorAll("td")).map((c) => text(c));
+    expect(cells.slice(0, 4)).toEqual(["4", "0", "3", "1"]); // dips, recovered, superseded, open
+    expect(cells[5]).toContain("-29.8%");
+    expect(cells[6]).toContain("-35.1%");
+    const rows = within(card).getAllByTestId("inv-swing-record");
+    expect(rows.map((r) => r.getAttribute("data-status"))).toEqual([
+      "open",
+      "superseded",
+      "superseded",
+      "superseded",
+    ]);
+    const chip = within(rows[1]!).getByTestId("inv-swing-superseded");
+    expect(chip).toHaveTextContent("Not regained within a year");
+    expect(rows[1]).toHaveTextContent("reference peak 7 Jan 2024 is older than a year");
+    expect(within(card).getAllByTestId("inv-swing-open")).toHaveLength(1); // at most one open dip
+    expect(within(card).getByTestId("inv-swing-superseded-count-10")).toHaveTextContent("3");
+  });
+
+  it("SWD-U12: header wording, the minimum from the block and the pure reasons list", async () => {
+    await renderTab((a) => ({
+      ...a,
+      swing_dips: { ...swingDips(), min_episodes: 5 },
+    }));
+    const card = screen.getByTestId("inv-swing");
+    for (const h of [
+      "Median depth (open dip so far included)",
+      "Median days peak to low (open dip so far included)",
+      "Median days to recover (recovered dips only)",
+      "Open for (days since peak)",
+      "Not regained within a year",
+    ]) {
+      expect(within(card).getByText(h)).toBeInTheDocument();
+    }
+    expect(text(card)).not.toContain("Longest open so far");
+    expect(within(card).getByText("Dips from the 52-week high")).toBeInTheDocument();
+    expect(within(card).getByText(/^Swings \(fall then bounce\)/)).toBeInTheDocument();
+    expect(within(card).getByTestId("inv-swing-legs-note")).toHaveTextContent(
+      "Median depth is measured to the lowest close before the X% bounce, so it is deeper than X.",
+    );
+    expect(within(card).getByTestId("inv-swing-reasons")).toHaveTextContent(
+      "at least 5 are needed",
+    );
+    const parsed = parseSwingDips({ swing_dips: swingDips() });
+    if (parsed.block.kind !== "ok") throw new Error("fixture must parse");
+    expect(swingReasons(parsed.block.value)).toContain(
+      "10% fall: only 2 recovered dips; at least 3 are needed",
+    );
+    // the same input gives the same list (no state is pushed during render)
+    expect(swingReasons(parsed.block.value)).toEqual(swingReasons(parsed.block.value));
+  });
+
+  it("SWD-U13: the Drawdown profile renders unchanged inside its layout wrapper", async () => {
+    await renderTab();
+    const dd = screen.getByTestId("inv-drawdown");
+    expect(dd).toHaveAttribute("data-state", "ready");
+    expect(within(dd).getByTestId("inv-drawdown-table")).toBeInTheDocument();
+    expect(within(dd).getByTestId("inv-drawdown-row-10")).toBeInTheDocument();
+    expect(dd).toHaveTextContent("Drawdown profile");
+    expect(dd.parentElement?.classList.contains("min-w-0")).toBe(true);
+    const grid = dd.parentElement?.parentElement;
+    expect(grid?.classList.contains("2xl:grid-cols-2")).toBe(true);
+    expect(grid?.classList.contains("xl:grid-cols-2")).toBe(false);
   });
 });

@@ -234,6 +234,7 @@ async def compute_analysis(
         risk_free=await load_risk_free(pool),
         warnings=warnings,
         inv_ctx=await load_inv_context(pool, now, bars.dates[0] if bars.dates else None),
+        symbol=symbol,
     )
     scores: dict[str, Any] = {}
     if snap is not None:

@@ -414,6 +414,7 @@ NEW_KEYS = (
     "vol_regime",
     "sip_backtest",
     "risk_adjusted",
+    "swing_dips",
 )
 
 
@@ -434,7 +435,7 @@ def test_inv_s08_new_blocks_are_json_safe_with_reasons_and_small(first: date, la
     new = {k: a[k] for k in NEW_KEYS}
     assert _null_without_reason(new) == []
     grown = len(json.dumps(new, separators=(",", ":")))
-    assert grown < 20_000, grown
+    assert grown < 25_000, grown
     assert len(json.dumps(snap)) < 250_000
     for k in NEW_KEYS:
         if isinstance(a[k], dict):
