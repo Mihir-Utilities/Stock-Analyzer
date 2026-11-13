@@ -38,6 +38,9 @@ func portfolioHandler(rt route, d Deps) http.Handler {
 	if d.Portfolio == nil {
 		return nil
 	}
+	if h := portfolioRiskHandler(rt, d); h != nil { // B19 (portfolio_risk_handlers.go)
+		return h
+	}
 	svc := d.Portfolio
 	switch rt.Method + " " + rt.Path {
 	case "GET /watchlist":

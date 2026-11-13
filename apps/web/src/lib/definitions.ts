@@ -275,6 +275,51 @@ export const definitions = {
     section: "",
     text: "Yearly price growth divided by how large the falling days were, counting only days when the price fell. It ignores dividends and has no risk-free rate.",
   },
+  "pf_concentration": {
+    label: "Concentration",
+    section: "8.6.1",
+    text: "How your money is spread over what you hold. The share of the biggest holding, of the biggest three and of the biggest five, and one number that says how many equal-sized holdings your spread is equivalent to. It describes today's values only. It is not advice about what to hold.",
+  },
+  "pf_hhi": {
+    label: "Effective number of holdings",
+    section: "8.6.1",
+    text: "Add up the square of each holding's share of your portfolio, as a fraction. It is 1 for a single holding and gets smaller the more evenly you spread. One divided by it is the effective number of holdings.",
+  },
+  "pf_stress": {
+    label: "Position stress (what-if)",
+    section: "8.6.2",
+    text: "A what-if, not a forecast. If only this one holding fell by 10% or 20% from today's value and nothing else changed, this is how much your portfolio value would change in rupees and in percent. It is simple arithmetic on today's values.",
+  },
+  "pf_twr": {
+    label: "Portfolio return line",
+    section: "8.6.3",
+    text: "Your portfolio's own return line starting at 100, built from the price moves of what you held each day. Money you add or take out is left out, so adding money cannot hide a fall and taking money out cannot create one. Dividends are not included for stocks.",
+  },
+  "pf_drawdown": {
+    label: "Portfolio drawdown",
+    section: "8.6.3",
+    text: "How far the return line is below its own highest point so far, the deepest such fall and how many days it has been below that point. It describes the past of your portfolio. It does not say what happens next.",
+  },
+  "relative_return": {
+    label: "Return against the Nifty 50",
+    section: "",
+    text: "How much the stock's price rose or fell over the period minus how much the Nifty 50 index did over the same days, in percentage points. A positive number means the stock did better than the index in that period. Only dates where both have a closing price are used, and the price change excludes dividends.",
+  },
+  "relative_line": {
+    label: "Stock divided by the Nifty 50",
+    section: "",
+    text: "The stock's price divided by the Nifty 50 level, scaled so the first day shown is 100. A rising line means the stock did better than the index since that day; a falling line means it did worse. It does not say what will happen next.",
+  },
+  "beat_share": {
+    label: "One-year periods that beat the index",
+    section: "",
+    text: "Out of all the past one-year periods that ended on a day in your imported history, the share in which the stock's price change was bigger than the index's. The periods overlap heavily, so they are far fewer independent experiences than the count suggests. Beating the index in the past is not a forecast.",
+  },
+  "peer_rank": {
+    label: "Rank among tracked sector peers",
+    section: "",
+    text: "How this stock's price change over 3, 6 and 12 months ranks among the other stocks you track in the same sector. Rank 1 is the biggest gain. It only compares stocks you track, it is not the whole sector, and no sector index is used.",
+  },
 } as const satisfies Record<string, Definition>;
 
 export type DefinitionKey = keyof typeof definitions;

@@ -34,25 +34,38 @@ function serverFields(error: unknown): Record<string, string> {
 
 const DEFAULT_KIND: AlertKind = "price_above";
 
+/** A create form opened with a stock, a price kind and a price already filled in (all editable). */
+export interface AlertPrefill {
+  symbol: string;
+  kind: "price_above" | "price_below";
+  /** Plain decimal text, for example "1035.00". */
+  price: string;
+}
+
 /**
  * Create (no `initial`) or edit (`initial`: only the parameters change, B12-3) one alert.
  * Prices are typed as text and checked with decimal arithmetic (lib/alerts/kinds.ts).
  */
 export function AlertForm({
   initial,
+  prefill,
   onDone,
 }: {
   initial?: AlertItem;
+  /** Create mode only (ALS-3): the Analysis tab shortcuts open the form with these filled in. */
+  prefill?: AlertPrefill;
   onDone: (message: string) => void;
 }) {
   const editing = initial !== undefined;
-  const initialKind = initial && isAlertKind(initial.kind) ? initial.kind : DEFAULT_KIND;
+  const initialKind =
+    initial && isAlertKind(initial.kind) ? initial.kind : (prefill?.kind ?? DEFAULT_KIND);
   const [kind, setKind] = useState<AlertKind>(initialKind);
-  const [symbol, setSymbol] = useState(initial?.target.symbol ?? "");
+  const [symbol, setSymbol] = useState(initial?.target.symbol ?? prefill?.symbol ?? "");
   const [code, setCode] = useState(initial?.target.code ? String(initial.target.code) : "");
   const [values, setValues] = useState<Record<string, string>>(() => {
     const v: Record<string, string> = {};
     for (const [k, val] of Object.entries(initial?.params ?? {})) v[k] = paramText(val);
+    if (!initial && prefill) v["price"] = prefill.price;
     return v;
   });
   const [oneShot, setOneShot] = useState(initial?.one_shot ?? true);

@@ -24,6 +24,7 @@ import (
 	"github.com/india-analyzer/api/internal/httpx"
 	"github.com/india-analyzer/api/internal/instruments"
 	"github.com/india-analyzer/api/internal/jobs"
+	"github.com/india-analyzer/api/internal/journal"
 	"github.com/india-analyzer/api/internal/logx"
 	"github.com/india-analyzer/api/internal/market"
 	"github.com/india-analyzer/api/internal/portfolio"
@@ -90,6 +91,7 @@ func run(ctx context.Context, getenv func(string) string, out io.Writer) error {
 		MF:               mfService(pool, jobSvc),
 		Screener:         screener.New(pool),
 		Portfolio:        pf,
+		Journal:          journal.New(pool),
 		MFHoldings:       mfh,
 		Imports:          importService(cfg, pool, jobSvc, log),
 		Actions:          actions.New(pool, jobSvc, log),

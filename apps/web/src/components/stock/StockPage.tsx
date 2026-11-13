@@ -66,6 +66,9 @@ const PredictionTab = dynamic(
   () => import("./prediction/PredictionTab").then((m) => m.PredictionTab),
   { loading: predictionLoading },
 );
+const JournalTab = dynamic(() => import("./journal/JournalTab").then((m) => m.JournalTab), {
+  loading: tabLoading,
+});
 const PeersTab = dynamic(() => import("./peers/PeersTab").then((m) => m.PeersTab), {
   loading: tabLoading,
 });
@@ -80,6 +83,7 @@ export const TAB_IDS = [
   "prediction",
   "events",
   "data",
+  "journal",
 ] as const;
 export type TabId = (typeof TAB_IDS)[number];
 
@@ -93,6 +97,7 @@ const TAB_LABELS: Record<TabId, string> = {
   prediction: "Prediction",
   events: "Events",
   data: "Data",
+  journal: "Journal",
 };
 
 export function parseTab(v: string | null): TabId {
@@ -267,7 +272,7 @@ function Inner({ symbol }: { symbol: string }) {
       return id === "chart" ? (
         <ChartTab profile={profile} indicatorsLoad={indicatorsLoad} pageWarnings={warnings} />
       ) : (
-        <AnalysisTab indicatorsLoad={indicatorsLoad} />
+        <AnalysisTab indicatorsLoad={indicatorsLoad} symbol={profile.symbol} />
       );
     }
     if (id === "fundamentals") return <FundamentalsTab symbol={profile.symbol} />;
@@ -277,6 +282,7 @@ function Inner({ symbol }: { symbol: string }) {
     if (id === "events") {
       return <EventsTab profile={profile} eventsLoad={eventsLoad} linksLoad={linksLoad} />;
     }
+    if (id === "journal") return <JournalTab symbol={profile.symbol} />;
     return <DataTab profile={profile} warnings={warnings} />;
   };
 

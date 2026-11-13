@@ -552,3 +552,33 @@ CREATE INDEX mf_scheme_isin_reinv_idx ON mf_scheme (isin_div_reinvest) WHERE isi
 -- idempotency_key.scope has the new value 'mf_txn' (free text, no DDL). mf_scheme.is_tracked is set true by the API when the
 -- first mf_txn of a scheme is written and re-derived on delete (watchlist, remaining holdings or an open keep it).
 -- Backup (docs/04 3.11, D08): mf_txn and mf_fund_name_map join the exported tables.
+
+-- ---------------------------------------------------------------------------
+-- Migration 0015_decision_journal (B20; decision journal, plan Item D; questions JRN-1..JRN-6).
+-- One row per dated note the owner writes about one stock: why they bought, held or watched it. Plain text (HTML-escaped by
+-- the web on render), at most 1,000 characters. price_at_note is the latest valid imported close on the day the note was
+-- written, with its own date (price_as_of); it is NULL when no price was imported (the API says so, never 0). review_on is an
+-- optional IST date; "review due" is computed on read with the owner's IST date, never stored. The row may link to one of the
+-- owner's own portfolio_txn rows (set NULL if that transaction is deleted). Owner data: backed up (docs/04 3.11), never exported.
+CREATE TABLE journal_note (
+  id               bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  instrument_id    integer NOT NULL REFERENCES instrument(id) ON DELETE RESTRICT,   -- a note is never orphaned silently
+  noted_on         date NOT NULL,                                                   -- IST market date the note was written
+  note_text        text NOT NULL,                                                   -- 1..1000 characters (rune count checked in the API too)
+  price_at_note    numeric(18,4),                                                   -- INR close of price_as_of, unadjusted as imported
+  price_as_of      date,                                                            -- bar date of price_at_note
+  review_on        date,                                                            -- optional IST date; the API refuses a past date on create
+  status           text NOT NULL DEFAULT 'open',                                    -- open | reviewed
+  reviewed_at      timestamptz,                                                     -- set when status becomes reviewed
+  portfolio_txn_id bigint REFERENCES portfolio_txn(id) ON DELETE SET NULL,          -- optional link; must be a transaction of the same stock (API)
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT journal_note_text_len CHECK (char_length(btrim(note_text)) >= 1 AND char_length(note_text) <= 1000),
+  CONSTRAINT journal_note_price_pos CHECK (price_at_note IS NULL OR price_at_note > 0),
+  CONSTRAINT journal_note_price_pair CHECK ((price_at_note IS NULL) = (price_as_of IS NULL)),
+  CONSTRAINT journal_note_status CHECK (status IN ('open','reviewed')),
+  CONSTRAINT journal_note_reviewed CHECK ((status = 'reviewed') = (reviewed_at IS NOT NULL))
+);
+CREATE INDEX journal_note_stock_idx ON journal_note (instrument_id, noted_on DESC, id DESC);             -- per-stock list, newest first
+CREATE INDEX journal_note_txn_idx ON journal_note (portfolio_txn_id) WHERE portfolio_txn_id IS NOT NULL; -- link lookups
+-- idempotency_key.scope has the new value 'journal_note' (free text, no DDL). Backup (docs/04 3.11): journal_note joins the exported tables.

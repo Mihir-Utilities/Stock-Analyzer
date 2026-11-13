@@ -18,6 +18,7 @@ from worker.analytics import analysis_series as ser
 from worker.analytics import indicators as ind
 from worker.analytics import inv_months as inm
 from worker.analytics import investing as inv
+from worker.analytics import relative_strength as rst
 from worker.analytics import returns as rt
 from worker.analytics import sip
 from worker.analytics import swing_dips as swd
@@ -313,6 +314,8 @@ def _analysis(
         "vol_regime": inv.vol_regime(d, vol21, st),
         "sip_backtest": sip.sip_backtest(d, c, st),
         "risk_adjusted": inv.risk_adjusted(d, c),
+        # Relative strength (docs/05 12.14, docs/03 4a.RST): vs the NIFTY50 and vs tracked peers.
+        "relative_strength": rst.build(d, c, bench, d[-window:], ctx.peers, symbol=ctx.symbol),
     }
 
 

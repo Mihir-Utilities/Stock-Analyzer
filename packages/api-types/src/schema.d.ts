@@ -742,6 +742,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/portfolio/risk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Portfolio-level risk for view=all|equity|mf (default all): concentration (weights per holding and group, top-1/3/5, HHI as a fraction, effective holdings), position stress (what-if 10 and 20 percent fall of one holding, arithmetic only) and the reconstructed daily value history with a time-weighted return index, current and maximum drawdown and days under water. Money fields are strings with 4 decimals (INR); percent fields are percent numbers; unknown values are null with a sibling *_reason; an unpriced holding nulls every weight (never a partial total); a date without a price is a gap, not a partial sum. (docs/03 section 12b, docs/05 section 8.6) */
+        get: operations["getPortfolioRisk"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/portfolio/adjustments": {
         parameters: {
             query?: never;
@@ -829,6 +846,42 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/stocks/{symbol}/journal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the owner's decision-journal notes for a stock, newest first. (docs/03 section 13a) */
+        get: operations["getStocksSymbolJournal"];
+        put?: never;
+        /** Add a note (price at the time is taken from the latest imported close; Idempotency-Key supported; 500 notes per stock). (docs/03 section 13a) */
+        post: operations["postStocksSymbolJournal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/journal/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a note (final). (docs/03 section 13a) */
+        delete: operations["deleteJournalId"];
+        options?: never;
+        head?: never;
+        /** Edit the note text, review date, status or transaction link (price and note date are fixed). (docs/03 section 13a) */
+        patch: operations["patchJournalId"];
         trace?: never;
     };
     "/alerts": {
@@ -1600,6 +1653,91 @@ export interface components {
             return_per_downside_3y?: number | null;
             downside_reason?: string | null;
         };
+        /** @description analysis.relative_strength (docs/05 12.14, docs/03 4a.RST): the stock against the owner-imported NIFTY50 and against tracked peers of the same sector. Price return only. Each half is an object or null with its sibling reason. Past behaviour is not a forecast. */
+        InvRelativeStrength: {
+            /** Format: date */
+            as_of: string;
+            bars?: number;
+            basis?: string;
+            vs_index?: {
+                /** @enum {string} */
+                index_code?: "NIFTY50";
+                /** Format: date */
+                index_as_of?: string;
+                index_rows?: number;
+                aligned_rows?: number;
+                /** Format: date */
+                first_aligned?: string;
+                /** Format: date */
+                last_aligned?: string;
+                dropped_stock_dates?: number;
+                dropped_index_dates?: number;
+                windows?: {
+                    /** @enum {string} */
+                    key?: "1m" | "3m" | "6m" | "1y";
+                    rows?: number;
+                    stock_pct?: number | null;
+                    index_pct?: number | null;
+                    /** @description stock_pct minus index_pct, percentage points */
+                    excess_pp?: number | null;
+                    /** @description insufficient_history | insufficient_overlap */
+                    reason?: string | null;
+                }[];
+                years?: {
+                    year?: number;
+                    /** @enum {string} */
+                    kind?: "full" | "ytd";
+                    /** Format: date */
+                    base_date?: string;
+                    /** Format: date */
+                    end_date?: string;
+                    stock_pct?: number;
+                    index_pct?: number;
+                    excess_pp?: number;
+                }[];
+                rolling_year?: {
+                    windows?: number;
+                    independent_periods?: number;
+                    share_beat_pct?: number | null;
+                    median_excess_pp?: number | null;
+                    small_sample?: boolean;
+                    /** @description insufficient_history | insufficient_overlap | too_few_windows */
+                    reason?: string | null;
+                };
+                /** @description Aligned to the stored series.dates (last 750 rows): position i belongs to the date of pair i of data.analysis.drawdown; null where the date is not an aligned date. 100 at ratio_base_date. */
+                ratio_rebased?: (number | null)[] | null;
+                /** Format: date */
+                ratio_base_date?: string | null;
+                ratio_reason?: string | null;
+            } | null;
+            /** @description no_index_series | compute_error */
+            vs_index_reason?: string | null;
+            vs_peers?: {
+                sector?: string;
+                /** Format: date */
+                as_of?: string;
+                peers_in_sector?: number;
+                excluded?: number;
+                windows?: {
+                    /** @enum {string} */
+                    key?: "3m" | "6m" | "1y";
+                    rows?: number;
+                    stock_pct?: number | null;
+                    n_peers?: number;
+                    n_total?: number;
+                    rank?: number | null;
+                    /** @description 0-100, mid-rank, higher = stronger among tracked same-sector stocks */
+                    percentile?: number | null;
+                    peer_median_pct?: number | null;
+                    vs_median_pp?: number | null;
+                    small_sample?: boolean;
+                    /** @description insufficient_history | too_few_peers */
+                    reason?: string | null;
+                }[];
+            } | null;
+            /** @description no_sector | compute_error */
+            vs_peers_reason?: string | null;
+        };
         /** @description The investment-context additions to GET /stocks/{symbol}/indicators data.analysis (docs/03 4a, docs/05 section 12). All optional: an older snapshot lacks them. month_year keeps its [year, month, percent|null] shape; a null cell has its reason in month_year_reasons ([year, month, no_base|gap_before|incomplete_month_data]). A month is closed when today's IST date is after its last day; a closed month whose prices do not reach its last expected trading day is null (incomplete_month_data) (D-INV). */
         InvAnalysisBlocks: {
             month_year_reasons?: unknown[][];
@@ -1615,6 +1753,7 @@ export interface components {
             vol_regime?: components["schemas"]["InvVolRegime"];
             sip_backtest?: components["schemas"]["InvSipBacktest"];
             risk_adjusted?: components["schemas"]["InvRiskAdjusted"];
+            relative_strength?: components["schemas"]["InvRelativeStrength"];
         };
         /** @description data of GET /stocks/seasonality (docs/03 section 4b). */
         SeasonalityList: {
@@ -1849,6 +1988,89 @@ export interface components {
         /** @description Same fields as TxnCreate, all optional. */
         TxnPatch: {
             [key: string]: unknown;
+        };
+        /** @description The linked portfolio transaction (decimal strings like section 12). */
+        JournalTxn: {
+            /** Format: int64 */
+            id: number;
+            /** @enum {string} */
+            side: "buy" | "sell";
+            qty: string;
+            price: string;
+            /** Format: date */
+            trade_date: string;
+        };
+        /** @description One decision-journal note (docs/03 section 13a). note is untrusted plain text (1 to 1,000 characters); price_at_note is the latest valid imported close on or before noted_on, unadjusted, with its own date; both are null with price_reason when no price was imported. review_due is computed on read from the owner's IST date. */
+        JournalNote: {
+            /** Format: int64 */
+            id: number;
+            symbol: string;
+            /** Format: date */
+            noted_on: string;
+            note: string;
+            /** @description INR, decimal string with 4 decimals. */
+            price_at_note: string | null;
+            /** Format: date */
+            price_as_of: string | null;
+            /** @description Constant: your imported prices. */
+            price_source: string;
+            /** @enum {string|null} */
+            price_reason: "no_price_imported" | null;
+            /** Format: date */
+            review_on: string | null;
+            /** @enum {string} */
+            status: "open" | "reviewed";
+            /** Format: date-time */
+            reviewed_at: string | null;
+            review_due: boolean;
+            /** Format: int64 */
+            portfolio_txn_id: number | null;
+            txn: components["schemas"]["JournalTxn"] | null;
+        };
+        JournalCreate: {
+            note: string;
+            /**
+             * Format: date
+             * @description Today (IST) or later, at most 10 years ahead.
+             */
+            review_on?: string;
+            /**
+             * Format: int64
+             * @description A transaction of this stock.
+             */
+            portfolio_txn_id?: number;
+        };
+        /** @description At least one key. review_on and portfolio_txn_id accept null to clear. */
+        JournalPatch: {
+            note?: string;
+            /** Format: date */
+            review_on?: string | null;
+            /** @enum {string} */
+            status?: "open" | "reviewed";
+            /** Format: int64 */
+            portfolio_txn_id?: number | null;
+        };
+        /** @description Success envelope with one journal note. */
+        JournalEnvelope: {
+            data: components["schemas"]["JournalNote"];
+            meta?: components["schemas"]["Meta"];
+            warnings?: components["schemas"]["Warning"][];
+        };
+        /** @description Success envelope with a page of journal notes. */
+        JournalPageEnvelope: {
+            data: {
+                items: components["schemas"]["JournalNote"][];
+                next_cursor: string | null;
+                /**
+                 * Format: date
+                 * @description The owner's IST date used for review_due.
+                 */
+                today: string;
+                /** @description All open notes of the stock that are due, whatever the page or filter. */
+                review_due_count: number;
+            };
+            meta?: components["schemas"]["Meta"];
+            warnings?: components["schemas"]["Warning"][];
         };
         AlertCreate: {
             target: {
@@ -2895,7 +3117,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success. Latest analysis_snapshot: returns, technicals, scores, null_reasons, units and series/analysis arrays as [[date, value]] pairs (nulls at warm-up positions, last 750 rows). 404 DATA_UNAVAILABLE reason no_prices_imported or no_history (fewer than 60 valid bars or snapshot not computed yet). An alias answers data = {redirect_symbol}. INV (proposed, B16): data.analysis also carries the optional investment-context blocks year_returns, seasonality, position, drawdown_profile, holding_periods, entry_study, vol_regime, sip_backtest and risk_adjusted (schema InvAnalysisBlocks, docs/03 4a, docs/05 section 12); month_year keeps its shape. There is no GET /stocks/{symbol}/analysis route. */
+            /** @description Success. Latest analysis_snapshot: returns, technicals, scores, null_reasons, units and series/analysis arrays as [[date, value]] pairs (nulls at warm-up positions, last 750 rows). 404 DATA_UNAVAILABLE reason no_prices_imported or no_history (fewer than 60 valid bars or snapshot not computed yet). An alias answers data = {redirect_symbol}. INV (proposed, B16): data.analysis also carries the optional investment-context blocks year_returns, seasonality, position, drawdown_profile, holding_periods, entry_study, vol_regime, sip_backtest and risk_adjusted, plus relative_strength (RST, B21, InvRelativeStrength, docs/03 4a.RST, docs/05 12.14) (schema InvAnalysisBlocks, docs/03 4a, docs/05 section 12); month_year keeps its shape. There is no GET /stocks/{symbol}/analysis route. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4253,6 +4475,43 @@ export interface operations {
             };
         };
     };
+    getPortfolioRisk: {
+        parameters: {
+            query?: {
+                /** @description Asset-class filter of one ledger: all (default), equity or mf. Other values are 422. */
+                view?: "all" | "equity" | "mf";
+                /** @description Valuation date (market date, IST); default today; a future date or a bad format is 422. */
+                as_of?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["RateLimited"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     getPortfolioAdjustments: {
         parameters: {
             query?: never;
@@ -4614,6 +4873,183 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["RateLimited"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getStocksSymbolJournal: {
+        parameters: {
+            query?: {
+                status?: "open" | "reviewed";
+                /** @description Page size (values above 200 are clamped). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque keyset cursor from next_cursor. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                /** @description URL-encoded exact exchange symbol, case-insensitive; old symbols resolve through symbol_alias. */
+                symbol: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page of notes with today (owner's IST date) and review_due_count */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalPageEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["RateLimited"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    postStocksSymbolJournal: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description CSRF guard for non-GET requests. */
+                "X-Requested-With": components["parameters"]["CsrfHeader"];
+                /** @description UUID; a replay within 24 h returns the stored response with Idempotent-Replayed: true. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                /** @description URL-encoded exact exchange symbol, case-insensitive; old symbols resolve through symbol_alias. */
+                symbol: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JournalCreate"];
+            };
+        };
+        responses: {
+            /** @description Created note */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            /** @description CONFLICT (500 notes per stock, or Idempotency-Key reused with a different request) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["RateLimited"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    deleteJournalId: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description CSRF guard for non-GET requests. */
+                "X-Requested-With": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                /** @description Numeric journal note id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success. data = {id, deleted: true} */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            /** @description Error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    patchJournalId: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description CSRF guard for non-GET requests. */
+                "X-Requested-With": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                /** @description Numeric journal note id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JournalPatch"];
+            };
+        };
+        responses: {
+            /** @description Updated note */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["RateLimited"];
             /** @description Error envelope */

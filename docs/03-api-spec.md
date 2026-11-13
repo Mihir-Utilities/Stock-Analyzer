@@ -24,7 +24,7 @@ Codes: `BAD_REQUEST` 400, `UNAUTHENTICATED` 401, `FORBIDDEN` 403, `NOT_FOUND` 40
 - Pagination: cursor-based `?limit=&cursor=`; `limit` default 50, max 200 (larger values are clamped to 200; non-integer or < 1 is a 422); response `{"items":[...],"next_cursor":null|string}`.
 - Symbol path parameter: URL-encoded exact exchange symbol (`M%26M`, `BAJAJ-AUTO`); matching is case-insensitive; resolved through `instrument.symbol` then `symbol_alias.old_symbol` (alias -> 301-style response `{"redirect_symbol": "NEW"}` with HTTP 200 and `data.redirect_symbol`).
 - Validation failures return 422 with `details.fields: [{"field":"qty","message":"must be > 0"}]`.
-- Idempotency: `POST /portfolio/txns` and `POST /portfolio/mf/txns` accept optional header `Idempotency-Key` (UUID) stored 24 h.
+- Idempotency: `POST /portfolio/txns`, `POST /portfolio/mf/txns` and `POST /stocks/{symbol}/journal` accept optional header `Idempotency-Key` (UUID) stored 24 h.
 
 ## 2. Auth
 
@@ -180,6 +180,40 @@ Rules.
 - All new blocks together add roughly 12 KB to the stored snapshot (the 29 SIP variants dominate); the snapshot stays under the 250 KB budget (RET-89, raised from 200 KB by SWD-9; the swing dips block adds about 5 KB, the new blocks together under 25 KB). The expansion step of B04 (`prices/expand.go`) passes the new blocks through unchanged (they carry their own dates; nothing is aligned to `series.dates`).
 - Errors and `DATA_UNAVAILABLE` reasons are those of `/indicators` above. No endpoint takes a parameter for these blocks.
 
+### 4a.RST. `data.analysis.relative_strength` (decision RST, PROPOSED; built by B21; formulas in `05` section 12.14)
+
+Additive and optional like the other 4a blocks (an older snapshot lacks it; the web shows "Not computed yet", never zero). **No new route, no new query parameter**; it is part of `GET /stocks/{symbol}/indicators` `data.analysis`. Percent fields are percent numbers; `excess_pp` and `vs_median_pp` are percentage points; `percentile` is 0-100; dates are `YYYY-MM-DD`. Each half is an object or `null` with its sibling reason (`vs_index_reason`: `no_index_series | compute_error`; `vs_peers_reason`: `no_sector | compute_error`). A null number inside an object has the row's `reason` (`insufficient_history | insufficient_overlap | too_few_windows | too_few_peers`).
+
+```json
+"relative_strength": {
+  "as_of": "2024-02-15", "bars": 330,
+  "basis": "price return (adj_close), excludes dividends",
+  "vs_index": {
+    "index_code": "NIFTY50", "index_as_of": "2024-02-15", "index_rows": 2465,
+    "aligned_rows": 328, "first_aligned": "2022-11-14", "last_aligned": "2024-02-15",
+    "dropped_stock_dates": 2, "dropped_index_dates": 3,
+    "windows": [ { "key": "1m", "rows": 21, "stock_pct": -3.1, "index_pct": 0.9, "excess_pp": -4.0, "reason": null } ],
+    "years": [ { "year": 2023, "kind": "full", "base_date": "2022-12-30", "end_date": "2023-12-29", "stock_pct": 12.0, "index_pct": 19.4, "excess_pp": -7.4 } ],
+    "rolling_year": { "windows": 76, "independent_periods": 1, "share_beat_pct": 61.84, "median_excess_pp": 3.2, "small_sample": true, "reason": null },
+    "ratio_rebased": [100.0, 100.4, null, 99.1], "ratio_base_date": "2022-11-14", "ratio_reason": null
+  },
+  "vs_index_reason": null,
+  "vs_peers": {
+    "sector": "Banks", "as_of": "2024-02-15", "peers_in_sector": 6, "excluded": 1,
+    "windows": [ { "key": "3m", "rows": 63, "stock_pct": 4.2, "n_peers": 5, "n_total": 6, "rank": 2, "percentile": 75.0,
+                   "peer_median_pct": 1.9, "vs_median_pp": 2.3, "small_sample": false, "reason": null } ]
+  },
+  "vs_peers_reason": null
+}
+```
+Rules.
+- `windows` of `vs_index` has the four rows `1m|3m|6m|1y` (rows 21, 63, 126, 252); `windows` of `vs_peers` has `3m|6m|1y` (rows 63, 126, 252). `years` has at most 10 rows ascending (`kind` `full | ytd`).
+- `ratio_rebased` has the length of the stored `series.dates` (the last 750 rows). The API zips `series.dates` into `[date, value]` pairs (section 4), so position `i` belongs to the date of pair `i` of `data.analysis.drawdown` (the same rows), and is `null` where that date is not an aligned date. `ratio_base_date` is its 100.
+- `aligned_rows` is the number of dates present in both the stock and the NIFTY50 series; the two dropped counts are dates present in only one of them (docs/05 12.14.1) and are always shown. `index_rows`, `index_as_of` describe the stored index series (source: the owner's prices.csv import of the reserved symbol; the UI prints "Your imported NIFTY50").
+- Hidden numbers: a null `rank`, `percentile`, `peer_median_pct`, `vs_median_pp` always has `reason` (`too_few_peers` below 3 peers; `insufficient_history` when the stock is shorter than the window); `n_peers` is always present.
+- A failure inside one half never fails the snapshot or the other half: that half is `null` with `compute_error` and the incident is logged (`relative_strength_failed`, symbol, half, error class).
+- Size: about 5 KB for a 750-row chart window (`ratio_rebased` dominates); the stored snapshot stays under the 200 KB budget (RET-89).
+- Peer ranks are as of this stock's own last bar and update only when this stock is recomputed (RST-6).
 ### 4a-swing. `analysis.swing_dips` (decision SWD, PROPOSED; built by B18; formulas in `05` 12.13)
 
 An additive, optional block next to `drawdown_profile` (which is unchanged). No new route and no parameter. Percent fields are percent numbers (a depth of -15.0 means 15% below the peak); the swing-leg rows are summaries only. Older snapshots lack the block (the web shows "Not computed yet"); a snapshot whose block failed to compute has `swing_dips: null` and `swing_dips_reason: "compute_error"` and every other block intact.
@@ -415,6 +449,45 @@ The statement carries only a fund name, so the scheme of every distinct name is 
 ### Import
 Kind `mf_statement` is added to `POST /imports/{kind}/validate`, `POST /imports/{kind}/commit` and `GET /imports/templates/{kind}` (section 14); format and parser rules in `01` section 7.9 (columns `Date | Fund Name | Transaction Type | Folio No | Units Traded | NAV | Amount | Stamp Duty`, CSV or `.xlsx`, blank rows skipped, no ISIN). Limits for this kind: 2 MB and 5,000 rows, type checked by content, read-only parsing (MFH-15, MFH-21). `.xlsx` is accepted only when the server runs with `MF_XLSX_ENABLED=true` (default off, B15R-1); otherwise an `.xlsx` is `422` with the message "xlsx not enabled" and CSV is unaffected. Only the 8 logical columns are kept in the upload store (`01` section 7.9). `validate` returns the usual envelope (row errors include `UNMAPPED_FUND`; warnings include `DUPLICATE_IN_FILE`, `AMOUNT_MISMATCH`, `NON_BUSINESS_DAY`; every preview row carries its file line `row`, the normalised fields, `fund_name` and `scheme_code` when mapped) plus `mf: { date_from, date_to, rows_by_type: {purchase, sip, ...}, funds: [{fund_name, fund_name_key, rows, mapped, scheme_code, scheme_name, plan, option}], unmapped_funds: [{fund_name, fund_name_key, rows, candidates: [{scheme_code, name, fund_house, plan, option, isin, on_watchlist, has_nav}]}], fund_mappings: [...the mapped entries of funds], duplicate_groups: [{rows: [5, 9], count: 2}], duplicates_in_db: 0 }` (a row already imported, by `dedupe_key`, is counted in `duplicates_in_db` and skipped at commit, so re-uploading the same statement inserts 0). `POST /imports/mf_statement/revalidate` body `{ "upload_id": "uuid" }` re-runs the validation of a stored upload against the current mappings and returns the same body as `validate` with the same `upload_id` (404 when the upload expired; the 1 h TTL is not extended). `commit` body `{ "upload_id", "note"?, "excluded_rows"?: [5] }` (`excluded_rows` = file lines the owner unticked, for example one of a `DUPLICATE_IN_FILE` group or a row with errors; they are not imported and the errors of an excluded row do not block the commit; an unknown line is 422; a header problem cannot be excluded) returns `{batch_id, inserted, skipped_duplicates, warnings}` and no `post_import_job_id` (holdings are computed on read); any remaining row error (including `UNMAPPED_FUND`) rejects the commit 422. Undo (`POST /imports/batches/{id}/undo`) is allowed within 30 days for this kind, deletes the batch's rows and answers `409 UNDO_BREAKS_HOLDINGS` (`details {scheme_code, folio, date}`) when a later redemption would then exceed held units; nothing changes in that case (MFH-20).
 
+## 12b. Portfolio risk (decision PRK, PROPOSED; built by B19; formulas in `05` section 8.6, screen in `06` 6.7b; questions PRK-1..PRK-8)
+
+`GET /portfolio/risk?view=all|equity|mf&as_of=` is one read-only endpoint (session required, no CSRF header) that serves concentration, position stress and the reconstructed value history with drawdown for one view. **Name:** `/portfolio/risk` (not `/portfolio/value-history`) because the three blocks share one ledger read and one set of reasons (PRK-5). `view` defaults to `all` (the Portfolio page default; the legacy `summary` default of `equity` exists only for compatibility, MFH-14); an unknown `view` is `422 UNPROCESSABLE` (`details.fields` `view`); `as_of` is `YYYY-MM-DD`, default today (IST), a future date or a bad format is `422` (field `as_of`). Conventions of sections 1, 12 and 12a: money as decimal strings with 4 decimals (INR), percent fields are percent numbers, unknown is `null` with a sibling `*_reason`, never `0`/`NaN`/`Infinity`. `meta.source` = `"mixed"` (`all`), `"owner transactions + imported prices"` (`equity`) or `"mfapi.in"` (`mf`); `meta.stale` is true when any component price or NAV is stale (as the summary); `warnings[]` carries `HOLDINGS_INCONSISTENT`, `HISTORY_STEP_SKIPPED`, `MISSING_PRICE`, `NAV_STALE` (one per cause).
+
+```json
+{ "data": {
+  "view": "all", "as_of": "2026-11-12", "currency": "INR",
+  "concentration": {
+    "total_value": "10000.0000", "total_value_reason": null,
+    "holdings_count": 4,
+    "top1_pct": 50.0, "top3_pct": 95.0, "top5_pct": 100.0, "shares_reason": null,
+    "hhi": 0.365, "effective_holdings": 2.74, "hhi_reason": null,
+    "group_hhi": 0.665, "group_top1_pct": 80.0, "group_reason": null,
+    "by_holding": [ { "key": "A", "name": "A Ltd", "asset_class": "equity", "group": "Banks", "value": "5000.0000", "weight_pct": 50.0, "weight_reason": null } ],
+    "by_group": [ { "key": "Banks", "kind": "sector", "value": "8000.0000", "weight_pct": 80.0, "holdings": 2 } ]
+  },
+  "stress": {
+    "label": "What if this one holding fell and nothing else moved. Arithmetic on today's values, not a forecast.",
+    "falls_pct": [10, 20],
+    "items": [ { "key": "A", "name": "A Ltd", "asset_class": "equity", "value": "5000.0000",
+      "impact_10": "-500.0000", "impact_10_pct": -5.0, "impact_20": "-1000.0000", "impact_20_pct": -10.0, "impact_reason": null } ]
+  },
+  "history": {
+    "basis": "time_weighted_index", "base": 100,
+    "series_reason": null, "from": "2016-04-01", "to": "2026-11-12", "points_count": 2480,
+    "points": [ { "date": "2016-04-01", "value": "100000.0000", "index": 100.0, "drawdown_pct": 0.0 } ],
+    "gaps": [ { "from": "2016-01-04", "to": "2016-03-31", "dates": 61, "reason": "missing_price: A" } ],
+    "gap_dates_total": 61, "gaps_truncated": false, "skipped_steps": 0,
+    "current_drawdown_pct": -4.5, "peak_date": "2026-10-01", "peak_index": 183.2, "days_under_water": 42, "drawdown_reason": null,
+    "max_drawdown": { "depth_pct": -31.2, "peak_date": "2020-01-14", "trough_date": "2020-03-23", "recovery_date": "2020-11-05", "recovered": true },
+    "twr_since_start_pct": 83.2
+  } }, "meta": { "as_of": "...", "source": "mixed", "stale": false, "stale_age_hours": 0 }, "warnings": [] }
+```
+- `concentration`: `total_value` is the summed value of the view's **open** holdings, `null` with `total_value_reason` (`missing_price: ...`, `missing_nav: ...`, `no_open_holdings`, `zero_value`) when any holding is unpriced or none is open; in that case `top1_pct`, `top3_pct`, `top5_pct`, `hhi`, `effective_holdings`, `group_hhi`, `group_top1_pct` and every `weight_pct` are `null` with the shared reason in `shares_reason`, `hhi_reason`, `group_reason`, `weight_reason` (never a partial sum as a total). `hhi` is a fraction in (0, 1] and `effective_holdings = 1/hhi` (2 decimals); `holdings_count` counts open holdings (priced or not); top-N with fewer than N holdings is the share of all of them. `by_holding` is ordered by value descending (unpriced last, ties by key); `key` is the stock symbol or the scheme code as a string; `group` repeats the holding's group key (`Unclassified` when the owner imported no sector or category). `by_group[].kind` is `sector`, `category`, `mutual_funds` or `unclassified`; in `all` every fund is in the single `Mutual funds` slice. Lists are `[]` when empty.
+- `stress.items[]`: one row per open holding in `by_holding` order; `impact_10`/`impact_20` are negative money strings (`value x f / 100`), `impact_*_pct` are negative percent numbers of the current total, both `null` with `impact_reason` (`no_price`, `no_nav`, or the total's reason for the percent only). `label` is fixed copy and `falls_pct` is `[10, 20]`.
+- `history`: `points` holds **only valid dates** in ascending order; `value` (money string; **includes the owner's deposits and withdrawals**, a full-exit day carries `"0.0000"`), `index` (time-weighted return index, base 100, 4 decimals), `drawdown_pct` (percent number, <= 0, 2 decimals). `gaps[]` are ranges of dates that could not be valued (`reason` `missing_price: SYM, ...` or `nav_gap: scheme name, ...`), at most the 50 most recent ranges (`gaps_truncated`, `gap_dates_total` always the exact count). `series_reason` is `no_transactions` or `no_priced_dates` when `points` is empty, else `null`. `skipped_steps` counts index steps that could not be computed because a transaction fell inside a price gap (`05` 8.6.3). `current_drawdown_pct`, `peak_date`, `peak_index`, `days_under_water`, `max_drawdown`, `twr_since_start_pct` are `null` with `drawdown_reason = too_few_points` when there are fewer than 2 points. `max_drawdown.recovery_date` is `null` with `recovered=false` while open; an index that never fell has `depth_pct` 0 and null `peak_date`, `trough_date`. Size: about 2,500 points for 10 years (about 250 KB of JSON before gzip; `Content-Encoding` is the gateway's job); a past `as_of` truncates the series.
+- Cost: the handler reads transactions, adjustments and the held instruments' bars once and computes in memory; target under 500 ms for about 200 transactions and 10 years of daily prices (B19 measures it and records the number in `docs/OPEN_QUESTIONS.md` PRK-8); no cache is added unless the measurement misses the budget.
+- Errors: 401 without a session; 422 for `view` or `as_of`; 429 as everywhere. A view with no data is a 200 with the reasons above (not an error).
+
 ## 13. Alerts and Telegram
 
 - `POST /alerts` body `{ "target": {"type":"stock","symbol":"TCS"}, "kind":"price_above", "params":{"price":4000}, "one_shot":true, "cooldown_minutes":1440, "expires_on":"2027-03-31" }`.
@@ -445,6 +518,24 @@ Implementation notes (B12):
 - `PATCH /alerts/{id}` takes `{status: "active"|"paused", params}` (at least one; any other key is 400). A params change clears `alert.last_state`. A fired or expired alert is final: 409. `DELETE` answers `{"data":{"ok":true}}`; a missing id is 404.
 - `POST /telegram/link-code` answers 200 `{code, expires_at, bot_username, deep_link}`; `bot_username` and `deep_link` are null with warning `BOT_NOT_CONFIGURED` while `TELEGRAM_BOT_USERNAME` is unset. `DELETE /telegram/link` and `POST /telegram/test` answer `{"data":{"ok":true}}`; the test message is 409 when no chat is linked, 429 (`Retry-After`) within 60 s of the previous one, and 503 `SOURCE_DOWN` when no bot token is configured or Telegram refuses.
 - `POST /telegram/webhook`: header `X-Telegram-Bot-Api-Secret-Token` compared in constant time with `TELEGRAM_WEBHOOK_SECRET`; missing, wrong or unconfigured secret is 401 and nothing is read or stored. Body limit 64 KiB. Only `/start <code>` (also `/start@<bot> <code>`) in a **private** chat is acted on: the code (case-insensitive, dash optional) is consumed atomically and the chat id stored (while a *different* chat is linked the request is refused, the code is not consumed and the chat gets a fixed "already linked" reply: unlink first; at most 10 unsuccessful attempts per 15 minutes are processed, B12-11), and the chat gets a fixed confirmation or "invalid, expired or already used" reply. Everything else (other commands, text, groups, channels, edits, callbacks, malformed JSON) is acknowledged with 200 and ignored, with no reply. The webhook needs no `X-Requested-With`.
+
+## 13a. Decision journal (plan Item D, B20; questions JRN-1..JRN-6; table `journal_note`, docs/02 migration 0015)
+
+A short dated note per stock saying why the owner bought, held or is watching it, so a later review compares the reason with what happened. Owner data: plain text, never sent anywhere, never exported (only the encrypted D08 backup holds it, docs/04 3.11). No Telegram reminder in v1 (JRN-2). All routes need the session; CSRF header on non-GET; errors use the envelope of section 1.
+
+- `GET /stocks/{symbol}/journal?status=open|reviewed&limit=&cursor=` -> `data = {items, next_cursor, today, review_due_count}` ordered by `(noted_on desc, id desc)` (keyset cursor, default 50, max 200). `today` is the owner's IST date used to compute `review_due` (so a client never needs its own clock); `review_due_count` counts **all** open notes of the stock that are due, whatever the page or the status filter. An unknown symbol is 404 `NOT_FOUND` (old symbols resolve through `symbol_alias`, as elsewhere); an unknown `status` is 422 on `status`. `meta.source = "owner journal"`.
+- Item: `{id, symbol, noted_on, note, price_at_note, price_as_of, price_source, price_reason, review_on, status, reviewed_at, review_due, portfolio_txn_id, txn}`.
+  - `note`: plain text, 1 to 1,000 characters (counted in characters, not bytes), stored and returned as typed (trimmed at both ends; CRLF and lone CR become LF). It is untrusted text: the web renders it as text, never as HTML.
+  - `price_at_note`: decimal string with 4 decimals, the latest valid (non-suspect) imported close on or before the day the note was written, **unadjusted as imported**; `price_as_of` is that bar's date; `price_source` is the constant `"your imported prices"`. With no imported price both price fields are `null` and `price_reason = "no_price_imported"` (never 0). The price is fixed when the note is created and cannot be edited (a changed mind is a new note).
+  - `review_on`: optional IST date. `review_due` is `true` exactly when `status = "open"`, `review_on` is set and `review_on <= today` (the date itself counts as due); it is computed on read, never stored.
+  - `status`: `open` or `reviewed`; `reviewed_at` is the UTC timestamp of the change to `reviewed` (null while open).
+  - `txn`: null, or `{id, side, qty, price, trade_date}` of the linked `portfolio_txn` (decimal strings like section 12); `portfolio_txn_id` is the same id or null. A link whose transaction was later deleted becomes null.
+- `POST /stocks/{symbol}/journal` body `{ "note": "Bought on the dip; thesis: ...", "review_on": "2027-03-31", "portfolio_txn_id": 42 }` (`review_on` and `portfolio_txn_id` optional) -> `201` with the item. `Idempotency-Key` header (UUID, optional, scope `journal_note`, 24 h): a replay returns the stored response with `Idempotent-Replayed: true`; the same key with a different body is `409 CONFLICT`. Validation (422, `details.fields`, one entry per field): `note` required, not blank, at most 1,000 characters, no control characters other than newline and tab (`"must not contain control characters"`); `review_on` must be a valid `YYYY-MM-DD` and today (IST) or later and at most 10 years ahead; `portfolio_txn_id` must be the id of a transaction of **this** stock (otherwise 422 `"must be a transaction of this stock"`). `noted_on` is today's IST date (not accepted from the client). At most 500 notes per stock; the 501st is `409 CONFLICT` (JRN-3). Unknown body keys are 400 like every other route.
+- `PATCH /journal/{id}` body with at least one of `note`, `review_on` (a date or `null` to clear), `status` (`open` | `reviewed`), `portfolio_txn_id` (an id or `null` to clear) (none: 422 on `body`) -> `200` with the item. Same validation as create; `review_on` may only be set to a past date when it equals the stored value (so an overdue note can still be marked reviewed or edited). Changing `status` to `reviewed` sets `reviewed_at`; back to `open` clears it. `price_at_note`, `price_as_of`, `noted_on` and the stock cannot change (unknown key 400). A missing or non-numeric id is 404.
+- `DELETE /journal/{id}` -> `{"data":{"id":42,"deleted":true}}`; missing id is 404. Deleting is final (no soft delete); the web asks for confirmation.
+- Error codes reused: `NOT_FOUND`, `UNPROCESSABLE` (422, `details.fields`), `CONFLICT` (409), `UNAUTHENTICATED`, `RATE_LIMITED`. Nothing new.
+
+**Alert shortcuts (plan Item D, no API change; questions ALS-1..ALS-3).** The Analysis tab offers buttons that open the existing create-alert form (section 13) with the symbol, the kind (`price_below` or `price_above`) and the price already filled in. The levels are computed in the browser with decimal arithmetic from facts already on screen (`analysis.position.high_52w_close`, `analysis.position.sma200`, rounded to 2 decimals half up); the owner still reviews the form and presses Create. The server rules are unchanged: `POST /alerts`, `THRESHOLD_ALREADY_MET` (422, checked against the last imported bar), the 200-active limit and the validation of section 13 apply as they do for a hand-typed alert. No new alert kind is introduced (JRN/ALS: `wk52_high` and `wk52_low` exist, but "10% below the high" is a level, which `price_below` already expresses).
 
 ## 14. Imports and owner-entered data
 
