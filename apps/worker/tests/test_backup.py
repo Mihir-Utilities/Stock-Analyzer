@@ -844,3 +844,27 @@ async def test_every_column_is_exported_or_deliberately_excluded(pg_full: asyncp
         missing = cols - set(spec.columns) - backup.EXCLUDED_COLUMNS.get(spec.name, frozenset())
         assert not missing, f"{spec.name}: {sorted(missing)}"
         assert set(spec.columns) <= cols, spec.name
+
+
+@pytest.mark.integration
+async def test_s5_every_owner_table_that_blocks_instrument_deletion_is_backed_up_and_exempt_from_lru(
+    pg_full: asyncpg.Pool,
+) -> None:
+    """Any table whose instrument_id foreign key blocks deleting an instrument (RESTRICT or NO ACTION,
+    not CASCADE) holds rows the owner entered: the backup must keep their instruments and the
+    housekeeping LRU must not untrack them. A new such table fails here until it is added to both."""
+    from worker import housekeeping
+
+    rows = await pg_full.fetch(
+        "SELECT c.conrelid::regclass::text AS tbl FROM pg_constraint c "
+        "JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] "
+        "WHERE c.contype = 'f' AND c.confrelid = 'instrument'::regclass "
+        "AND c.confdeltype IN ('r', 'a') AND a.attname = 'instrument_id' ORDER BY 1"
+    )
+    tables = {r["tbl"] for r in rows}
+    assert {"journal_note", "portfolio_txn", "portfolio_adjustment"} <= tables
+    for t in sorted(tables):
+        assert f"FROM {t}" in backup._REFERENCED_INSTRUMENTS, (
+            f"{t}: not in the backup instrument list"
+        )
+        assert f"FROM {t} x" in housekeeping._LRU_EXEMPT, f"{t}: not in the LRU exemption"

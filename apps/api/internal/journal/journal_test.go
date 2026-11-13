@@ -1,9 +1,12 @@
 package journal
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func d(s string) time.Time {
@@ -37,6 +40,12 @@ func TestValidateNote(t *testing.T) {
 		{"nul", sp("a\x00b"), "", "control characters"},
 		{"bel", sp("a\x07b"), "", "control characters"},
 		{"escape", sp("a\x1bb"), "", "control characters"},
+		{"bidi override", sp("a\u202Eb"), "", "text-direction"},
+		{"bidi isolate", sp("a\u2066b\u2069"), "", "text-direction"},
+		{"embedding", sp("\u202Ab"), "", "text-direction"},
+		{"bom only", sp("\uFEFF"), "", "must not be blank"},
+		{"zero width only", sp(" \u200B\u200D\u2060 "), "", "must not be blank"},
+		{"zwj emoji kept", sp("\U0001F468\u200D\U0001F469"), "\U0001F468\u200D\U0001F469", ""},
 		{"html kept verbatim", sp("<script>alert(1)</script> M&M"), "<script>alert(1)</script> M&M", ""},
 	}
 	for _, tc := range tests {
@@ -134,5 +143,22 @@ func TestToday(t *testing.T) {
 func TestIdempotencyKeyValid(t *testing.T) {
 	if !IdempotencyKeyValid("0b6c4f3e-8f3a-4a52-9c0e-0d7d1d2f3a4b") || IdempotencyKeyValid("nope") || IdempotencyKeyValid("") {
 		t.Fatal("uuid check wrong")
+	}
+}
+
+// N2: a transaction deleted between the check and the write is a 422 on the field, not a 500.
+func TestTxnLinkError(t *testing.T) {
+	fk := &pgconn.PgError{Code: "23503", ConstraintName: "journal_note_portfolio_txn_id_fkey"}
+	var ve *ValidationError
+	if err := txnLinkError(fk); !errors.As(err, &ve) || ve.Fields[0].Field != "portfolio_txn_id" {
+		t.Fatalf("got %v", err)
+	}
+	other := &pgconn.PgError{Code: "23503", ConstraintName: "journal_note_instrument_id_fkey"}
+	if err := txnLinkError(other); errors.As(err, &ve) {
+		t.Fatal("an unrelated foreign key must stay an internal error")
+	}
+	plain := errors.New("boom")
+	if txnLinkError(plain) != plain {
+		t.Fatal("other errors pass through")
 	}
 }

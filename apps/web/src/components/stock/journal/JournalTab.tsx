@@ -24,7 +24,6 @@ import {
 } from "@/lib/journal/form";
 import type { JournalNote, JournalTxn } from "@/lib/journal/schemas";
 import { useTxns } from "@/lib/portfolio/api";
-import type { Txn } from "@/lib/portfolio/schemas";
 
 const BUTTON =
   "h-9 touch-target rounded-control border border-border px-3 text-body-sm hover:bg-surface-3 disabled:opacity-50";
@@ -63,7 +62,7 @@ function NoteForm({
 }: {
   symbol: string;
   editing: JournalNote | null;
-  txns: ReadonlyArray<Txn>;
+  txns: ReadonlyArray<JournalTxn>;
   onDone: (reason: "saved" | "cancelled", savedId: number | null) => void;
 }) {
   const create = useCreateNote(symbol);
@@ -83,7 +82,14 @@ function NoteForm({
   const [errors, setErrors] = useState<NoteErrors>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [tried, setTried] = useState(false);
+  // Bumped on a submit (and when the server answers with field errors): only then is focus moved.
+  const [focusSeq, setFocusSeq] = useState(0);
+  // The linked transaction is always an option, even before every page of transactions has loaded,
+  // so saving can never silently unlink it (N6).
+  const options = useMemo(() => {
+    const linked = editing?.txn;
+    return linked && !txns.some((t) => t.id === linked.id) ? [linked, ...txns] : txns;
+  }, [txns, editing]);
   const count = charCount(draft.note);
   const over = count > NOTE_MAX;
 
@@ -91,12 +97,13 @@ function NoteForm({
     noteRef.current?.focus();
   }, []);
 
-  // After a submit that shows field errors, focus the first invalid control.
+  // After a submit that shows field errors, focus the first invalid control. Typing never gets here
+  // (the effect depends on the submit counter only), so focus is not stolen from the field in use (S1).
   useEffect(() => {
-    if (!tried) return;
+    if (focusSeq === 0) return;
     const form = noteRef.current?.form;
     form?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
-  }, [tried, errors]);
+  }, [focusSeq]);
 
   const set = <K extends keyof NoteDraft>(k: K, v: NoteDraft[K]) => {
     setDraft((d) => ({ ...d, [k]: v }));
@@ -108,7 +115,7 @@ function NoteForm({
     const { errors: errs, body } = validateNote(draft);
     setErrors(errs);
     setServerError(null);
-    setTried(true);
+    setFocusSeq((n) => n + 1);
     if (body === null) return;
     single(async () => {
       setSaving(true);
@@ -135,6 +142,7 @@ function NoteForm({
         if (view.conflict) attempt.current = null;
         setErrors(view.fields);
         setServerError(view.message);
+        setFocusSeq((n) => n + 1);
       } finally {
         setSaving(false);
       }
@@ -163,14 +171,13 @@ function NoteForm({
           />
         )}
       </FormField>
-      <p
-        className="text-caption text-text-2"
-        data-testid="jrn-count"
-        {...(over || tried ? { "aria-live": "polite" as const } : {})}
-      >
+      <p className="text-caption text-text-2" data-testid="jrn-count">
         {count.toLocaleString("en-US")} of {NOTE_MAX.toLocaleString("en-US")} characters
         {over ? ". Over the limit." : ""}
       </p>
+      <span className="sr-only" role="status" aria-live="polite" data-testid="jrn-count-live">
+        {over ? `Over the limit by ${(count - NOTE_MAX).toLocaleString("en-US")} characters.` : ""}
+      </span>
       <p id="jrn-note-hint" className="text-caption text-text-2" data-testid="jrn-hint">
         {HINT}
       </p>
@@ -193,7 +200,7 @@ function NoteForm({
       <FormField
         label="Linked transaction (optional)"
         hint={
-          txns.length === 0
+          options.length === 0
             ? "No transactions for this stock."
             : "One of your own transactions in this stock."
         }
@@ -204,12 +211,12 @@ function NoteForm({
             {...p}
             data-testid="jrn-txn"
             className={inputClass}
-            disabled={txns.length === 0}
+            disabled={options.length === 0}
             value={draft.txnId}
             onChange={(e) => set("txnId", e.target.value)}
           >
             <option value="">None</option>
-            {txns.map((t) => (
+            {options.map((t) => (
               <option key={t.id} value={String(t.id)}>
                 {txnText(t)}
               </option>
@@ -349,6 +356,11 @@ export function JournalTab({ symbol }: { symbol: string }) {
   const first = q.data?.pages[0]?.data;
   const dueCount = first?.review_due_count ?? null;
   const txns = useMemo(() => (txnsQ.data?.pages ?? []).flatMap((p) => p.data.items), [txnsQ.data]);
+  // Every transaction of the stock is offered for the link: fetch the remaining pages (N6).
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = txnsQ;
+  useEffect(() => {
+    if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // Focus requests are kept in a ref and honoured after the render that makes them possible: the
   // target must exist and, after a delete, the deleted note must be gone from the list.
@@ -399,6 +411,13 @@ export function JournalTab({ symbol }: { symbol: string }) {
       focusReq.current = { target: neighbour ? `jrn-text-${neighbour.id}` : "add", goneId: n.id };
     } catch (err) {
       setConfirm(null);
+      if (err instanceof ApiError && err.status === 404) {
+        // Already gone (deleted elsewhere): the goal is met, so refresh the list and say so (N3).
+        setLive("Note deleted");
+        void q.refetch();
+        focusReq.current = { target: neighbour ? `jrn-text-${neighbour.id}` : "add", goneId: n.id };
+        return;
+      }
       setActionError(describeNoteError(err).message);
     }
   };
