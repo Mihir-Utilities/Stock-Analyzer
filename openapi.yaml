@@ -2098,6 +2098,50 @@ paths:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/ErrorEnvelope"
+  "/portfolio/risk":
+    get:
+      operationId: "getPortfolioRisk"
+      tags:
+        - "portfolio"
+      summary: "Portfolio-level risk for view=all|equity|mf (default all): concentration (weights per holding and group, top-1/3/5, HHI as a fraction, effective holdings), position stress (what-if 10 and 20 percent fall of one holding, arithmetic only) and the reconstructed daily value history with a time-weighted return index, current and maximum drawdown and days under water. Money fields are strings with 4 decimals (INR); percent fields are percent numbers; unknown values are null with a sibling *_reason; an unpriced holding nulls every weight (never a partial total); a date without a price is a gap, not a partial sum. (docs/03 section 12b, docs/05 section 8.6)"
+      parameters:
+        - name: "view"
+          in: "query"
+          required: false
+          description: "Asset-class filter of one ledger: all (default), equity or mf. Other values are 422."
+          schema:
+            type: "string"
+            enum:
+              - "all"
+              - "equity"
+              - "mf"
+            default: "all"
+        - name: "as_of"
+          in: "query"
+          required: false
+          description: "Valuation date (market date, IST); default today; a future date or a bad format is 422."
+          schema:
+            type: "string"
+            format: "date"
+      responses:
+        "200":
+          description: "Success"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/SuccessEnvelope"
+        "401":
+          "$ref": "#/components/responses/Unauthenticated"
+        "422":
+          "$ref": "#/components/responses/Unprocessable"
+        "429":
+          "$ref": "#/components/responses/RateLimited"
+        default:
+          description: "Error envelope"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/ErrorEnvelope"
   "/portfolio/adjustments":
     get:
       operationId: "getPortfolioAdjustments"

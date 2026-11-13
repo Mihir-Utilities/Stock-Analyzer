@@ -987,6 +987,20 @@ Request: an investor wants a monthly-return heatmap with a Year column and seaso
 | INVA-3 (B17) | Existing `UNPROCESSABLE` envelope code. The spec words said "422 VALIDATION_FAILED". | The API's validation envelope code is `UNPROCESSABLE` (422, `details.fields`); used it and corrected the new spec text/rows. | 03 4b, 07 |
 | INVA-4 (B17) | A tracked stock stays listed even with no price or snapshot; the owner's "every tracked stock that has a seasonality block" could mean hiding the rest. | The endpoint lists all tracked stocks with the reason for those without a block (honest, partial state); the tile shows them in the collapsed "Not enough years yet" group with the reason, as the watchlist version did. | 03 4b, 06 6.2a |
 
+## Portfolio-level risk (PRK, Claude, 2026-11-12; PROPOSED defaults, none blocks the build; the owner may overrule; docs/PLAN-investor-additions.md Item C)
+
+| ID | Question or ambiguity | What B19/F20 do (default) | Where |
+|---|---|---|---|
+| PRK-1 | Drawdown of a portfolio that receives deposits and withdrawals: raw value or time-weighted? | A time-weighted return index (base 100) built from the price moves of the holdings held at the end of the previous date; flows never enter the return. Raw value is also returned per point, labelled as including deposits. | 05 8.6.3 |
+| PRK-2 | Sector weights when a holding has no sector | A visible **Unclassified** group (also for a blank sector, and for an MF with no category). | 05 8.6.1 |
+| PRK-3 | A date on which a holding has no price | The date is a gap: no value, no index, no drawdown, listed with the reason; never a sum of the other holdings. A single held stock's missing bar cannot be told from a holiday (limitation, 05 8.6.3). | 05 8.6.3 |
+| PRK-4 | A transaction falls inside a price gap, so the move across the gap cannot be computed exactly | The step is skipped (index carried), counted in `skipped_steps` and warned (`HISTORY_STEP_SKIPPED`); it is never silently treated as a 0% move in a statistic. Without a transaction in the gap the time-weighted step is exact and used. | 05 8.6.3 |
+| PRK-5 | Route name | One endpoint `GET /portfolio/risk?view=` carrying concentration, stress and history (they share one ledger read). `view` defaults to `all` here (the legacy summary default `equity` is for compatibility only). | 03 12b |
+| PRK-6 | Groups for mutual funds | Stock sectors are the owner-imported sector; in the `mf` view funds are grouped by AMFI category; in `all` all funds are one "Mutual funds" slice because a fund's own stock sectors are unknown (no look-through). | 05 8.6.1 |
+| PRK-7 | HHI scale | A fraction in (0, 1] (not 0-10000); effective holdings = 1/HHI. Top-N with fewer than N holdings is the share of all holdings (100) and the count is printed. | 05 8.6.1 |
+| PRK-8 | Cost and caching | Computed on read, no cache, no table. Budget under 500 ms for about 200 transactions and 10 years of daily prices; measured by B19 (below). If it misses, the documented fallback is to cap the series to the last N years via a `range` parameter, not a cache table. | 03 12b |
+
+PRK-8 measurement (B19, Windows laptop, Postgres 16 in Docker, other agents' builds running at the same time, so these are pessimistic): 200 transactions, 40 stocks, 104,040 daily bars (2,529 series dates), `GET /portfolio/risk?view=all` through the real router: median about 0.66 s and worst 0.77 s of 5 reads under that load. The parts: summary read 30-100 ms, loading the bars 150-250 ms (one query, arrays per instrument), the in-memory build 174 ms when measured alone (`BenchmarkBuildHistory`). On a quiet machine the total is about 0.4 s. The 500 ms target is therefore met on a quiet machine and is not met under heavy load; no cache was added. If it matters, the documented fallback is a `range` limit (last N years) on the series. The CI test asserts only a 1.5 s regression guard on the median.
 ## Decision journal and alert shortcuts (plan Item D, B20/F21; Claude, 2026-11-12; none blocks the build; every row has a proposed default and the owner may overrule)
 
 | ID | Question or ambiguity | Proposed default (what B20/F21 do) | Where |
