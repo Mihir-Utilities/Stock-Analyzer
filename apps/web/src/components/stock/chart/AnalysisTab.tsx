@@ -41,6 +41,10 @@ const HoldingPeriodsCard = lazyCard("HoldingPeriodsCard");
 const EntryStudyCard = lazyCard("EntryStudyCard");
 const SipCard = lazyCard("SipCard");
 const RiskAdjustedCard = lazyCard("RiskAdjustedCard");
+// Alert shortcuts (F21): their own chunk, since the alert form comes with them.
+const AlertShortcuts = dynamic(() => import("./AlertShortcuts").then((m) => m.AlertShortcuts), {
+  loading: cardLoading,
+});
 
 const SRC = "Imported prices (adjusted, price return excludes dividends)";
 const small =
@@ -339,7 +343,14 @@ function HeatmapCard({
 }
 
 /** Analysis sub-tab (docs/06 section 6.4): every chart has Show data and CSV (UI-10). */
-export function AnalysisTab({ indicatorsLoad }: { indicatorsLoad: Load<IndicatorsData> }) {
+export function AnalysisTab({
+  indicatorsLoad,
+  symbol,
+}: {
+  indicatorsLoad: Load<IndicatorsData>;
+  /** Needed by the alert shortcuts (F21); without it the card is not shown. */
+  symbol?: string;
+}) {
   const ind = indicatorsLoad.state === "ready" ? indicatorsLoad.data : null;
   const parsed = useMemo(() => parseAnalysis(ind?.analysis), [ind]);
   const asOf = ind?.as_of ?? null;
@@ -414,6 +425,7 @@ export function AnalysisTab({ indicatorsLoad }: { indicatorsLoad: Load<Indicator
         <PositionCard load={indicatorsLoad} blocks={inv} />
         <VolRegimeCard load={indicatorsLoad} blocks={inv} />
       </div>
+      {symbol ? <AlertShortcuts symbol={symbol} load={indicatorsLoad} blocks={inv} /> : null}
       <ChartSlot
         title="Drawdown from the running peak (peak within the last 750 trading days)"
         testId="chart-drawdown"

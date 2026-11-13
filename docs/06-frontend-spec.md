@@ -125,6 +125,8 @@ Header (4.2). Tabs:
 ### 6.4b Journal tab and alert shortcuts (plan Item D; built by F21 after B20; API `docs/03` section 13a and 13)
 **Decision (JRN-4): a tab, not a side panel.** The Journal is the tab `journal` after Data (`?tab=journal`), loaded with `next/dynamic` (no weight on the other tabs). A side panel would compete with the chart on a 375 px screen; a tab keeps one clear place and works with the existing keyboard tab pattern. No price is required: the tab also works for a stock with no imported prices (the price at the time then reads "No imported price on that day").
 
+**Formatting.** Every amount and date is produced by `format.ts` (for example ₹1,035.00 and 12 Nov 2026); the examples in this section write "INR" and ISO dates only to be unambiguous.
+
 **Principles.** The journal records the owner's own reasoning; it never scores, judges or reminds. Notes are untrusted plain text: rendered as text with line breaks kept (`white-space: pre-wrap`), never as HTML or markdown. The form hint says "Plain text, up to 1,000 characters. Do not paste passwords, tokens or account numbers." Nothing is sent anywhere but the owner's own API. No export button in v1.
 
 **Layout.** Header line "Decision journal for {SYMBOL}" with a one-sentence purpose ("Write down why you bought or are watching this stock, then check back on the review date."), a count chip "{n} review due" (`jrn-due-count`, text plus icon, amber like other stale chips, hidden at 0) from `review_due_count`, a status filter (native select `jrn-filter`: All, Open, Reviewed) and a button "Add note" (`jrn-add`) that reveals the form inline at the top (no modal, so focus is easy to manage).
@@ -215,7 +217,7 @@ WCAG 2.1 AA; contrast >= 4.5:1 (text) and 3:1 (graphics) in both themes; visible
 | `/watchlist` | stocks, funds -> Watchlist/Dashboard; `stocks[].seasonality.*` kept for compatibility |
 | `/stocks/seasonality` | month, as_of, stocks[].on_watchlist / seasonality.* / seasonality_reason -> This month, across the years tile (6.2a) |
 | `/alerts*` | all alert and event fields -> Alerts |
-| `/stocks/{symbol}/journal`, `/journal/{id}` | every item field, `today`, `review_due_count`, `next_cursor` -> Journal tab (6.4b) |
+| `/stocks/{symbol}/journal`, `/journal/{id}` | every item field, `review_due_count`, `next_cursor` -> Journal tab (6.4b); `today` is used on the server only |
 | `/mf/*` | meta, returns, risk, warnings, points, sip outputs, compare -> Funds |
 | `/imports*`, `/broker/status`, `/admin/status` | all fields -> Import center, Settings, Admin |
 A Playwright test iterates the OpenAPI schema and asserts each field name appears in `docs/field-map.json` mapped to a `data-testid`; unmapped fields fail CI.
