@@ -1001,6 +1001,7 @@ Request: an investor wants a monthly-return heatmap with a Year column and seaso
 | ALS-2 | Does any new alert kind help? | No. `price_below` and `price_above` express every offered level; `wk52_high` and `wk52_low` are events at the extremes, not levels like "10% below the high". No new kind. | 03 13a |
 | ALS-3 | How the existing alert form is prefilled. | The form had no prefill (it only took an existing alert to edit). The smallest change: an optional `prefill` prop (symbol, kind, price) on the existing `AlertForm`; the Alerts page does not pass it. No URL deep link (a URL would let a link put a level into the form; a prop cannot be forged from outside). | 06 6.4b, 6.8 |
 | ALS-4 | 200-day average direction. | The kind follows the last close: above the average gives `price_below` ("falls to"), below gives `price_above` ("rises to"); the label states which. A shortcut for a level the last close already satisfies still opens the form and the server's `THRESHOLD_ALREADY_MET` text explains. | 06 6.4b |
+
 ## Swing dips (SWD, Claude, 2026-11-12; none blocks the build; the owner may overrule; spec docs/05 12.13, docs/03 4a-swing, docs/06 6.4a item 4a)
 
 Request: for a stock like IDEA (peak 2017, never regained) the all-time-high Drawdown profile shows one open episode and "at least 3 recovered episodes are needed", which says nothing about how it behaved inside the decline. The owner wants falls of 10% or 20% from the recent peak, recovered or not, many times. The Drawdown profile stays unchanged; swing dips are an additional optional block and card.
