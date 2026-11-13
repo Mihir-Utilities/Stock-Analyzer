@@ -555,3 +555,40 @@ func TestJournalNotReadElsewhere(t *testing.T) {
 		t.Fatalf("journal_note referenced outside the allowed places: %v", offenders)
 	}
 }
+
+// N1: concurrent creates cannot both pass the 500-note cap.
+func TestJournalCapIsSerialised(t *testing.T) {
+	e := newJrnEnv(t)
+	id := e.instrument("ACME", "")
+	e.exec(`INSERT INTO journal_note (instrument_id, noted_on, note_text) SELECT $1, '2026-11-01', 'n' FROM generate_series(1, 498)`, id)
+	codes := make(chan int, 6)
+	for i := 0; i < 6; i++ {
+		go func(i int) {
+			r := e.do(http.MethodPost, pfBase+"/stocks/ACME/journal", noteBody(fmt.Sprintf("race %d", i)), e.cookie, nil)
+			codes <- r.Code
+		}(i)
+	}
+	created := 0
+	for i := 0; i < 6; i++ {
+		if <-codes == http.StatusCreated {
+			created++
+		}
+	}
+	if created != 2 || e.count(`SELECT count(*) FROM journal_note`) != 500 {
+		t.Fatalf("created %d, rows %d", created, e.count(`SELECT count(*) FROM journal_note`))
+	}
+}
+
+// N5: bidi overrides and invisible-only notes are refused through the API too.
+func TestJournalBidiAndInvisible(t *testing.T) {
+	e := newJrnEnv(t)
+	e.instrument("ACME", "")
+	for _, bad := range []string{"a\u202Eb", "x\u2066y\u2069", "\uFEFF", "\u200B\u200D"} {
+		if r, _ := e.create("ACME", noteBody(bad), nil); r.Code != http.StatusUnprocessableEntity {
+			t.Errorf("%q: %d", bad, r.Code)
+		}
+	}
+	if r, _ := e.create("ACME", noteBody("\U0001F468\u200D\U0001F469 family"), nil); r.Code != http.StatusCreated {
+		t.Errorf("zwj emoji refused: %d", r.Code)
+	}
+}

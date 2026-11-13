@@ -18,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/shopspring/decimal"
 
 	"github.com/india-analyzer/api/internal/dbq"
@@ -161,7 +162,7 @@ func ValidateNote(raw *string) (string, []FieldError) {
 		return "", []FieldError{{"note", "is required"}}
 	}
 	n := NormalizeNote(*raw)
-	if n == "" {
+	if n == "" || strings.TrimSpace(strings.Map(dropInvisible, n)) == "" {
 		return "", []FieldError{{"note", "must not be blank"}}
 	}
 	if !utf8.ValidString(n) {
@@ -174,8 +175,35 @@ func ValidateNote(raw *string) (string, []FieldError) {
 		if unicode.IsControl(r) && r != '\n' && r != '\t' {
 			return "", []FieldError{{"note", "must not contain control characters"}}
 		}
+		if isBidiControl(r) {
+			return "", []FieldError{{"note", "must not contain text-direction control characters"}}
+		}
 	}
 	return n, nil
+}
+
+// dropInvisible removes zero-width characters so a note made only of them counts as blank (JRN-7).
+func dropInvisible(r rune) rune {
+	switch {
+	case r >= 0x200B && r <= 0x200D, r == 0x2060, r == 0xFEFF:
+		return -1
+	}
+	return r
+}
+
+// isBidiControl is true for the bidirectional embedding, override and isolate controls, which can
+// reorder surrounding text. Zero-width joiners stay allowed (emoji sequences). JRN-7.
+func isBidiControl(r rune) bool {
+	return (r >= 0x202A && r <= 0x202E) || (r >= 0x2066 && r <= 0x2069)
+}
+
+// txnLinkError maps the foreign-key failure of a transaction deleted between the check and the write.
+func txnLinkError(err error) error {
+	var pe *pgconn.PgError
+	if errors.As(err, &pe) && pe.Code == "23503" && strings.Contains(pe.ConstraintName, "portfolio_txn") {
+		return &ValidationError{Fields: []FieldError{{"portfolio_txn_id", errTxn}}}
+	}
+	return err
 }
 
 // ParseReviewOn validates a review date against today. keep is the stored value on an edit: it may
@@ -389,6 +417,10 @@ func (s *Service) Create(ctx context.Context, symbol string, in CreateInput, key
 			return Result{Item: *prior, Replayed: true}, nil
 		}
 	}
+	// Serialise creates per stock so two concurrent requests cannot both pass the cap (N1).
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM instrument WHERE id = $1 FOR NO KEY UPDATE`, inst.ID); err != nil {
+		return Result{}, err
+	}
 	var n int
 	if err := tx.QueryRow(ctx, `SELECT count(*) FROM journal_note WHERE instrument_id = $1`, inst.ID).Scan(&n); err != nil {
 		return Result{}, err
@@ -408,7 +440,7 @@ func (s *Service) Create(ctx context.Context, symbol string, in CreateInput, key
 	if err := tx.QueryRow(ctx, `INSERT INTO journal_note (instrument_id, noted_on, note_text, price_at_note, price_as_of, review_on, portfolio_txn_id)
 		VALUES ($1, $2, $3, $4::numeric, $5, $6, $7) RETURNING id`,
 		inst.ID, today, note, price, priceDate, reviewOn, in.PortfolioTxnID).Scan(&id); err != nil {
-		return Result{}, err
+		return Result{}, txnLinkError(err)
 	}
 	item, err := scanItem(tx.QueryRow(ctx, `SELECT `+itemCols+itemFrom+` WHERE n.id = $1`, id), today)
 	if err != nil {
@@ -504,7 +536,7 @@ func (s *Service) Update(ctx context.Context, id int64, in PatchInput) (Item, er
 		reviewed_at = CASE WHEN $6::text = 'reviewed' THEN coalesce(reviewed_at, now()) ELSE NULL END,
 		updated_at = now() WHERE id = $1`,
 		id, in.Note != nil, note, newReview, newTxn, newStatus); err != nil {
-		return Item{}, err
+		return Item{}, txnLinkError(err)
 	}
 	item, err := scanItem(tx.QueryRow(ctx, `SELECT `+itemCols+itemFrom+` WHERE n.id = $1`, id), today)
 	if err != nil {
